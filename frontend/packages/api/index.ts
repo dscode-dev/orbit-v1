@@ -58,6 +58,7 @@ export type {
   PmocUpcomingItem,
 } from './maintenance-reminders';
 export * as salesApi from './sales';
+export * as serviceRequestsApi from './service-requests';
 
 export type {
   ListFinancialAccountsParams,

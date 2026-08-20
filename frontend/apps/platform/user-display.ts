@@ -6,6 +6,7 @@ export const ROLE_LABEL: Record<Role, string> = {
   MANAGER: "Gestor",
   OPERATOR: "Operador",
   VIEWER: "Visualizador",
+  CUSTOMER: "Cliente",
 };
 
 export const ROLE_TONE: Record<Role, ChipTone> = {
@@ -13,6 +14,7 @@ export const ROLE_TONE: Record<Role, ChipTone> = {
   MANAGER: "info",
   OPERATOR: "success",
   VIEWER: "neutral",
+  CUSTOMER: "info",
 };
 
 export const ROLES: Role[] = ["OWNER", "MANAGER", "OPERATOR", "VIEWER"];

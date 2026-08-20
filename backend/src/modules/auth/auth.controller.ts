@@ -22,7 +22,23 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Post('login')
   login(@Body() body: LoginDto, @Req() request: RequestWithId): Promise<TokenPairResponseDto> {
-    return this.auth.login(body, this.context(request));
+    return this.auth.login(body, this.context(request), [Role.OWNER, Role.MANAGER, Role.VIEWER]);
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @HttpCode(HttpStatus.OK)
+  @Post('operator/login')
+  operatorLogin(@Body() body: LoginDto, @Req() request: RequestWithId): Promise<TokenPairResponseDto> {
+    return this.auth.login(body, this.context(request), [Role.OPERATOR]);
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @HttpCode(HttpStatus.OK)
+  @Post('customer/login')
+  customerLogin(@Body() body: LoginDto, @Req() request: RequestWithId): Promise<TokenPairResponseDto> {
+    return this.auth.login(body, this.context(request), [Role.CUSTOMER]);
   }
 
   @Public()
@@ -44,7 +60,7 @@ export class AuthController {
     return this.auth.logout(body.refreshToken, this.context(request));
   }
 
-  @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
+  @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER, Role.CUSTOMER)
   @AllowPasswordChangeRequired()
   @Get('me')
   me(@CurrentUser() user: AuthenticatedUser): MeResponseDto {

@@ -1,11 +1,13 @@
 /** Authentication endpoints. */
 import { api, apiRequest } from "./client";
-import { clearTokens, getRefreshToken, setTokens } from "./tokens";
+import { clearTokens, getRefreshToken, getSessionScope, setTokens } from "./tokens";
 import type { AuthTokens, LoginPayload } from "@erp/types";
 
 /** POST /auth/login — stores tokens on success. */
 export async function login(payload: LoginPayload): Promise<AuthTokens> {
-  const tokens = await apiRequest<AuthTokens>("/auth/login", {
+  const scope = getSessionScope();
+  const endpoint = scope === "platform" ? "/auth/login" : `/auth/${scope}/login`;
+  const tokens = await apiRequest<AuthTokens>(endpoint, {
     method: "POST",
     body: payload,
     auth: false,

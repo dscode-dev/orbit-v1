@@ -6,6 +6,7 @@ export interface AuthenticatedUser {
   username: string;
   name: string;
   role: Role;
+  customerId?: string | null;
   isActive: boolean;
   mustChangePassword: boolean;
 }

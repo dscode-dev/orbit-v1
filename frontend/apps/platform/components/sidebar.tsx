@@ -22,6 +22,7 @@ import {
   FileText,
   ShoppingCart,
   Activity,
+  Headphones,
 } from 'lucide-react';
 import { cn } from '@erp/utils';
 import { BrandLogo } from '@erp/ui/brand';
@@ -105,6 +106,7 @@ const groups: NavGroup[] = [
         icon: Activity,
         roles: ['OWNER', 'MANAGER'],
       },
+      { label: 'Chamados', href: '/chamados', icon: Headphones, roles: ['OWNER'] },
       { label: 'Usuários', href: '/usuarios', icon: Shield, roles: ['OWNER', 'MANAGER', 'VIEWER'] },
     ],
   },

@@ -1,6 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { Prisma, type User } from '@prisma/client';
+import { Prisma, Role, type User } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { AppConfigService } from '../config/app-config.service';
 import { PrismaService } from '../database/prisma.service';
@@ -30,6 +30,7 @@ const USER_PUBLIC_SELECT = {
   username: true,
   name: true,
   role: true,
+  customerId: true,
   isActive: true,
   mustChangePassword: true,
 } satisfies Prisma.UserSelect;
@@ -43,7 +44,11 @@ export class AuthService {
     private readonly passwords: PasswordService,
   ) {}
 
-  async login(input: LoginDto, context: AuthRequestContext): Promise<TokenPairResponseDto> {
+  async login(
+    input: LoginDto,
+    context: AuthRequestContext,
+    allowedRoles: Role[],
+  ): Promise<TokenPairResponseDto> {
     const user = await this.prisma.user.findUnique({
       where: { email: input.email },
     });
@@ -53,17 +58,21 @@ export class AuthService {
       input.password,
     );
 
-    if (!user || !passwordValid || !user.isActive) {
+    if (!user || !passwordValid || !user.isActive || !allowedRoles.includes(user.role)) {
       await this.writeAudit(AUDIT_ACTIONS.LOGIN_FAILURE, user?.id ?? null, context, {
         email: input.email,
-        reason: !user || !passwordValid ? 'INVALID_CREDENTIALS' : 'USER_INACTIVE',
+        reason: !user || !passwordValid || (user && !allowedRoles.includes(user.role))
+          ? 'INVALID_CREDENTIALS'
+          : 'USER_INACTIVE',
       });
 
       throw new ApplicationException(
-        !user || !passwordValid
+        !user || !passwordValid || (user && !allowedRoles.includes(user.role))
           ? ERROR_CODES.AUTH_INVALID_CREDENTIALS
           : ERROR_CODES.AUTH_USER_INACTIVE,
-        !user || !passwordValid ? 'Invalid email or password' : 'User account is inactive',
+        !user || !passwordValid || !allowedRoles.includes(user.role)
+          ? 'Invalid email or password'
+          : 'User account is inactive',
         HttpStatus.UNAUTHORIZED,
       );
     }

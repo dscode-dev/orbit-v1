@@ -44,7 +44,7 @@ export function RequireAuth({
   const router = useRouter();
   const pathname = usePathname();
 
-  const base = scope === "operator" ? "/operator" : "";
+  const base = scope === "operator" ? "/operator" : scope === "customer" ? "/customer" : "";
   const login = loginPath ?? `${base}/login`;
   const change = changePasswordPath ?? `${base}/trocar-senha`;
   const home = fallbackPath ?? `${base}/`;

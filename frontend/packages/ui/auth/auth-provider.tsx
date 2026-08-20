@@ -23,7 +23,7 @@ import {
   type ReactNode,
 } from "react";
 import { authApi, usersApi, setSessionScope, type SessionScope } from "@erp/api";
-import { ensureFreshSession, hasSession, onSessionInvalid } from "@erp/api";
+import { clearTokens, ensureFreshSession, hasSession, onSessionInvalid } from "@erp/api";
 import type { Role, SessionUser, UserPermissions } from "@erp/api";
 
 export type SessionStatus =
@@ -89,6 +89,17 @@ export function AuthProvider({ scope = "platform", children }: { scope?: Session
     }
     try {
       const me = await usersApi.getMe();
+      const allowed = scope === "operator"
+        ? me.role === "OPERATOR"
+        : scope === "customer"
+          ? me.role === "CUSTOMER"
+          : ["OWNER", "MANAGER", "VIEWER"].includes(me.role);
+      if (!allowed) {
+        clearTokens();
+        setSession(null);
+        setStatus("unauthenticated");
+        return;
+      }
       setSession(me);
       applyBranding(me.organization.primaryColor, me.organization.secondaryColor);
       setStatus(me.user.mustChangePassword ? "password-change" : "authenticated");
@@ -97,7 +108,7 @@ export function AuthProvider({ scope = "platform", children }: { scope?: Session
       setSession(null);
       setStatus("unauthenticated");
     }
-  }, []);
+  }, [scope]);
 
   // Bootstrap on mount.
   useEffect(() => {

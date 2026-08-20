@@ -99,7 +99,7 @@ export type RvtExecutionPrefill = {
 
 /* ============ Auth / Roles ============ */
 
-export type Role = 'OWNER' | 'MANAGER' | 'OPERATOR' | 'VIEWER';
+export type Role = 'OWNER' | 'MANAGER' | 'OPERATOR' | 'VIEWER' | 'CUSTOMER';
 
 export type AuthTokens = {
   accessToken: string;
@@ -1290,6 +1290,72 @@ export type CreateOperationPayload = {
   customerSignerRole?: string | null;
   signedAt?: string | null;
   photos?: { dataUrl: string; caption?: string | null }[];
+};
+
+/* ============ Portal do cliente / Chamados ============ */
+
+export type ServiceRequestStatus = 'OPEN' | 'IN_REVIEW' | 'SCHEDULED' | 'CLOSED' | 'CANCELED';
+export type ServiceRequestType = 'WORK_ORDER' | 'RVT' | 'TECHNICAL_REPORT';
+
+export type ServiceRequest = {
+  id: string;
+  number: number;
+  customerId: string;
+  addressId: string | null;
+  type: ServiceRequestType;
+  status: ServiceRequestStatus;
+  subject: string;
+  description: string;
+  contactName: string | null;
+  contactPhone: string | null;
+  preferredAt: string | null;
+  internalNotes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  customer: Pick<Customer, 'id' | 'name' | 'tradeName' | 'phone' | 'email'>;
+  address: CustomerAddress | null;
+  equipments: Array<{ equipment: Pick<EquipmentSummary, 'id' | 'name' | 'tag' | 'type' | 'sector' | 'manufacturer' | 'model' | 'capacity'> }>;
+  operation: { id: string; number: number; status: OperationStatus; scheduledFor: string | null; operator: { id: string; name: string } } | null;
+};
+
+export type CustomerPortalOperation = {
+  id: string;
+  number: number;
+  type: OperationType;
+  requestedDocumentType: DocumentTemplateType;
+  serviceTypes: OperationType[];
+  status: OperationStatus;
+  scheduledFor: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  observations: string | null;
+  reportedIssue: string | null;
+  serviceDescription: string | null;
+  createdAt: string;
+  address: CustomerAddress | null;
+  equipment: { id: string; name: string; tag: string | null } | null;
+  operator: { id: string; name: string };
+  inspectedEquipments: Array<{ equipment: { id: string; name: string; tag: string | null } }>;
+  documents: Array<{ id: string; type: DocumentTemplateType; number: string; status: OperationDocumentStatus; finalizedAt: string | null; createdAt: string }>;
+  pmocExecutionRequest: { id: string; executionNumber: number; executionYear: number; status: string; scheduledFor: string } | null;
+  rvtExecution: { id: string; executionNumber: number; status: string; scheduledAt: string } | null;
+};
+
+export type CustomerPortalDashboard = CustomerDetail & {
+  equipments: EquipmentSummary[];
+  operations: CustomerPortalOperation[];
+  serviceRequests: ServiceRequest[];
+};
+
+export type CreateServiceRequestPayload = {
+  addressId?: string;
+  type?: ServiceRequestType;
+  subject: string;
+  description: string;
+  contactName?: string;
+  contactPhone?: string;
+  preferredAt?: string;
+  equipmentIds?: string[];
 };
 
 /* ============ Assignments (operator workflow) ============ */

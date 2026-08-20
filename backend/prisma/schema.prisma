@@ -12,6 +12,21 @@ enum Role {
   MANAGER
   OPERATOR
   VIEWER
+  CUSTOMER
+}
+
+enum ServiceRequestStatus {
+  OPEN
+  IN_REVIEW
+  SCHEDULED
+  CLOSED
+  CANCELED
+}
+
+enum ServiceRequestType {
+  WORK_ORDER
+  RVT
+  TECHNICAL_REPORT
 }
 
 enum BrandAssetType {
@@ -528,6 +543,7 @@ model User {
   name                            String                  @db.VarChar(150)
   passwordHash                    String                  @map("password_hash") @db.VarChar(255)
   role                            Role
+  customerId                      String?                 @map("customer_id") @db.Uuid
   avatarAssetId                   String?                 @unique @map("avatar_asset_id") @db.Uuid
   phone                           String?                 @db.VarChar(30)
   jobTitle                        String?                 @map("job_title") @db.VarChar(100)
@@ -578,7 +594,9 @@ model User {
   rvtResponsibleFor               RvtPlan[]               @relation("RvtResponsibleTechnician")
   rvtDefaultOperatorFor           RvtPlan[]               @relation("RvtDefaultOperator")
   rvtExecutionsAssigned           RvtExecution[]          @relation("RvtExecutionOperator")
+  customer                        Customer?               @relation("CustomerPortalUsers", fields: [customerId], references: [id], onDelete: Cascade)
 
+  @@index([customerId])
   @@map("users")
 }
 
@@ -636,6 +654,8 @@ model Organization {
   sales                Sale[]
   maintenanceReminders MaintenanceReminder[]
   rvtPlans             RvtPlan[]
+  portalUsers          User[]                @relation("CustomerPortalUsers")
+  serviceRequests      ServiceRequest[]
 
   @@map("organizations")
 }
@@ -871,6 +891,7 @@ model CustomerAddress {
   sales                   Sale[]
   pmocDefaultAddressPlans PmocPlan[]
   rvtPlans                RvtPlan[]
+  serviceRequests         ServiceRequest[]
 
   @@index([customerId, isPrimary])
   @@map("customer_addresses")
@@ -957,6 +978,7 @@ model Equipment {
   budgets                   Budget[]
   maintenanceReminders      MaintenanceReminder[]
   rvtPlanLinks              RvtPlanEquipment[]
+  serviceRequestLinks       ServiceRequestEquipment[]
 
   @@index([customerId, status])
   @@index([addressId])
@@ -967,6 +989,43 @@ model Equipment {
   @@index([tag])
   @@index([serialNumber])
   @@map("equipments")
+}
+
+model ServiceRequest {
+  id          String               @id @default(uuid()) @db.Uuid
+  number      Int                  @unique @default(autoincrement())
+  customerId  String               @map("customer_id") @db.Uuid
+  addressId   String?              @map("address_id") @db.Uuid
+  type        ServiceRequestType   @default(WORK_ORDER)
+  status      ServiceRequestStatus @default(OPEN)
+  subject     String               @db.VarChar(180)
+  description String               @db.Text
+  contactName String?              @map("contact_name") @db.VarChar(150)
+  contactPhone String?             @map("contact_phone") @db.VarChar(30)
+  preferredAt DateTime?            @map("preferred_at") @db.Timestamptz(3)
+  internalNotes String?            @map("internal_notes") @db.Text
+  createdAt   DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+  customer    Customer             @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  address     CustomerAddress?     @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  equipments  ServiceRequestEquipment[]
+  operation   Operation?
+
+  @@index([customerId, createdAt])
+  @@index([status, createdAt])
+  @@index([type, createdAt])
+  @@map("service_requests")
+}
+
+model ServiceRequestEquipment {
+  serviceRequestId String         @map("service_request_id") @db.Uuid
+  equipmentId      String         @map("equipment_id") @db.Uuid
+  serviceRequest   ServiceRequest @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+  equipment        Equipment      @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
+
+  @@id([serviceRequestId, equipmentId])
+  @@index([equipmentId])
+  @@map("service_request_equipments")
 }
 
 model EquipmentAttachment {
@@ -1072,6 +1131,8 @@ model Operation {
   maintenanceReminder             MaintenanceReminder?
   sourceSaleId                    String?                             @map("source_sale_id") @db.Uuid
   sourceSale                      Sale?                               @relation(fields: [sourceSaleId], references: [id], onDelete: SetNull)
+  serviceRequestId                String?                             @unique @map("service_request_id") @db.Uuid
+  serviceRequest                  ServiceRequest?                     @relation(fields: [serviceRequestId], references: [id], onDelete: SetNull)
   cancellations                   OperationCancellation[]
 
   @@index([customerId, createdAt])
@@ -1081,6 +1142,7 @@ model Operation {
   @@index([status, createdAt])
   @@index([scheduledFor, status], map: "operations_schedule_status_idx")
   @@index([sourceSaleId])
+  @@index([serviceRequestId])
   @@map("operations")
 }
 

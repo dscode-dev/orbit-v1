@@ -20,7 +20,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   VALIDATION_ERROR: "Informe um e-mail e uma senha válidos.",
 };
 
-type Variant = "platform" | "operator";
+type Variant = "platform" | "operator" | "customer";
 
 const COPY: Record<Variant, { title: string; subtitle: string; home: string; change: string }> = {
   platform: {
@@ -34,6 +34,12 @@ const COPY: Record<Variant, { title: string; subtitle: string; home: string; cha
     subtitle: "Acesse para iniciar seus atendimentos.",
     home: "/operator",
     change: "/operator/trocar-senha",
+  },
+  customer: {
+    title: "Portal do cliente",
+    subtitle: "Consulte seus serviços e solicite atendimento.",
+    home: "/customer",
+    change: "/customer",
   },
 };
 
@@ -68,6 +74,7 @@ function LoginForm({ variant }: { variant: Variant }) {
   }
 
   const isOperator = variant === "operator";
+  const isCustomer = variant === "customer";
 
   return (
     <div className="min-h-dvh grid place-items-center bg-[var(--color-background)] px-4 py-10">
@@ -97,7 +104,7 @@ function LoginForm({ variant }: { variant: Variant }) {
         </form>
 
         <p className="text-center text-[11px] text-[var(--color-muted-foreground)] mt-6">
-          {isOperator ? "App de campo · sessão independente" : "Acesso restrito · sessão protegida por token"}
+          {isOperator ? "App de campo · sessão independente" : isCustomer ? "Portal do cliente · acesso exclusivo" : "Acesso restrito · sessão protegida por token"}
         </p>
       </div>
     </div>

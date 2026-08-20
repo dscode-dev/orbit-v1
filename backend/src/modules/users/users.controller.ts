@@ -57,7 +57,7 @@ export class UsersController {
   }
 
   @AllowPasswordChangeRequired()
-  @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
+  @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER, Role.CUSTOMER)
   @Get('me')
   profile(@CurrentUser() user: AuthenticatedUser): Promise<unknown> {
     return this.users.profile(user.id);

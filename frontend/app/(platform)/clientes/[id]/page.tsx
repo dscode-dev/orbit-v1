@@ -16,6 +16,7 @@ import {
   ReceiptText,
   Trash2,
   Wrench,
+  KeyRound,
 } from 'lucide-react';
 import { Breadcrumbs } from '@platform/components/breadcrumbs';
 import { PageHeader } from '@platform/components/page-header';
@@ -42,6 +43,7 @@ import {
   equipmentsApi,
   operationApi,
   salesApi,
+  serviceRequestsApi,
   useQuery,
   type CustomerDetail,
   type CustomerAddress,
@@ -65,6 +67,7 @@ export default function ClienteDetailPage({ params }: { params: Promise<{ id: st
   const { hasRole } = useAuth();
   const [tab, setTab] = useState<Tab>('overview');
   const [editingCustomer, setEditingCustomer] = useState(false);
+  const [portalAccess, setPortalAccess] = useState(false);
   const detail = useQuery<CustomerDetail>(
     (signal) => customersApi.getCustomer(id, { signal }),
     [id],
@@ -89,10 +92,10 @@ export default function ClienteDetailPage({ params }: { params: Promise<{ id: st
               description={customer.tradeName ?? customer.email ?? undefined}
               actions={
                 <Gate roles={['OWNER', 'MANAGER']}>
-                  <button className="btn-secondary" onClick={() => setEditingCustomer(true)}>
-                    <Pencil className="h-4 w-4" />
-                    Editar cliente
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    {hasRole('OWNER') && <button className="btn-secondary" onClick={() => setPortalAccess(true)}><KeyRound className="h-4 w-4" /> Criar acesso ao portal</button>}
+                    <button className="btn-secondary" onClick={() => setEditingCustomer(true)}><Pencil className="h-4 w-4" /> Editar cliente</button>
+                  </div>
                 </Gate>
               }
             />
@@ -127,11 +130,20 @@ export default function ClienteDetailPage({ params }: { params: Promise<{ id: st
               onSaved={detail.refetch}
               customer={customer}
             />
+            {portalAccess && <PortalAccessDialog customer={customer} onClose={() => setPortalAccess(false)} />}
           </>
         )}
       </AsyncBoundary>
     </div>
   );
+}
+
+function PortalAccessDialog({ customer, onClose }: { customer: CustomerDetail; onClose: () => void }) {
+  const [name, setName] = useState(customer.contacts.find((item) => item.isPrimary)?.name || customer.name);
+  const [email, setEmail] = useState(customer.contacts.find((item) => item.isPrimary)?.email || customer.email || '');
+  const [saving, setSaving] = useState(false); const [error, setError] = useState<string | null>(null); const [password, setPassword] = useState<string | null>(null);
+  async function create() { setSaving(true); setError(null); try { const result = await serviceRequestsApi.createPortalAccount(customer.id, { name: name.trim(), email: email.trim() }); setPassword(result.temporaryPassword); } catch (cause) { setError(cause instanceof ApiClientError ? cause.message : 'Não foi possível criar o acesso.'); } finally { setSaving(false); } }
+  return <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"><div className="w-full max-w-md rounded-[var(--radius-lg)] bg-[var(--color-card)] p-6 shadow-[var(--shadow-floating)]"><div className="flex items-start justify-between"><div><h2 className="text-lg font-bold">Acesso ao portal do cliente</h2><p className="mt-1 text-sm text-[var(--color-muted-foreground)]">A conta funcionará somente em /customer/login.</p></div><button onClick={onClose} className="p-2">×</button></div>{password ? <div className="mt-5 space-y-4"><div className="rounded-[var(--radius-md)] border border-green-500/30 bg-green-500/10 p-4"><p className="text-sm font-medium text-green-700">Acesso criado. Copie a senha temporária agora:</p><code className="mt-2 block select-all break-all rounded bg-[var(--color-card)] p-3 text-base">{password}</code></div><p className="text-sm">Login: <strong>{email}</strong><br />Endereço: <strong>/customer/login</strong></p><button onClick={onClose} className="btn-primary w-full justify-center">Concluir</button></div> : <div className="mt-5 space-y-4">{error && <p className="rounded bg-red-500/10 p-3 text-sm text-red-600">{error}</p>}<label className="grid gap-1.5 text-sm font-medium">Nome do usuário<input className="input" value={name} onChange={(e) => setName(e.target.value)} /></label><label className="grid gap-1.5 text-sm font-medium">E-mail de acesso<input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></label><div className="flex justify-end gap-2"><button onClick={onClose} className="btn-secondary">Cancelar</button><button onClick={() => void create()} disabled={saving || !name.trim() || !email.trim()} className="btn-primary">{saving ? 'Criando…' : 'Criar acesso'}</button></div></div>}</div></div>;
 }
 
 function Overview({
