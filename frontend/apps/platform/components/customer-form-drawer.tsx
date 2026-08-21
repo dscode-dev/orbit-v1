@@ -5,9 +5,9 @@
  * PERSON shows CPF; COMPANY shows tradeName + CNPJ. Documents stay optional.
  */
 import { useEffect, useState } from "react";
-import { Building2, Copy, KeyRound, Loader2, MapPin, Plus, User } from "lucide-react";
+import { Building2, Loader2, MapPin, Plus, User } from "lucide-react";
 import { Drawer } from "@erp/ui/drawer";
-import { customersApi, customerPortalApi, cepApi, ApiClientError } from "@erp/api";
+import { customersApi, cepApi, ApiClientError } from "@erp/api";
 import type { Customer, CustomerAddress, CustomerType, CreateCustomerPayload } from "@erp/api";
 import { maskCpf, maskCnpj, maskCep } from "@erp/utils";
 import { AddressFormDrawer } from "./address-form-drawer";
@@ -36,13 +36,6 @@ type AddressState = {
   city: string;
   state: string;
   isPrimary: boolean;
-};
-
-type PortalAccessState = {
-  enabled: boolean;
-  name: string;
-  email: string;
-  phone: string;
 };
 
 const blankAddress: AddressState = {
@@ -91,14 +84,6 @@ export function CustomerFormDrawer({
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [address, setAddress] = useState<AddressState>(blankAddress);
   const [createdCustomerId, setCreatedCustomerId] = useState<string | null>(null);
-  const [initialAddressSaved, setInitialAddressSaved] = useState(false);
-  const [portalAccess, setPortalAccess] = useState<PortalAccessState>({
-    enabled: false,
-    name: "",
-    email: "",
-    phone: "",
-  });
-  const [credential, setCredential] = useState<{ email: string; password: string } | null>(null);
   const [cepLoading, setCepLoading] = useState(false);
   // Endereços cadastrados (modo edição): permite escolher um para editar/adicionar.
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
@@ -117,9 +102,6 @@ export function CustomerFormDrawer({
       setSaving(false);
       setAddress(blankAddress);
       setCreatedCustomerId(null);
-      setInitialAddressSaved(false);
-      setPortalAccess({ enabled: false, name: "", email: "", phone: "" });
-      setCredential(null);
       setCepLoading(false);
       setAddrDrawer(null);
       setAddresses([]);
@@ -157,20 +139,8 @@ export function CustomerFormDrawer({
   }
 
   async function handleSave() {
-    if (credential) {
-      onClose();
-      return;
-    }
     if (!form.name.trim()) {
       setError("Informe o nome do cliente.");
-      return;
-    }
-    if (!isEdit && portalAccess.enabled && !portalAccess.name.trim()) {
-      setError("Informe o nome da pessoa que acessará o Portal do Cliente.");
-      return;
-    }
-    if (!isEdit && portalAccess.enabled && !portalAccess.email.trim()) {
-      setError("Informe o e-mail que será utilizado no Portal do Cliente.");
       return;
     }
     setSaving(true);
@@ -195,8 +165,7 @@ export function CustomerFormDrawer({
       } else {
         const savedCustomer = createdCustomerId ? null : await customersApi.createCustomer(payload);
         const customerId = createdCustomerId ?? savedCustomer?.id;
-        if (customerId && !createdCustomerId) setCreatedCustomerId(customerId);
-        if (address.enabled && !initialAddressSaved && customerId) {
+        if (address.enabled && customerId) {
           const validation = validateAddress(address);
           if (validation) {
             setError(validation);
@@ -217,33 +186,9 @@ export function CustomerFormDrawer({
               state: address.state.trim().toUpperCase(),
               isPrimary: address.isPrimary,
             });
-            setInitialAddressSaved(true);
           } catch (addressErr) {
             setCreatedCustomerId(customerId);
             setError(addressErr instanceof ApiClientError ? `Cliente criado, mas o endereço não foi salvo: ${addressErr.message}. Corrija os dados e clique em salvar novamente.` : "Cliente criado, mas o endereço não foi salvo. Corrija os dados e clique em salvar novamente.");
-            setSaving(false);
-            return;
-          }
-        }
-        if (portalAccess.enabled && customerId) {
-          try {
-            const result = await customerPortalApi.provisionAccount({
-              customerId,
-              name: portalAccess.name.trim(),
-              email: portalAccess.email.trim(),
-              phone: portalAccess.phone.trim() || undefined,
-            });
-            setCredential({ email: result.account.email, password: result.temporaryPassword });
-            onSaved();
-            setSaving(false);
-            return;
-          } catch (portalError) {
-            setCreatedCustomerId(customerId);
-            setError(
-              portalError instanceof ApiClientError
-                ? `Cliente criado, mas o acesso ao portal não foi gerado: ${portalError.message}`
-                : "Cliente criado, mas o acesso ao portal não foi gerado. Revise os dados e tente novamente.",
-            );
             setSaving(false);
             return;
           }
@@ -280,15 +225,7 @@ export function CustomerFormDrawer({
             className="inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] px-3 h-9 text-sm font-medium disabled:opacity-50"
           >
             {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-            {credential
-              ? "Concluir"
-              : createdCustomerId && address.enabled && !initialAddressSaved
-                ? "Salvar endereço"
-                : createdCustomerId && portalAccess.enabled
-                  ? "Criar acesso"
-                  : isEdit
-                    ? "Salvar alterações"
-                    : "Criar cliente"}
+            {createdCustomerId ? "Salvar endereço" : isEdit ? "Salvar alterações" : "Criar cliente"}
           </button>
         </>
       }
@@ -299,36 +236,6 @@ export function CustomerFormDrawer({
             {error}
           </div>
         )}
-
-        {credential && (
-          <section className="rounded-[var(--radius-lg)] border border-[var(--color-warning)]/40 bg-[var(--color-warning)]/10 p-4">
-            <div className="flex items-start gap-3">
-              <KeyRound className="mt-0.5 h-5 w-5 shrink-0 text-[var(--color-warning)]" />
-              <div className="min-w-0 flex-1">
-                <h3 className="font-semibold">Acesso ao Portal do Cliente criado</h3>
-                <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
-                  Copie a senha temporária agora. Ela não será exibida novamente e deverá ser alterada no primeiro acesso.
-                </p>
-                <dl className="mt-4 space-y-2 text-sm">
-                  <div><dt className="text-xs text-[var(--color-muted-foreground)]">E-mail</dt><dd className="break-all font-medium">{credential.email}</dd></div>
-                  <div>
-                    <dt className="text-xs text-[var(--color-muted-foreground)]">Senha temporária</dt>
-                    <dd className="mt-1 flex items-center gap-2">
-                      <code className="min-w-0 flex-1 break-all rounded bg-[var(--color-card)] px-2 py-1.5">{credential.password}</code>
-                      <button type="button" aria-label="Copiar senha temporária" onClick={() => void navigator.clipboard.writeText(credential.password)} className="rounded-md border border-[var(--color-border)] p-2 hover:bg-[var(--color-card)]">
-                        <Copy className="h-4 w-4" />
-                      </button>
-                    </dd>
-                  </div>
-                </dl>
-                <p className="mt-4 text-xs">Acesso: <strong>/customer/login</strong></p>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {!credential && (
-          <>
 
         {/* Tipo */}
         <div className="grid grid-cols-2 gap-2">
@@ -420,50 +327,6 @@ export function CustomerFormDrawer({
           <section className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h3 className="text-sm font-semibold">Acesso ao Portal do Cliente</h3>
-                <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
-                  Permite consultar equipamentos e serviços e abrir chamados. Este acesso é separado dos usuários internos.
-                </p>
-              </div>
-              <label className="inline-flex shrink-0 items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={portalAccess.enabled}
-                  onChange={(event) => setPortalAccess((current) => ({
-                    ...current,
-                    enabled: event.target.checked,
-                    name: current.name || form.tradeName.trim() || form.name.trim(),
-                    email: current.email || form.email.trim(),
-                    phone: current.phone || form.phone.trim(),
-                  }))}
-                  className="accent-[var(--color-primary)]"
-                />
-                Permitir
-              </label>
-            </div>
-            {portalAccess.enabled && (
-              <div className="space-y-3 border-t border-[var(--color-border)] pt-3">
-                <Field label="Nome da pessoa com acesso" required>
-                  <input value={portalAccess.name} onChange={(event) => setPortalAccess((current) => ({ ...current, name: event.target.value }))} className={inputCls} placeholder="Nome do responsável" />
-                </Field>
-                <Field label="E-mail de acesso" required>
-                  <input type="email" value={portalAccess.email} onChange={(event) => setPortalAccess((current) => ({ ...current, email: event.target.value }))} className={inputCls} placeholder="cliente@empresa.com.br" />
-                </Field>
-                <Field label="Telefone do usuário">
-                  <input value={portalAccess.phone} onChange={(event) => setPortalAccess((current) => ({ ...current, phone: event.target.value }))} className={inputCls} />
-                </Field>
-                <p className="rounded-md bg-[var(--color-muted)] p-3 text-xs text-[var(--color-muted-foreground)]">
-                  Uma senha forte e temporária será gerada automaticamente.
-                </p>
-              </div>
-            )}
-          </section>
-        )}
-
-        {!isEdit && (
-          <section className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
                 <h3 className="text-sm font-semibold">Endereço inicial</h3>
                 <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
                   O cliente é criado primeiro e o endereço é salvo pelo endpoint oficial de endereços. Se o endereço falhar, o cliente não será duplicado no retry.
@@ -539,8 +402,6 @@ export function CustomerFormDrawer({
               </div>
             )}
           </section>
-        )}
-          </>
         )}
       </div>
 
