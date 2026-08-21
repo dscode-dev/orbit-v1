@@ -1,5 +1,19 @@
 # Backend State
 
+## Portal do Cliente e Central de Chamados — 2026-08-21
+
+- Identidade externa isolada em `CustomerPortalAccount`; nunca utiliza `User`, `Role` ou refresh
+  tokens internos. Tokens próprios são aceitos somente pelo `CustomerPortalAuthGuard`.
+- Migration aditiva `20260817120000_customer_portal_tickets`: contas, refresh tokens e
+  `CustomerServiceTicket`, sem alterar dados existentes. Endereços/equipamentos são validados
+  contra o cliente autenticado.
+- O portal entrega projeções sanitizadas de cadastro, equipamentos, Operations, PMOC/RVT e
+  documentos, sem custos, `storageKey`, paths, base64, assinaturas binárias ou metadata interna.
+- Chamados são convertidos transacionalmente pela `OperationsService`; Operation, Assignment e
+  vínculo permanecem no fluxo oficial, com no máximo uma Operation por chamado.
+- Login interno recebeu `channel=PLATFORM|OPERATOR`: Platform aceita OWNER/MANAGER; Operator aceita
+  OWNER/OPERATOR. Contas de cliente usam senha temporária forte e troca obrigatória.
+
 ## Hotfix RVT — preparo idempotente e Assignment única (2026-08-03)
 
 - `OperationsService.create` permanece como único responsável por criar a Assignment primária de

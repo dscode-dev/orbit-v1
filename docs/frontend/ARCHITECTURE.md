@@ -1,5 +1,17 @@
 # ARCHITECTURE — Frontend
 
+## Três fronteiras de sessão
+
+```text
+/login           → platform → OWNER/MANAGER
+/operator/login  → operator → OWNER/OPERATOR
+/customer/login  → customer → CustomerPortalAccount
+```
+
+`AppProviders` escolhe o provider pelo segmento completo. O client usa refresh de cliente somente
+no scope `customer`. A Central recebe prefill do backend e reutiliza `OperationCreationDrawer`;
+atribuição, relacionamentos e transação continuam no backend.
+
 ## Datas-calendário e dados operacionais de endereço
 
 - Campos PMOC que representam um dia, sem horário, são formatados com `timeZone: "UTC"`.

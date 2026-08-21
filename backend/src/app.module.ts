@@ -35,6 +35,7 @@ import { ListExportModule } from './modules/list-exports/list-export.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { SalesModule } from './modules/sales/sales.module';
 import { RvtPlanningModule } from './modules/rvt-planning/rvt-planning.module';
+import { CustomerPortalModule } from './modules/customer-portal/customer-portal.module';
 import { GlobalExceptionFilter } from './shared/filters/global-exception.filter';
 import { RequestLoggingInterceptor } from './shared/interceptors/request-logging.interceptor';
 import { ResponseEnvelopeInterceptor } from './shared/interceptors/response-envelope.interceptor';
@@ -78,6 +79,7 @@ import { ResponseEnvelopeInterceptor } from './shared/interceptors/response-enve
     NotificationsModule,
     SalesModule,
     RvtPlanningModule,
+    CustomerPortalModule,
     HealthModule,
   ],
   providers: [

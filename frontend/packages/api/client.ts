@@ -126,7 +126,8 @@ async function performRefresh(accessBefore: string | null): Promise<boolean> {
   const refreshToken = getRefreshToken();
   if (!refreshToken) return false;
   try {
-    const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+    const refreshPath = getSessionScope() === "customer" ? "/customer/auth/refresh" : "/auth/refresh";
+    const res = await fetch(`${API_BASE_URL}${refreshPath}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Request-Id": requestId() },
       body: JSON.stringify({ refreshToken }),

@@ -498,6 +498,14 @@ enum NotificationEntityType {
   DOCUMENT
 }
 
+enum CustomerPortalTicketStatus {
+  OPEN
+  IN_REVIEW
+  OPERATION_CREATED
+  CLOSED
+  CANCELED
+}
+
 model SystemSetting {
   id        String   @id @default(uuid()) @db.Uuid
   key       String   @unique @db.VarChar(150)
@@ -597,45 +605,47 @@ model RefreshToken {
 }
 
 model Organization {
-  id                   String                @id @default(uuid()) @db.Uuid
-  legalName            String                @map("legal_name") @db.VarChar(180)
-  tradeName            String                @map("trade_name") @db.VarChar(120)
-  cnpj                 String                @db.VarChar(18)
-  stateRegistration    String?               @map("state_registration") @db.VarChar(30)
-  email                String                @db.VarChar(254)
-  phone                String                @db.VarChar(30)
-  phoneNumbers         String[]              @default([]) @map("phone_numbers")
-  website              String?               @db.VarChar(255)
-  zipCode              String?               @map("zip_code") @db.VarChar(10)
-  street               String?               @db.VarChar(180)
-  number               String?               @db.VarChar(20)
-  complement           String?               @db.VarChar(120)
-  district             String?               @db.VarChar(120)
-  city                 String                @db.VarChar(100)
-  state                String                @db.VarChar(2)
-  primaryColor         String                @map("primary_color") @db.VarChar(7)
-  secondaryColor       String                @map("secondary_color") @db.VarChar(7)
-  segment              String?               @db.VarChar(80)
-  isActive             Boolean               @default(true) @map("is_active")
-  createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt            DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
-  settings             OrganizationSettings?
-  assets               BrandAsset[]
-  templates            DocumentTemplate[]
-  pmocPlans            PmocPlan[]
-  inventoryItems       InventoryItem[]
-  productPricings      ProductPricing[]
-  budgets              Budget[]
-  financialAccounts    FinancialAccount[]
-  financialCategories  FinancialCategory[]
-  financialEntries     FinancialEntry[]
-  purchaseOrders       PurchaseOrder[]
-  notifications        Notification[]
-  technicalCatalogs    TechnicalCatalog[]
-  signatures           Signature[]
-  sales                Sale[]
-  maintenanceReminders MaintenanceReminder[]
-  rvtPlans             RvtPlan[]
+  id                     String                  @id @default(uuid()) @db.Uuid
+  legalName              String                  @map("legal_name") @db.VarChar(180)
+  tradeName              String                  @map("trade_name") @db.VarChar(120)
+  cnpj                   String                  @db.VarChar(18)
+  stateRegistration      String?                 @map("state_registration") @db.VarChar(30)
+  email                  String                  @db.VarChar(254)
+  phone                  String                  @db.VarChar(30)
+  phoneNumbers           String[]                @default([]) @map("phone_numbers")
+  website                String?                 @db.VarChar(255)
+  zipCode                String?                 @map("zip_code") @db.VarChar(10)
+  street                 String?                 @db.VarChar(180)
+  number                 String?                 @db.VarChar(20)
+  complement             String?                 @db.VarChar(120)
+  district               String?                 @db.VarChar(120)
+  city                   String                  @db.VarChar(100)
+  state                  String                  @db.VarChar(2)
+  primaryColor           String                  @map("primary_color") @db.VarChar(7)
+  secondaryColor         String                  @map("secondary_color") @db.VarChar(7)
+  segment                String?                 @db.VarChar(80)
+  isActive               Boolean                 @default(true) @map("is_active")
+  createdAt              DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  settings               OrganizationSettings?
+  assets                 BrandAsset[]
+  templates              DocumentTemplate[]
+  pmocPlans              PmocPlan[]
+  inventoryItems         InventoryItem[]
+  productPricings        ProductPricing[]
+  budgets                Budget[]
+  financialAccounts      FinancialAccount[]
+  financialCategories    FinancialCategory[]
+  financialEntries       FinancialEntry[]
+  purchaseOrders         PurchaseOrder[]
+  notifications          Notification[]
+  technicalCatalogs      TechnicalCatalog[]
+  signatures             Signature[]
+  sales                  Sale[]
+  maintenanceReminders   MaintenanceReminder[]
+  rvtPlans               RvtPlan[]
+  customerPortalAccounts CustomerPortalAccount[]
+  customerServiceTickets CustomerServiceTicket[]
 
   @@map("organizations")
 }
@@ -815,22 +825,22 @@ model Notification {
 }
 
 model Customer {
-  id                   String                @id @default(uuid()) @db.Uuid
+  id                   String                  @id @default(uuid()) @db.Uuid
   type                 CustomerType
-  name                 String                @db.VarChar(180)
-  tradeName            String?               @map("trade_name") @db.VarChar(180)
-  cpf                  String?               @unique @db.VarChar(14)
-  cnpj                 String?               @unique @db.VarChar(18)
-  email                String?               @db.VarChar(254)
-  phone                String?               @db.VarChar(30)
-  secondaryPhone       String?               @map("secondary_phone") @db.VarChar(30)
-  notes                String?               @db.Text
-  isActive             Boolean               @default(true) @map("is_active")
+  name                 String                  @db.VarChar(180)
+  tradeName            String?                 @map("trade_name") @db.VarChar(180)
+  cpf                  String?                 @unique @db.VarChar(14)
+  cnpj                 String?                 @unique @db.VarChar(18)
+  email                String?                 @db.VarChar(254)
+  phone                String?                 @db.VarChar(30)
+  secondaryPhone       String?                 @map("secondary_phone") @db.VarChar(30)
+  notes                String?                 @db.Text
+  isActive             Boolean                 @default(true) @map("is_active")
   // Cadastro criado em campo (OS avulso) aguardando conclusão pelo owner.
-  pendingReview        Boolean               @default(false) @map("pending_review")
-  disabledAt           DateTime?             @map("disabled_at") @db.Timestamptz(3)
-  createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt            DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+  pendingReview        Boolean                 @default(false) @map("pending_review")
+  disabledAt           DateTime?               @map("disabled_at") @db.Timestamptz(3)
+  createdAt            DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
   addresses            CustomerAddress[]
   contacts             CustomerContact[]
   attachments          CustomerAttachment[]
@@ -841,6 +851,8 @@ model Customer {
   sales                Sale[]
   maintenanceReminders MaintenanceReminder[]
   rvtPlans             RvtPlan[]
+  portalAccounts       CustomerPortalAccount[]
+  serviceTickets       CustomerServiceTicket[]
 
   @@index([name])
   @@index([email])
@@ -850,30 +862,103 @@ model Customer {
 }
 
 model CustomerAddress {
-  id                      String      @id @default(uuid()) @db.Uuid
-  customerId              String      @map("customer_id") @db.Uuid
-  name                    String      @db.VarChar(100)
-  zipCode                 String      @map("zip_code") @db.VarChar(9)
-  street                  String      @db.VarChar(180)
-  number                  String      @db.VarChar(20)
-  complement              String?     @db.VarChar(120)
-  referencePoint          String?     @map("reference_point") @db.VarChar(180)
-  district                String      @db.VarChar(100)
-  city                    String      @db.VarChar(100)
-  state                   String      @db.VarChar(2)
-  isPrimary               Boolean     @default(false) @map("is_primary")
-  createdAt               DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt               DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
-  customer                Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  id                      String                  @id @default(uuid()) @db.Uuid
+  customerId              String                  @map("customer_id") @db.Uuid
+  name                    String                  @db.VarChar(100)
+  zipCode                 String                  @map("zip_code") @db.VarChar(9)
+  street                  String                  @db.VarChar(180)
+  number                  String                  @db.VarChar(20)
+  complement              String?                 @db.VarChar(120)
+  referencePoint          String?                 @map("reference_point") @db.VarChar(180)
+  district                String                  @db.VarChar(100)
+  city                    String                  @db.VarChar(100)
+  state                   String                  @db.VarChar(2)
+  isPrimary               Boolean                 @default(false) @map("is_primary")
+  createdAt               DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  customer                Customer                @relation(fields: [customerId], references: [id], onDelete: Cascade)
   equipments              Equipment[]
   operations              Operation[]
   budgets                 Budget[]
   sales                   Sale[]
   pmocDefaultAddressPlans PmocPlan[]
   rvtPlans                RvtPlan[]
+  serviceTickets          CustomerServiceTicket[]
 
   @@index([customerId, isPrimary])
   @@map("customer_addresses")
+}
+
+model CustomerPortalAccount {
+  id                 String                       @id @default(uuid()) @db.Uuid
+  organizationId     String                       @map("organization_id") @db.Uuid
+  customerId         String                       @map("customer_id") @db.Uuid
+  email              String                       @unique @db.VarChar(254)
+  passwordHash       String                       @map("password_hash") @db.VarChar(255)
+  name               String                       @db.VarChar(150)
+  phone              String?                      @db.VarChar(30)
+  mustChangePassword Boolean                      @default(true) @map("must_change_password")
+  isActive           Boolean                      @default(true) @map("is_active")
+  disabledAt         DateTime?                    @map("disabled_at") @db.Timestamptz(3)
+  lastLoginAt        DateTime?                    @map("last_login_at") @db.Timestamptz(3)
+  createdAt          DateTime                     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization       Organization                 @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer           Customer                     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  refreshTokens      CustomerPortalRefreshToken[]
+  serviceTickets     CustomerServiceTicket[]
+
+  @@index([organizationId, isActive])
+  @@index([customerId, isActive])
+  @@map("customer_portal_accounts")
+}
+
+model CustomerPortalRefreshToken {
+  id        String                @id @db.Uuid
+  accountId String                @map("account_id") @db.Uuid
+  tokenHash String                @map("token_hash") @db.VarChar(255)
+  expiresAt DateTime              @map("expires_at") @db.Timestamptz(3)
+  revokedAt DateTime?             @map("revoked_at") @db.Timestamptz(3)
+  createdAt DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  account   CustomerPortalAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, revokedAt])
+  @@index([expiresAt])
+  @@map("customer_portal_refresh_tokens")
+}
+
+model CustomerServiceTicket {
+  id             String                     @id @default(uuid()) @db.Uuid
+  organizationId String                     @map("organization_id") @db.Uuid
+  customerId     String                     @map("customer_id") @db.Uuid
+  accountId      String                     @map("account_id") @db.Uuid
+  addressId      String?                    @map("address_id") @db.Uuid
+  operationId    String?                    @unique @map("operation_id") @db.Uuid
+  number         Int                        @unique @default(autoincrement())
+  status         CustomerPortalTicketStatus @default(OPEN)
+  documentType   DocumentTemplateType       @default(WORK_ORDER) @map("document_type")
+  operationType  OperationType              @default(CORRETIVA) @map("operation_type")
+  serviceTypes   OperationType[]            @default([]) @map("service_types")
+  equipmentIds   String[]                   @default([]) @map("equipment_ids") @db.Uuid
+  title          String                     @db.VarChar(160)
+  description    String                     @db.Text
+  priority       String?                    @db.VarChar(40)
+  preferredDate  DateTime?                  @map("preferred_date") @db.Timestamptz(3)
+  contactName    String?                    @map("contact_name") @db.VarChar(150)
+  contactPhone   String?                    @map("contact_phone") @db.VarChar(30)
+  createdAt      DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization   Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer       Customer                   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  account        CustomerPortalAccount      @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  address        CustomerAddress?           @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  operation      Operation?                 @relation(fields: [operationId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status, createdAt])
+  @@index([customerId, createdAt])
+  @@index([accountId, createdAt])
+  @@index([documentType, status])
+  @@map("customer_service_tickets")
 }
 
 model CustomerContact {
@@ -1073,6 +1158,7 @@ model Operation {
   sourceSaleId                    String?                             @map("source_sale_id") @db.Uuid
   sourceSale                      Sale?                               @relation(fields: [sourceSaleId], references: [id], onDelete: SetNull)
   cancellations                   OperationCancellation[]
+  customerServiceTicket           CustomerServiceTicket?
 
   @@index([customerId, createdAt])
   @@index([equipmentId, createdAt])

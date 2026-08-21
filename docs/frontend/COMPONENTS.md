@@ -1,5 +1,14 @@
 # COMPONENTS — Frontend
 
+## Portal do Cliente
+
+- `CustomerAuthProvider` / `RequireCustomerAuth`: sessão externa e troca obrigatória.
+- `CustomerPortalPage`: shell única com quatro abas.
+- `TicketDrawer`: formulário enxuto com `MultiSelect` oficial.
+- `CustomerPortalAccess`: provisionamento/reset/desativação no Cliente 360.
+- Central reutiliza `DataTable`, `Pagination`, `Drawer`, `OperationCreationDrawer` e
+  `OperationDetailDrawer`; nenhum wizard operacional paralelo.
+
 ## AddressFormDrawer e atendimento Operator
 
 - `AddressFormDrawer`: inclui `referencePoint` opcional no CRUD oficial de endereços.

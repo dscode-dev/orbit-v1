@@ -12,7 +12,7 @@
  */
 import type { AuthTokens } from "@erp/types";
 
-export type SessionScope = "platform" | "operator";
+export type SessionScope = "platform" | "operator" | "customer";
 
 let activeScope: SessionScope = "platform";
 
