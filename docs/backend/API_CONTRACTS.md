@@ -1,5 +1,47 @@
 # API Contracts
 
+## Portal do Cliente
+
+Identidades e tokens deste contrato não são aceitos em `/auth/*` nem nas APIs internas.
+
+- `POST /api/v1/customer/auth/login` — `{ email, password }`; retorna tokens rotativos.
+- `POST /api/v1/customer/auth/refresh` e `POST /api/v1/customer/auth/logout`.
+- `GET /api/v1/customer/me` e `POST /api/v1/customer/change-password`.
+- `GET /api/v1/customer/operations?page&limit&search`, `GET /customer/operations/:id`.
+- `GET /api/v1/customer/equipments`, `GET /customer/equipments/:id`.
+- `GET /api/v1/customer/tickets?page&limit&status&search`, `GET /customer/tickets/:id`.
+- `POST /api/v1/customer/tickets`.
+
+Payload mínimo do chamado:
+
+```json
+{
+  "documentType": "WORK_ORDER",
+  "title": "Equipamento sem refrigeração",
+  "description": "O equipamento deixou de refrigerar durante a operação."
+}
+```
+
+Opcionais: `addressId`, `equipmentIds` (máximo 20), `operationType`, `serviceTypes`, `priority`,
+`preferredDate`, `contactName`, `contactPhone`. A UI oferece `WORK_ORDER`, `TECHNICAL_REPORT` e
+`TECHNICAL_OPINION`.
+
+Administração:
+
+- `GET|POST /api/v1/customer-portal/accounts` (GET exige `customerId`).
+- `GET /api/v1/customer-portal/accounts/directory?page&limit&search&status` — diretório paginado
+  para Gestão > Usuários; `status` aceita `ACTIVE` ou `INACTIVE` e cada item inclui somente a
+  projeção pública do cliente vinculado.
+- `PATCH /api/v1/customer-portal/accounts/:id/disable`.
+- `PATCH /api/v1/customer-portal/accounts/:id/reset-password`.
+- `GET /api/v1/service-tickets` e `GET /service-tickets/:id`.
+- `GET /api/v1/service-tickets/:id/operation-prefill`.
+- `POST /api/v1/service-tickets/:id/operation`, com o `CreateOperationDto` oficial.
+
+`POST /api/v1/auth/login` aceita `channel: PLATFORM|OPERATOR`. Perfil incompatível recebe
+`403 AUTH_LOGIN_CHANNEL_FORBIDDEN`. Erros adicionais: 401 de credencial/token, 403 de troca de
+senha, 404, 409 de chamado já convertido e 400 de validação.
+
 ## Cancelamento de Operation
 
 ### `POST /api/v1/operations/:id/cancellation`

@@ -149,6 +149,21 @@ body {
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px var(--color-primary-soft);
 }
+
+.portal-card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-card);
+  padding: 1rem;
+  box-shadow: var(--shadow-card);
+}
+
+.portal-subcard {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-muted) 35%, transparent);
+  padding: 1rem;
+}
 .btn-primary,
 .btn-secondary {
   display: inline-flex;

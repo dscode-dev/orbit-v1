@@ -1,5 +1,18 @@
 # Frontend Integration
 
+## Portal do Cliente
+
+- Rotas: `/customer/login`, `/customer/change-password` e `/customer`.
+- Use scope de sessão `customer`; refresh em `/customer/auth/refresh`. Nunca reutilize tokens
+  Platform/Operator.
+- A página consome somente `/customer/*`; `customerId` vem do token e nunca do browser.
+- Abas: Visão geral, Serviços e histórico, Equipamentos e Chamados. PMOC/RVT já vêm resolvidos nos
+  campos `pmocExecutionRequest` e `rvtExecution` da Operation.
+- A abertura exige somente tipo, assunto e descrição; endereço, múltiplos equipamentos e data são
+  opcionais.
+- A Platform usa o prefill do chamado como `initialValues` do `OperationCreationDrawer` e submete
+  ao endpoint de conversão. Não montar Operation paralela.
+
 ## Cancelamento pelo técnico
 
 1. O Operator mantém a coleta local até confirmar o último passo.

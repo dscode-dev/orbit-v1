@@ -1,5 +1,22 @@
 # Security
 
+## Isolamento do Portal do Cliente — 2026-08-21
+
+- `CustomerPortalAccount` não se relaciona a `User` nem recebe RBAC interno.
+- Tokens `customer-access`/`customer-refresh` são incompatíveis com guards internos
+  `access`/`refresh`.
+- O guard resolve `customerId`/`organizationId` pela sessão revogável; queries não aceitam esses IDs
+  como autoridade do request, prevenindo IDOR.
+- Senhas usam Argon2, temporárias aleatórias, troca obrigatória e mínimo de 12 caracteres. Reset e
+  desativação revogam sessões abertas.
+- Projeções usam `select` explícito e não retornam storage, binários, custos, valores internos,
+  assinaturas ou auditoria.
+- O diretório administrativo de acessos exige OWNER, MANAGER ou VIEWER, aplica paginação e busca
+  limitada, filtra pela organização ativa e nunca projeta `passwordHash`, refresh tokens ou sessões.
+- Conversão de chamado exige OWNER/MANAGER, valida relações e impede segunda conversão.
+- Login Platform/Operator valida o canal antes de emitir tokens; as shells aplicam gate de papel
+  como defesa em profundidade.
+
 ## Cancelamento operacional
 
 - Somente o operador primário autenticado pode solicitar cancelamento e somente antes da conclusão.

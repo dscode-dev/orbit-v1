@@ -1,5 +1,16 @@
 # STATE — Frontend
 
+## Portal do Cliente e Chamados — 2026-08-21
+
+- Novas rotas `/customer/login`, `/customer/change-password`, `/customer` e `/service-tickets`.
+- Portal responsivo com dados, histórico, equipamentos e chamados reais; sessão `customer` isolada.
+- Cliente abre OS/RVT/Laudo com endereço opcional e multiseleção de equipamentos.
+- Cliente 360 gerencia acessos, senha temporária, reset e desativação.
+- Gestão > Usuários separa `Equipe interna` de `Portal do cliente`; a segunda visão lista os acessos
+  externos com busca, status, paginação, último acesso e cliente vinculado.
+- Central de Chamados possui KPIs, busca, status, paginação e reutiliza o wizard oficial de
+  Operation/Assignment.
+
 ## Hotfix RVT — atribuição e download (2026-08-03)
 
 - Abrir detalhes de uma ocorrência pode preparar a Operation sem conflito de Assignment duplicada.
@@ -1495,3 +1506,16 @@ Status: concluído.
   sucesso após persistência.
 - Preview/PDF do RVT agora distinguem número documental no título e número sequencial da execução
   no item `Número` da identificação, ambos fornecidos pelo Document Engine.
+
+## Portal do Cliente — provisionamento em Usuários (2026-08-21)
+
+O cadastro de cliente voltou a tratar exclusivamente os dados cadastrais. O Owner cria o acesso na
+página `Gestão > Usuários`, escolhendo `Portal do cliente` e vinculando um cliente já existente.
+Esse fluxo provisiona a identidade isolada `CustomerPortalAccount`, apresenta a senha temporária
+forte uma única vez e mantém o login restrito a `/customer/login`.
+
+## Landing — acesso ao Portal do Cliente (2026-08-21)
+
+O CTA superior de WhatsApp ao lado de `Gestão` foi substituído por `Portal do cliente`, apontando
+para `/customer/login`. A mesma ação foi incluída no menu responsivo; os canais comerciais de
+WhatsApp existentes no corpo da landing permanecem disponíveis.

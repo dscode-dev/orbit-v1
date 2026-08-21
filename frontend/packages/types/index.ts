@@ -107,7 +107,130 @@ export type AuthTokens = {
   expiresIn: number;
 };
 
-export type LoginPayload = { email: string; password: string };
+export type LoginPayload = { email: string; password: string; channel: 'PLATFORM' | 'OPERATOR' };
+
+export type CustomerPortalTicketStatus =
+  | 'OPEN'
+  | 'IN_REVIEW'
+  | 'OPERATION_CREATED'
+  | 'CLOSED'
+  | 'CANCELED';
+
+export type CustomerPortalSession = {
+  account: { id: string; email: string; name: string; mustChangePassword: boolean };
+  customer: {
+    id: string;
+    type: CustomerType;
+    name: string;
+    tradeName: string | null;
+    cpf: string | null;
+    cnpj: string | null;
+    email: string | null;
+    phone: string | null;
+    secondaryPhone: string | null;
+    isActive: boolean;
+    createdAt: string;
+    addresses: CustomerAddress[];
+    contacts: Array<{ id: string; name: string; role: string | null; phone: string | null; email: string | null; isPrimary: boolean }>;
+  };
+};
+
+export type CustomerPortalEquipment = {
+  id: string;
+  type: EquipmentType;
+  status: EquipmentStatus;
+  name: string;
+  tag: string | null;
+  manufacturer: string | null;
+  model: string | null;
+  serialNumber: string | null;
+  capacity: string | null;
+  sector: string | null;
+  voltage: string | null;
+  installationDate: string | null;
+  warrantyExpiration: string | null;
+  observations: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  address: CustomerAddress | null;
+  equipmentTypeCatalog: { id: string; title: string } | null;
+};
+
+export type CustomerPortalEquipmentSummary = Pick<
+  CustomerPortalEquipment,
+  'id' | 'name' | 'tag' | 'manufacturer' | 'model' | 'capacity' | 'sector'
+>;
+
+export type CustomerPortalOperation = {
+  id: string;
+  number: number;
+  type: OperationType;
+  requestedDocumentType: DocumentTemplateType;
+  status: OperationStatus;
+  scheduledFor: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  reportedIssue: string | null;
+  serviceDescription: string | null;
+  observations: string | null;
+  createdAt: string;
+  updatedAt: string;
+  address: CustomerAddress | null;
+  equipment: CustomerPortalEquipmentSummary | null;
+  inspectedEquipments: Array<{ position: number; sector: string; equipment: CustomerPortalEquipmentSummary }>;
+  operator: { id: string; name: string };
+  documents: Array<{ id: string; type: DocumentTemplateType; number: string; status: string; revision: number; renderedAt: string | null; createdAt: string }>;
+  pmocExecutionRequest: null | { id: string; executionNumber: number; equipmentExecutionNumber: number; scheduledFor: string; status: string; pmocPlan: { id: string; number: number; startDate: string; endDate: string } };
+  rvtExecution: null | { id: string; executionNumber: number; scheduledAt: string; status: string; rvtPlan: { id: string; number: number; name: string; startDate: string; endDate: string } };
+};
+
+export type CustomerServiceTicket = {
+  id: string;
+  number: number;
+  status: CustomerPortalTicketStatus;
+  documentType: DocumentTemplateType;
+  operationType: OperationType;
+  serviceTypes: OperationType[];
+  equipmentIds: string[];
+  title: string;
+  description: string;
+  priority: string | null;
+  preferredDate: string | null;
+  contactName: string | null;
+  contactPhone: string | null;
+  createdAt: string;
+  updatedAt: string;
+  customer: { id: string; name: string; tradeName: string | null; cpf: string | null; cnpj: string | null };
+  account: { id: string; name: string; email: string; phone: string | null };
+  address: CustomerAddress | null;
+  operation: null | { id: string; number: number; status: OperationStatus; operator: { id: string; name: string } };
+};
+
+export type CustomerPortalAccount = {
+  id: string;
+  customerId: string;
+  email: string;
+  name: string;
+  phone: string | null;
+  mustChangePassword: boolean;
+  isActive: boolean;
+  disabledAt: string | null;
+  lastLoginAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CustomerPortalDirectoryAccount = CustomerPortalAccount & {
+  customer: {
+    id: string;
+    name: string;
+    tradeName: string | null;
+    cpf: string | null;
+    cnpj: string | null;
+    isActive: boolean;
+  };
+};
 
 /* ============ Users / Team ============ */
 

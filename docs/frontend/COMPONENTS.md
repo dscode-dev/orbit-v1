@@ -1,5 +1,16 @@
 # COMPONENTS — Frontend
 
+## Portal do Cliente
+
+- `CustomerAuthProvider` / `RequireCustomerAuth`: sessão externa e troca obrigatória.
+- `CustomerPortalPage`: shell única com quatro abas.
+- `TicketDrawer`: formulário enxuto com `MultiSelect` oficial.
+- `CustomerPortalAccess`: provisionamento/reset/desativação no Cliente 360.
+- `UsuariosPage`: alterna entre a tabela de usuários internos e o diretório paginado de contas do
+  Portal do Cliente; clicar numa conta externa abre o Cliente 360 correspondente.
+- Central reutiliza `DataTable`, `Pagination`, `Drawer`, `OperationCreationDrawer` e
+  `OperationDetailDrawer`; nenhum wizard operacional paralelo.
+
 ## AddressFormDrawer e atendimento Operator
 
 - `AddressFormDrawer`: inclui `referencePoint` opcional no CRUD oficial de endereços.
@@ -1018,3 +1029,13 @@ nos dois fluxos.
   mensagem acessível com `role=status`.
 - `DocumentViewer` não transforma identificadores do RVT: renderiza o Blueprint oficial, preservando
   o número documental no cabeçalho e o número da execução na seção de identificação.
+
+## Criação de acesso ao Portal do Cliente (2026-08-21)
+
+- `CustomerFormDrawer` permanece responsável somente pelo cadastro e edição dos dados do cliente.
+- `UserFormDrawer`, acessível ao Owner em `Gestão > Usuários`, oferece os tipos de acesso
+  `Equipe interna` e `Portal do cliente` durante a criação.
+- Em `Portal do cliente`, o Owner seleciona um cliente já cadastrado e provisiona uma
+  `CustomerPortalAccount`; nenhuma role ou sessão de `User` interno é criada ou compartilhada.
+- Login e senha temporária são apresentados uma única vez, com troca obrigatória no primeiro acesso
+  exclusivamente por `/customer/login`.

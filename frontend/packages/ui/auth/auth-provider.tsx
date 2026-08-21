@@ -142,10 +142,10 @@ export function AuthProvider({ scope = "platform", children }: { scope?: Session
 
   const login = useCallback(
     async (email: string, password: string) => {
-      await authApi.login({ email, password });
+      await authApi.login({ email, password, channel: scope === "operator" ? "OPERATOR" : "PLATFORM" });
       await loadSession();
     },
-    [loadSession],
+    [loadSession, scope],
   );
 
   const logout = useCallback(async () => {
