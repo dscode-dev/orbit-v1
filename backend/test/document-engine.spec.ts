@@ -1829,9 +1829,18 @@ describe('DocumentEngine foundation', () => {
     }).buildFromContext(context);
     expect(built.sections.map((section) => section.id)).toEqual([
       'budget-identification', 'budget-customer', 'budget-introduction', 'budget-services',
-      'budget-material-descriptions', 'budget-commercial-materials', 'budget-totals',
+      'budget-special-conditions', 'budget-material-descriptions', 'budget-commercial-materials', 'budget-totals',
       'budget-commercial-conditions', 'signature',
     ]);
+    const specialConditions = built.sections.find((section) => section.id === 'budget-special-conditions');
+    expect(specialConditions?.title).toBe('Condições especiais');
+    expect(specialConditions?.components[0]).toMatchObject({
+      kind: 'observation',
+      text: 'Escopo técnico conforme vistoria.',
+    });
+    expect(built.sections.findIndex((section) => section.id === 'budget-special-conditions')).toBeLessThan(
+      built.sections.findIndex((section) => section.id === 'budget-commercial-materials'),
+    );
     const services = built.sections.find((section) => section.id === 'budget-services')?.components[0];
     const descriptions = built.sections.find((section) => section.id === 'budget-material-descriptions')?.components[0];
     const materials = built.sections.find((section) => section.id === 'budget-commercial-materials')?.components[0];

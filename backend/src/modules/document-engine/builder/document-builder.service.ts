@@ -1826,6 +1826,20 @@ export class DocumentBuilderService {
         components: [itemTable('budget-services-table', services)],
       });
     }
+    if (budget.description) {
+      sections.push({
+        id: 'budget-special-conditions',
+        title: 'Condições especiais',
+        components: [
+          {
+            id: 'budget-special-conditions-text',
+            kind: 'observation',
+            text: this.clean(budget.description),
+            keepTogether: true,
+          },
+        ],
+      });
+    }
     if (catalogMaterials.length) {
       sections.push({
         id: 'budget-material-descriptions',
@@ -1876,13 +1890,13 @@ export class DocumentBuilderService {
               : 'A combinar',
           ],
         ]),
-        ...([budget.description, budget.commercialNotes, budget.observations, template?.observations]
+        ...([budget.commercialNotes, budget.observations, template?.observations]
           .filter(Boolean).length
           ? [{
               id: 'budget-commercial-observations',
               kind: 'observation' as const,
               text: this.clean(
-                [budget.description, budget.commercialNotes, budget.observations, template?.observations]
+                [budget.commercialNotes, budget.observations, template?.observations]
                   .filter(Boolean)
                   .join('\n\n'),
               ),

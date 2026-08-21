@@ -1510,3 +1510,9 @@ Status: concluído.
 O cadastro de um novo cliente pode provisionar opcionalmente sua credencial isolada do Portal do
 Cliente. Nome, e-mail e telefone do usuário de acesso são revisáveis no drawer; a senha temporária
 forte é apresentada uma única vez após o cadastro e deve ser alterada no primeiro acesso.
+
+## Landing — acesso ao Portal do Cliente (2026-08-21)
+
+O CTA superior de WhatsApp ao lado de `Gestão` foi substituído por `Portal do cliente`, apontando
+para `/customer/login`. A mesma ação foi incluída no menu responsivo; os canais comerciais de
+WhatsApp existentes no corpo da landing permanecem disponíveis.

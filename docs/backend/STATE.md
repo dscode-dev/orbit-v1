@@ -3410,3 +3410,11 @@ Status: implementado e validado em PostgreSQL/Docker.
   transação. Não houve alteração de schema ou migration.
 - No RVT planejado, o título/cabeçalho mantém o número documental (`RVT-000039`), enquanto o campo
   `Identificação do relatório > Número` usa a sequência da execução (`001`, `002`, ...).
+
+## Orçamento — ordem semântica das condições especiais (2026-08-21)
+
+- A descrição geral do orçamento é projetada em `budget-special-conditions`, com o título
+  `Condições especiais`, logo após os serviços e antes das seções de materiais.
+- Condições comerciais continuam no fim do corpo com validade, formas de pagamento e observações
+  comerciais, sem repetir a descrição geral.
+- Preview e PDF permanecem derivados do mesmo `DocumentBlueprint`.

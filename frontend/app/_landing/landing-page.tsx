@@ -24,6 +24,7 @@ import {
   Settings2,
   ShieldCheck,
   Snowflake,
+  UserRound,
   Wind,
   Wrench,
   X,
@@ -181,16 +182,9 @@ export function LandingPage() {
             <Link href="/login" className="lp-btn lp-btn--ghost">
               Gestão
             </Link>
-            {whatsappUrl && (
-              <a
-                href={whatsappUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="lp-btn lp-btn--primary lp-hide-sm"
-              >
-                <MessageCircle size={16} /> Falar agora
-              </a>
-            )}
+            <Link href="/customer/login" className="lp-btn lp-btn--primary lp-hide-sm">
+              <UserRound size={16} /> Portal do cliente
+            </Link>
             <button
               type="button"
               className="lp-menu-btn"
@@ -217,6 +211,9 @@ export function LandingPage() {
             ))}
             <Link href="/login" className="lp-mobile-menu__link" onClick={() => setMenuOpen(false)}>
               Acesso à gestão
+            </Link>
+            <Link href="/customer/login" className="lp-mobile-menu__link" onClick={() => setMenuOpen(false)}>
+              Portal do cliente
             </Link>
           </div>
         )}
