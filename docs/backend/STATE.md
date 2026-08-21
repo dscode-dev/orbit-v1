@@ -3413,8 +3413,9 @@ Status: implementado e validado em PostgreSQL/Docker.
 
 ## Orçamento — ordem semântica das condições especiais (2026-08-21)
 
-- A descrição geral do orçamento é projetada em `budget-special-conditions`, com o título
-  `Condições especiais`, logo após os serviços e antes das seções de materiais.
+- A descrição informada no passo `Dados gerais` do wizard (`budget.description`) é projetada em
+  `budget-service-description`, com o título `Descrição do(s) serviço(s)`, logo após os serviços e
+  antes das seções de materiais.
 - Condições comerciais continuam no fim do corpo com validade, formas de pagamento e observações
   comerciais, sem repetir a descrição geral.
 - Preview e PDF permanecem derivados do mesmo `DocumentBlueprint`.

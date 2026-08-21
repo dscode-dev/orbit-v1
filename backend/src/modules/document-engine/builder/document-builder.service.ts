@@ -1828,11 +1828,11 @@ export class DocumentBuilderService {
     }
     if (budget.description) {
       sections.push({
-        id: 'budget-special-conditions',
-        title: 'Condições especiais',
+        id: 'budget-service-description',
+        title: 'Descrição do(s) serviço(s)',
         components: [
           {
-            id: 'budget-special-conditions-text',
+            id: 'budget-service-description-text',
             kind: 'observation',
             text: this.clean(budget.description),
             keepTogether: true,
