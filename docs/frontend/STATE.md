@@ -1504,3 +1504,9 @@ Status: concluído.
   sucesso após persistência.
 - Preview/PDF do RVT agora distinguem número documental no título e número sequencial da execução
   no item `Número` da identificação, ambos fornecidos pelo Document Engine.
+
+## Portal do Cliente — provisionamento no cadastro (2026-08-21)
+
+O cadastro de um novo cliente pode provisionar opcionalmente sua credencial isolada do Portal do
+Cliente. Nome, e-mail e telefone do usuário de acesso são revisáveis no drawer; a senha temporária
+forte é apresentada uma única vez após o cadastro e deve ser alterada no primeiro acesso.

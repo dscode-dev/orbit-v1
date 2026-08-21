@@ -1027,3 +1027,12 @@ nos dois fluxos.
   mensagem acessível com `role=status`.
 - `DocumentViewer` não transforma identificadores do RVT: renderiza o Blueprint oficial, preservando
   o número documental no cabeçalho e o número da execução na seção de identificação.
+
+## Cadastro de cliente com acesso ao portal (2026-08-21)
+
+- `CustomerFormDrawer` oferece, somente na criação, a opção `Permitir acesso ao Portal do Cliente`.
+- Quando habilitada, a opção provisiona `CustomerPortalAccount` após o cliente e o endereço inicial,
+  sem criar `User` interno nem compartilhar sessão com Platform/Operator.
+- A senha temporária é exibida uma única vez no próprio drawer e exige troca no primeiro acesso.
+- Em falha parcial, o identificador do cliente e o estado do endereço são preservados para que o
+  retry não duplique cliente ou endereço.
