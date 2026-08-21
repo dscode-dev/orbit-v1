@@ -15,7 +15,6 @@ import { OperationCreationDrawer } from "@platform/components/operation-creation
 import { Drawer } from "@erp/ui/drawer";
 import { ConfirmDialog } from "@erp/ui/confirm-dialog";
 import { Gate } from "@erp/ui/auth/gate";
-import { EmptyState } from "@erp/ui/empty-state";
 import { SkeletonList } from "@erp/ui/skeletons";
 import { StatusChip } from "@erp/ui/status-chip";
 import { StatusPill } from "@erp/ui/status-pill";

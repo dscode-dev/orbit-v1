@@ -5,7 +5,7 @@ import { OperatorShell } from "@operator/shell/operator-shell";
 /** Authenticated operator app: guard + field chrome. */
 export default function OperatorShellLayout({ children }: { children: ReactNode }) {
   return (
-    <RequireAuth>
+    <RequireAuth roles={['OWNER', 'OPERATOR']} fallbackPath="/inicio">
       <OperatorShell>{children}</OperatorShell>
     </RequireAuth>
   );

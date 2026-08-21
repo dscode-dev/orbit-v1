@@ -1,5 +1,14 @@
 # STATE — Frontend
 
+## Portal do Cliente e Chamados — 2026-08-21
+
+- Novas rotas `/customer/login`, `/customer/change-password`, `/customer` e `/service-tickets`.
+- Portal responsivo com dados, histórico, equipamentos e chamados reais; sessão `customer` isolada.
+- Cliente abre OS/RVT/Laudo com endereço opcional e multiseleção de equipamentos.
+- Cliente 360 gerencia acessos, senha temporária, reset e desativação.
+- Central de Chamados possui KPIs, busca, status, paginação e reutiliza o wizard oficial de
+  Operation/Assignment.
+
 ## Hotfix RVT — atribuição e download (2026-08-03)
 
 - Abrir detalhes de uma ocorrência pode preparar a Operation sem conflito de Assignment duplicada.
@@ -1495,3 +1504,9 @@ Status: concluído.
   sucesso após persistência.
 - Preview/PDF do RVT agora distinguem número documental no título e número sequencial da execução
   no item `Número` da identificação, ambos fornecidos pelo Document Engine.
+
+## Portal do Cliente — provisionamento no cadastro (2026-08-21)
+
+O cadastro de um novo cliente pode provisionar opcionalmente sua credencial isolada do Portal do
+Cliente. Nome, e-mail e telefone do usuário de acesso são revisáveis no drawer; a senha temporária
+forte é apresentada uma única vez após o cadastro e deve ser alterada no primeiro acesso.

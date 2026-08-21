@@ -1,5 +1,15 @@
 # ROUTES — Frontend
 
+## Portal do Cliente
+
+- `/customer/login` — login exclusivo de cliente.
+- `/customer/change-password` — troca da senha temporária.
+- `/customer` — dados, histórico, equipamentos e chamados.
+- `/service-tickets` — Gestão de Chamados para OWNER/MANAGER.
+
+`/login` é OWNER/MANAGER; `/operator/login` é OWNER/OPERATOR. Os três namespaces de token são
+independentes.
+
 ## Ajustes de endereço e PMOC
 
 - `/clientes` e `/clientes/:id`: cadastro/edição de endereço aceita ponto de referência.

@@ -1,6 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { Prisma, type User } from '@prisma/client';
+import { Prisma, Role, type User } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { AppConfigService } from '../config/app-config.service';
 import { PrismaService } from '../database/prisma.service';
@@ -14,7 +14,7 @@ import type {
   AuthRequestContext,
   RefreshTokenPayload,
 } from './types/jwt-payload.type';
-import type { LoginDto } from './dto/login.dto';
+import { LoginChannel, type LoginDto } from './dto/login.dto';
 import { LogoutResponseDto, MeResponseDto, TokenPairResponseDto } from './dto/auth-response.dto';
 
 /**
@@ -65,6 +65,26 @@ export class AuthService {
           : ERROR_CODES.AUTH_USER_INACTIVE,
         !user || !passwordValid ? 'Invalid email or password' : 'User account is inactive',
         HttpStatus.UNAUTHORIZED,
+      );
+    }
+
+    const allowed =
+      !input.channel ||
+      (input.channel === LoginChannel.PLATFORM
+        ? user.role === Role.OWNER || user.role === Role.MANAGER
+        : user.role === Role.OWNER || user.role === Role.OPERATOR);
+    if (!allowed) {
+      await this.writeAudit(AUDIT_ACTIONS.LOGIN_FAILURE, user.id, context, {
+        email: input.email,
+        channel: input.channel,
+        reason: 'LOGIN_CHANNEL_FORBIDDEN',
+      });
+      throw new ApplicationException(
+        ERROR_CODES.AUTH_LOGIN_CHANNEL_FORBIDDEN,
+        input.channel === LoginChannel.PLATFORM
+          ? 'Este usuário não possui acesso à plataforma de gestão'
+          : 'Este usuário não possui acesso ao aplicativo de campo',
+        HttpStatus.FORBIDDEN,
       );
     }
 

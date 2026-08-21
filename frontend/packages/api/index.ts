@@ -58,6 +58,8 @@ export type {
   PmocUpcomingItem,
 } from './maintenance-reminders';
 export * as salesApi from './sales';
+export * as customerPortalApi from './customer-portal';
+export type { CreateCustomerTicketPayload } from './customer-portal';
 
 export type {
   ListFinancialAccountsParams,

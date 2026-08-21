@@ -1,5 +1,14 @@
 # OPUS Frontend Integration
 
+## Portal do Cliente e Chamados
+
+- `/customer/login` possui sessão própria; APIs: `/customer/me`, `/customer/operations`,
+  `/customer/equipments` e `/customer/tickets`.
+- Operations/Chamados usam `{ items, pagination }`; estados de UX incluem senha temporária,
+  loading, retry, vazio, chamado enviado e operação vinculada.
+- Não criar mocks para PMOC/RVT: a projeção da Operation identifica as execuções.
+- `/service-tickets` reutiliza `OperationCreationDrawer` na ação “Criar operação e delegar”.
+
 ## Compatibilidade das migrations recentes
 
 - Nenhum endpoint foi removido.

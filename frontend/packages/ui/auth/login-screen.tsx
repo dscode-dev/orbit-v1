@@ -16,6 +16,7 @@ import { ApiClientError } from "@erp/api";
 const ERROR_MESSAGES: Record<string, string> = {
   AUTH_INVALID_CREDENTIALS: "E-mail ou senha incorretos.",
   AUTH_USER_INACTIVE: "Usuário desativado. Procure um administrador.",
+  AUTH_LOGIN_CHANNEL_FORBIDDEN: "Este usuário deve acessar o ambiente correspondente ao seu perfil.",
   RATE_LIMIT_EXCEEDED: "Muitas tentativas. Aguarde alguns instantes.",
   VALIDATION_ERROR: "Informe um e-mail e uma senha válidos.",
 };

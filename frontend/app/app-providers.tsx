@@ -14,12 +14,18 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { AuthProvider } from "@erp/ui/auth/auth-provider";
 import { CommandPaletteProvider } from "@platform/components/command-palette";
+import { CustomerAuthProvider } from "@erp/ui/auth/customer-auth-provider";
 
 export function AppProviders({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   // Match the Operator route segment, not Platform routes that merely share
   // the prefix (for example `/operator-executions`).
   const isOperator = pathname === "/operator" || pathname?.startsWith("/operator/") === true;
+  const isCustomer = pathname === "/customer" || pathname?.startsWith("/customer/") === true;
+
+  if (isCustomer) {
+    return <CustomerAuthProvider>{children}</CustomerAuthProvider>;
+  }
 
   if (isOperator) {
     return <AuthProvider scope="operator">{children}</AuthProvider>;

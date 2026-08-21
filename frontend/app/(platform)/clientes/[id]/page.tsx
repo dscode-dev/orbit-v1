@@ -29,6 +29,7 @@ import { OperationDetailDrawer } from '@platform/components/operation-detail-dra
 import { OperationCreationDrawer } from '@platform/components/operation-creation-drawer';
 import { CustomerContactFormDrawer } from '@platform/components/customer-contact-form-drawer';
 import { AddressFormDrawer } from '@platform/components/address-form-drawer';
+import { CustomerPortalAccess } from '@platform/components/customer-portal-access';
 import { AsyncBoundary, ErrorState } from '@erp/ui/states';
 import { EmptyState } from '@erp/ui/empty-state';
 import { SkeletonCard, SkeletonList } from '@erp/ui/skeletons';
@@ -451,6 +452,7 @@ function Overview({
             </div>
           </InfoCard>
         </div>
+        {canManage && <CustomerPortalAccess customer={customer} />}
       </div>
 
       <CustomerContactFormDrawer
