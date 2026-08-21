@@ -6,6 +6,8 @@
 - `CustomerPortalPage`: shell única com quatro abas.
 - `TicketDrawer`: formulário enxuto com `MultiSelect` oficial.
 - `CustomerPortalAccess`: provisionamento/reset/desativação no Cliente 360.
+- `UsuariosPage`: alterna entre a tabela de usuários internos e o diretório paginado de contas do
+  Portal do Cliente; clicar numa conta externa abre o Cliente 360 correspondente.
 - Central reutiliza `DataTable`, `Pagination`, `Drawer`, `OperationCreationDrawer` e
   `OperationDetailDrawer`; nenhum wizard operacional paralelo.
 

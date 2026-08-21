@@ -29,6 +29,9 @@ Opcionais: `addressId`, `equipmentIds` (máximo 20), `operationType`, `serviceTy
 Administração:
 
 - `GET|POST /api/v1/customer-portal/accounts` (GET exige `customerId`).
+- `GET /api/v1/customer-portal/accounts/directory?page&limit&search&status` — diretório paginado
+  para Gestão > Usuários; `status` aceita `ACTIVE` ou `INACTIVE` e cada item inclui somente a
+  projeção pública do cliente vinculado.
 - `PATCH /api/v1/customer-portal/accounts/:id/disable`.
 - `PATCH /api/v1/customer-portal/accounts/:id/reset-password`.
 - `GET /api/v1/service-tickets` e `GET /service-tickets/:id`.

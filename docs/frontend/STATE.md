@@ -6,6 +6,8 @@
 - Portal responsivo com dados, histórico, equipamentos e chamados reais; sessão `customer` isolada.
 - Cliente abre OS/RVT/Laudo com endereço opcional e multiseleção de equipamentos.
 - Cliente 360 gerencia acessos, senha temporária, reset e desativação.
+- Gestão > Usuários separa `Equipe interna` de `Portal do cliente`; a segunda visão lista os acessos
+  externos com busca, status, paginação, último acesso e cliente vinculado.
 - Central de Chamados possui KPIs, busca, status, paginação e reutiliza o wizard oficial de
   Operation/Assignment.
 

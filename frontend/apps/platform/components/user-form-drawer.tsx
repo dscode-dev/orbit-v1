@@ -145,6 +145,7 @@ export function UserFormDrawer({
           password: result.temporaryPassword,
           accessType: "CUSTOMER",
         });
+        onSaved();
       } catch (err) {
         if (err instanceof ApiClientError && err.status === 409) {
           setFieldError("Este e-mail já está vinculado a outro cliente.");

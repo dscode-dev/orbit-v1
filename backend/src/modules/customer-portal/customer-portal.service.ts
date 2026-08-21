@@ -21,6 +21,7 @@ import type {
   CustomerPortalChangePasswordDto,
   CreateCustomerTicketDto,
   CustomerPortalLoginDto,
+  ListCustomerPortalAccountsQueryDto,
   ListCustomerTicketsQueryDto,
   UpsertCustomerPortalAccountDto,
 } from './dto/customer-portal.dto';
@@ -253,6 +254,39 @@ export class CustomerPortalService {
         isActive: true, disabledAt: true, lastLoginAt: true, createdAt: true, updatedAt: true,
       },
     });
+  }
+
+  async listAccountDirectory(query: ListCustomerPortalAccountsQueryDto): Promise<unknown> {
+    const organization = await this.defaultOrganization();
+    const where: Prisma.CustomerPortalAccountWhereInput = {
+      organizationId: organization.id,
+      ...(query.status === 'ACTIVE' ? { isActive: true } : query.status === 'INACTIVE' ? { isActive: false } : {}),
+      ...(query.search ? { OR: [
+        { name: { contains: query.search, mode: 'insensitive' } },
+        { email: { contains: query.search, mode: 'insensitive' } },
+        { phone: { contains: query.search, mode: 'insensitive' } },
+        { customer: { name: { contains: query.search, mode: 'insensitive' } } },
+        { customer: { tradeName: { contains: query.search, mode: 'insensitive' } } },
+        { customer: { cpf: { contains: query.search, mode: 'insensitive' } } },
+        { customer: { cnpj: { contains: query.search, mode: 'insensitive' } } },
+      ] } : {}),
+    };
+    const skip = (query.page - 1) * query.limit;
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.customerPortalAccount.findMany({
+        where, skip, take: query.limit,
+        orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
+        select: {
+          id: true, customerId: true, email: true, name: true, phone: true, mustChangePassword: true,
+          isActive: true, disabledAt: true, lastLoginAt: true, createdAt: true, updatedAt: true,
+          customer: { select: {
+            id: true, name: true, tradeName: true, cpf: true, cnpj: true, isActive: true,
+          } },
+        },
+      }),
+      this.prisma.customerPortalAccount.count({ where }),
+    ]);
+    return buildPaginatedResponse(items, total, query.page, query.limit);
   }
 
   async provisionAccount(dto: UpsertCustomerPortalAccountDto, actor: AuthenticatedUser): Promise<unknown> {

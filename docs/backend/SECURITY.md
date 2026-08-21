@@ -11,6 +11,8 @@
   desativação revogam sessões abertas.
 - Projeções usam `select` explícito e não retornam storage, binários, custos, valores internos,
   assinaturas ou auditoria.
+- O diretório administrativo de acessos exige OWNER, MANAGER ou VIEWER, aplica paginação e busca
+  limitada, filtra pela organização ativa e nunca projeta `passwordHash`, refresh tokens ou sessões.
 - Conversão de chamado exige OWNER/MANAGER, valida relações e impede segunda conversão.
 - Login Platform/Operator valida o canal antes de emitir tokens; as shells aplicam gate de papel
   como defesa em profundidade.

@@ -221,6 +221,17 @@ export type CustomerPortalAccount = {
   updatedAt: string;
 };
 
+export type CustomerPortalDirectoryAccount = CustomerPortalAccount & {
+  customer: {
+    id: string;
+    name: string;
+    tradeName: string | null;
+    cpf: string | null;
+    cnpj: string | null;
+    isActive: boolean;
+  };
+};
+
 /* ============ Users / Team ============ */
 
 export type UserTheme = 'SYSTEM' | 'LIGHT' | 'DARK';

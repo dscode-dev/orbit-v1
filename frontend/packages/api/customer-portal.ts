@@ -4,6 +4,7 @@ import type {
   AuthTokens,
   CreateOperationPayload,
   CustomerPortalAccount,
+  CustomerPortalDirectoryAccount,
   CustomerPortalEquipment,
   CustomerPortalOperation,
   CustomerPortalSession,
@@ -59,6 +60,10 @@ export const listMyTickets = (params?: { page?: number; limit?: number; status?:
 export const createTicket = (payload: CreateCustomerTicketPayload) => api.post<CustomerServiceTicket>('/customer/tickets', payload);
 
 export const listAccounts = (customerId: string, signal?: AbortSignal) => api.get<CustomerPortalAccount[]>('/customer-portal/accounts', { query: { customerId }, signal });
+export const listAccountDirectory = (params?: { page?: number; limit?: number; search?: string; status?: 'ACTIVE' | 'INACTIVE'; signal?: AbortSignal }) => {
+  const { signal, ...query } = params ?? {};
+  return api.get<Paginated<CustomerPortalDirectoryAccount>>('/customer-portal/accounts/directory', { query, signal });
+};
 export const provisionAccount = (payload: { customerId: string; email: string; name: string; phone?: string }) => api.post<{ account: CustomerPortalAccount; temporaryPassword: string }>('/customer-portal/accounts', payload);
 export const disableAccount = (id: string) => api.patch<CustomerPortalAccount>(`/customer-portal/accounts/${id}/disable`);
 export const resetAccountPassword = (id: string) => api.patch<{ account: CustomerPortalAccount; temporaryPassword: string }>(`/customer-portal/accounts/${id}/reset-password`);

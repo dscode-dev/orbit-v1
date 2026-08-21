@@ -16,6 +16,35 @@ function createService(prisma: Record<string, unknown>): CustomerPortalService {
 }
 
 describe('CustomerPortalService customer isolation', () => {
+  it('lists portal accounts as a paginated directory without credential fields', async () => {
+    const capturedQueries: Array<{ where: unknown; skip: number; take: number }> = [];
+    const findMany = jest.fn((query: { where: unknown; skip: number; take: number }) => {
+      capturedQueries.push(query);
+      return Promise.resolve([{ id: account.id, customerId: account.customerId, email: account.email,
+        name: account.name, phone: null, mustChangePassword: false, isActive: true, disabledAt: null,
+        lastLoginAt: null, createdAt: new Date(), updatedAt: new Date(), customer: {
+          id: account.customerId, name: 'Cliente Orbit', tradeName: null, cpf: null,
+          cnpj: '00.000.000/0001-00', isActive: true,
+        } }]);
+    });
+    const prisma = {
+      organization: { findFirst: jest.fn().mockResolvedValue({ id: account.organizationId }) },
+      customerPortalAccount: { findMany, count: jest.fn().mockResolvedValue(1) },
+      $transaction: jest.fn((queries: Array<Promise<unknown>>) => Promise.all(queries)),
+    };
+    const service = createService(prisma);
+    const result = await service.listAccountDirectory({
+      page: 1, limit: 20, search: 'cliente', status: 'ACTIVE',
+    }) as { items: Array<Record<string, unknown>>; pagination: { total: number } };
+
+    expect(findMany).toHaveBeenCalledTimes(1);
+    expect(capturedQueries[0]).toMatchObject({
+      where: { organizationId: account.organizationId, isActive: true }, skip: 0, take: 20,
+    });
+    expect(result.pagination.total).toBe(1);
+    expect(result.items[0]).not.toHaveProperty('passwordHash');
+  });
+
   it('always scopes operation detail by the authenticated customer', async () => {
     const findFirst = jest.fn().mockResolvedValue({ id: 'operation-1' });
     const service = createService({ operation: { findFirst } });

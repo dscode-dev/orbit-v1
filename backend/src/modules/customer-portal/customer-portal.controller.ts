@@ -28,6 +28,7 @@ import {
   CustomerPortalChangePasswordDto,
   CustomerPortalLoginDto,
   CustomerPortalRefreshDto,
+  ListCustomerPortalAccountsQueryDto,
   ListCustomerTicketsQueryDto,
   UpsertCustomerPortalAccountDto,
 } from './dto/customer-portal.dto';
@@ -139,6 +140,12 @@ export class CustomerPortalController {
 @Controller('customer-portal/accounts')
 export class CustomerPortalAccountsController {
   constructor(private readonly portal: CustomerPortalService) {}
+
+  @Roles(Role.OWNER, Role.MANAGER, Role.VIEWER)
+  @Get('directory')
+  directory(@Query() query: ListCustomerPortalAccountsQueryDto): Promise<unknown> {
+    return this.portal.listAccountDirectory(query);
+  }
 
   @Roles(Role.OWNER, Role.MANAGER)
   @Get()
