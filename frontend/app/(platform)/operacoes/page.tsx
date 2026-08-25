@@ -6,8 +6,8 @@
  * gradualmente a visão de Serviços. Consome a API real `/operations`.
  */
 import { Suspense, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { CalendarClock, Check, ClipboardList, Loader2, Plus, ShieldCheck, Users } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { CalendarClock, Check, ClipboardList, Loader2, Plus, ReceiptText, ShieldCheck, Users } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { DataTable, type Column } from "@platform/components/data-table";
 import { Pagination } from "@platform/components/pagination";
@@ -38,6 +38,7 @@ const STATUS_FILTERS: Array<{ key: "all" | OperationStatus; label: string }> = [
 ];
 
 function OperacoesInner() {
+  const router = useRouter();
   const params = useSearchParams();
   const customerId = params.get("customerId") ?? undefined;
   const equipmentId = params.get("equipmentId") ?? undefined;
@@ -45,6 +46,7 @@ function OperacoesInner() {
 
   const { hasRole } = useAuth();
   const canAuthorize = hasRole("OWNER", "MANAGER");
+  const canGenerateReceipt = hasRole("OWNER", "MANAGER");
   const [tab, setTab] = useState<OpsTab>("overview");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"all" | OperationStatus>(initialStatus);
@@ -88,8 +90,31 @@ function OperacoesInner() {
         const tone = cancellation?.status === "REQUESTED" || cancellation?.status === "APPROVED" ? "danger" : cancellation?.status === "RESCHEDULED" ? "info" : OPERATION_STATUS[o.status].tone;
         return <StatusChip tone={tone} dot className="whitespace-nowrap" >{label}</StatusChip>;
       } },
+      ...(canGenerateReceipt
+        ? [{
+            key: "receipt",
+            header: "Ações",
+            className: "w-[145px]",
+            link: false,
+            cell: (operation: OperationSummary) =>
+              operation.status === "COMPLETED" && operation.requestedDocumentType === "WORK_ORDER" ? (
+                <button
+                  type="button"
+                  title="Gerar Recibo a partir desta Ordem de Serviço"
+                  aria-label={`Gerar Recibo da ${operationCode(operation.number)}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    router.push(`/reports?create=RECEIPT&operationId=${encodeURIComponent(operation.id)}`);
+                  }}
+                  className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-[var(--radius-md)] border border-[var(--color-border)] px-2.5 text-xs font-medium text-[var(--color-primary)] transition hover:border-[var(--color-primary)] hover:bg-[var(--color-primary)]/5"
+                >
+                  <ReceiptText className="h-3.5 w-3.5" /> Gerar Recibo
+                </button>
+              ) : null,
+          } satisfies Column<OperationSummary>]
+        : []),
     ],
-    [],
+    [canGenerateReceipt, router],
   );
 
   return (

@@ -113,6 +113,10 @@ As entradas de criação pelo Wizard PMOC e por `/reports` consultam `GET /api/v
 OWNER/MANAGER iniciam o Recibo manualmente ou por OS concluída no drawer oficial. Nenhuma rota ou
 tela paralela foi criada.
 
+Em `/operacoes`, Ordens de Serviço concluídas exibem `Gerar Recibo`. A ação navega para
+`/reports?create=RECEIPT&operationId=:id`, abrindo o mesmo Wizard com a origem por OS e o registro
+correspondente previamente selecionados.
+
 
 ## PMOC — coleta e revisão
 

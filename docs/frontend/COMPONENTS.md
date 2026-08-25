@@ -84,6 +84,8 @@ ao término da cobertura.
 - `receiptDeclaration` separa venda de produtos e serviços prestados, preservando edição manual.
 - `ReceiptDataStep` utiliza um único campo descritivo: `Descrição dos serviços` (ou `Descrição da
   venda` para essa origem), sem o antigo campo redundante `Serviço prestado`.
+- A ação `Gerar Recibo` da tabela de Operações reutiliza `ReportWorkflowDrawer` por meio do deep
+  link oficial com `operationId`; ela não mantém estado ou formulário paralelo.
 - `ReceiptWarrantyStep` atualiza a garantia sem perder a semântica da origem.
 
 ## OS originada em PMOC

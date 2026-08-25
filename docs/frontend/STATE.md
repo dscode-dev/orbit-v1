@@ -1,5 +1,13 @@
 # STATE — Frontend
 
+## Recibo rápido a partir de Operações — 2026-08-25
+
+- A tabela de Operações oferece `Gerar Recibo` para OWNER/MANAGER somente em Ordens de Serviço
+  concluídas.
+- A ação abre o Wizard oficial da Central de Relatórios com origem `Ordem de Serviço` e a operação
+  correspondente já selecionadas e pré-preenchidas; nenhum formulário ou fluxo documental foi
+  duplicado.
+
 ## Recibo com descrição única — 2026-08-24
 
 - O Wizard da Central de Relatórios removeu o campo redundante `Serviço prestado` e mantém apenas

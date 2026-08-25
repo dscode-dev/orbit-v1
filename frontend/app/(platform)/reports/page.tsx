@@ -328,8 +328,10 @@ export default function ReportCenterPage() {
   } | null>(null);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('create') === 'RECEIPT' && params.get('saleId'))
-      setWorkflow({ type: 'RECEIPT', saleId: params.get('saleId') ?? undefined });
+    if (params.get('create') !== 'RECEIPT') return;
+    const operationId = params.get('operationId') ?? undefined;
+    const saleId = params.get('saleId') ?? undefined;
+    setWorkflow({ type: 'RECEIPT', operationId, saleId });
   }, []);
   const [selectedDocument, setSelectedDocument] = useState<DocumentCatalogItem | null>(null);
   const [search, setSearch] = useState('');
