@@ -1,5 +1,12 @@
 # ARCHITECTURE — Frontend
 
+## Wizard documental compartilhado
+
+`ReportCenterPage` e `ReportWorkflowDrawer` residem no módulo compartilhado
+`@platform/components/report-center`. A rota `/reports` monta a Central completa; `/operacoes`
+carrega somente o drawer sob demanda para gerar Recibos sem abandonar o contexto da listagem. Os
+dois pontos usam o mesmo estado, validações, APIs e fluxo Preview → Render → Download.
+
 ## Três fronteiras de sessão
 
 ```text
