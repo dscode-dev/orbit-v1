@@ -6,7 +6,8 @@
  * gradualmente a visão de Serviços. Consome a API real `/operations`.
  */
 import { Suspense, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
+import { useSearchParams } from "next/navigation";
 import { CalendarClock, Check, ClipboardList, Loader2, Plus, ReceiptText, ShieldCheck, Users } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { DataTable, type Column } from "@platform/components/data-table";
@@ -27,6 +28,11 @@ import { useDebounce, formatDateTime } from "@erp/utils";
 
 type OpsTab = "overview" | "authorize";
 
+const ReportWorkflowDrawer = dynamic(
+  () => import("@platform/components/report-center").then((module) => module.ReportWorkflowDrawer),
+  { ssr: false },
+);
+
 const STATUS_FILTERS: Array<{ key: "all" | OperationStatus; label: string }> = [
   { key: "all", label: "Todas" },
   { key: "PENDING", label: "Pendentes" },
@@ -38,7 +44,6 @@ const STATUS_FILTERS: Array<{ key: "all" | OperationStatus; label: string }> = [
 ];
 
 function OperacoesInner() {
-  const router = useRouter();
   const params = useSearchParams();
   const customerId = params.get("customerId") ?? undefined;
   const equipmentId = params.get("equipmentId") ?? undefined;
@@ -54,6 +59,7 @@ function OperacoesInner() {
   const [limit, setLimit] = useState(20);
   // Deep link (ex.: clique em uma notificação) abre o drawer da operação direto.
   const [detailId, setDetailId] = useState<string | null>(params.get("operationId"));
+  const [receiptOperationId, setReceiptOperationId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const debounced = useDebounce(search, 300);
 
@@ -104,7 +110,7 @@ function OperacoesInner() {
                   aria-label={`Gerar Recibo da ${operationCode(operation.number)}`}
                   onClick={(event) => {
                     event.stopPropagation();
-                    router.push(`/reports?create=RECEIPT&operationId=${encodeURIComponent(operation.id)}`);
+                    setReceiptOperationId(operation.id);
                   }}
                   className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-[var(--radius-md)] border border-[var(--color-border)] px-2.5 text-xs font-medium text-[var(--color-primary)] transition hover:border-[var(--color-primary)] hover:bg-[var(--color-primary)]/5"
                 >
@@ -114,7 +120,7 @@ function OperacoesInner() {
           } satisfies Column<OperationSummary>]
         : []),
     ],
-    [canGenerateReceipt, router],
+    [canGenerateReceipt],
   );
 
   return (
@@ -207,6 +213,14 @@ function OperacoesInner() {
 
       <OperationDetailDrawer operationId={detailId} open={detailId !== null} onClose={() => { setDetailId(null); list.refetch(); }} />
       <OperationCreationDrawer open={createOpen} mode="operation" onClose={() => setCreateOpen(false)} onCreated={(op) => { setDetailId(op.id); list.refetch(); }} />
+      {receiptOperationId && (
+        <ReportWorkflowDrawer
+          type="RECEIPT"
+          initialOperationId={receiptOperationId}
+          onClose={() => setReceiptOperationId(null)}
+          onRendered={list.refetch}
+        />
+      )}
     </div>
   );
 }
