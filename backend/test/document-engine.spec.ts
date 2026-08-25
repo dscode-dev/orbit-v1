@@ -779,7 +779,6 @@ describe('DocumentEngine foundation', () => {
       receiptIssuedAt: new Date('2026-07-18T00:00:00.000Z'),
       receiptAmount: 1275.9,
       receiptAmountInWords: 'um mil duzentos e setenta e cinco reais e noventa centavos',
-      receiptService: 'manutenção preventiva',
       receiptDescription: 'Higienização e revisão do sistema de climatização',
       receiptWarrantyDays: 90,
       receiptDeclaration: 'Declaração administrativa oficial do recibo.',
@@ -810,6 +809,34 @@ describe('DocumentEngine foundation', () => {
     expect(pdf.buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-');
   });
 
+  it('uses only the service description in the generated receipt declaration', () => {
+    const context = operationContext(DocumentTemplateType.RECEIPT);
+    const operation = context.operation as Record<string, unknown>;
+    Object.assign(operation, {
+      receiptAmount: 850,
+      receiptAmountInWords: 'oitocentos e cinquenta reais',
+      receiptDescription: 'Higienização e revisão do sistema de climatização',
+      receiptWarrantyDays: 90,
+      receiptDeclaration: null,
+    });
+
+    const built = (
+      new DocumentBuilderService({} as never) as unknown as {
+        buildFromContext: (ctx: unknown) => DocumentBlueprint;
+      }
+    ).buildFromContext(context);
+    const declaration = built.sections
+      .find((section) => section.id === 'receipt-declaration')
+      ?.components.find((component) => component.kind === 'paragraph');
+    const text = declaration?.kind === 'paragraph' ? declaration.text : '';
+
+    expect(text).toContain('correspondente aos serviços prestados');
+    expect(text).toContain(
+      'Descrição dos serviços: Higienização e revisão do sistema de climatização',
+    );
+    expect(text).not.toContain('Serviço prestado');
+  });
+
   it('distinguishes a product sale receipt and identifies the customer in the fallback declaration', () => {
     const context = operationContext(DocumentTemplateType.RECEIPT);
     const operation = context.operation as Record<string, unknown>;
@@ -817,7 +844,6 @@ describe('DocumentEngine foundation', () => {
       sourceSaleId: '8b490e18-72bb-42bd-a51d-fb57457a1a97',
       receiptAmount: 1350,
       receiptAmountInWords: 'mil e trezentos e cinquenta reais',
-      receiptService: 'Compressor',
       receiptDescription: '1 UN — Compressor',
       receiptWarrantyDays: 90,
       receiptDeclaration: null,
@@ -833,7 +859,9 @@ describe('DocumentEngine foundation', () => {
     const text = declaration?.kind === 'paragraph' ? declaration.text : '';
 
     expect(text).toContain('Hospital Santa Clara, CNPJ nº 00.000.000/0001-00');
-    expect(text).toContain('correspondente à venda de produtos: Compressor');
+    expect(text).toContain('correspondente à venda realizada');
+    expect(text).toContain('Descrição da venda: 1 UN — Compressor');
+    expect(text).not.toContain('venda de produtos: Compressor');
     expect(text).toContain('garantia de 90 dias sobre os produtos fornecidos');
     expect(text).not.toContain('referente ao serviço de');
   });

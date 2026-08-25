@@ -1,5 +1,12 @@
 # STATE — Frontend
 
+## Recibo com descrição única — 2026-08-24
+
+- O Wizard da Central de Relatórios removeu o campo redundante `Serviço prestado` e mantém apenas
+  a descrição dos serviços ou da venda.
+- Declaração automática, Preview e PDF passam a consumir a mesma descrição, preservando a edição
+  manual do texto e a distinção gramatical entre prestação de serviços e venda.
+
 ## Portal do Cliente e Chamados — 2026-08-21
 
 - Novas rotas `/customer/login`, `/customer/change-password`, `/customer` e `/service-tickets`.

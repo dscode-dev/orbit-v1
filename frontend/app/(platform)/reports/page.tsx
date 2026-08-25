@@ -158,7 +158,6 @@ type WorkflowForm = {
   receiptNumber: string;
   receiptDate: string;
   receiptAmountInWords: string;
-  receiptService: string;
   receiptDescription: string;
   receiptWarrantyPreset: 'NONE' | '30' | '60' | '90' | '180' | '365' | 'CUSTOM';
   receiptWarrantyDays: string;
@@ -248,7 +247,6 @@ const emptyForm: WorkflowForm = {
   receiptNumber: '',
   receiptDate: localDateInputValue(),
   receiptAmountInWords: '',
-  receiptService: '',
   receiptDescription: '',
   receiptWarrantyPreset: '90',
   receiptWarrantyDays: '90',
@@ -309,24 +307,11 @@ function receiptDeclaration(
   const customerLabel = receiptCustomerLabel(customer);
   const formattedAmount = amount === null ? '{VALOR_NUMÉRICO}' : formatBrl(amount);
   const amountInWords = form.receiptAmountInWords || '{VALOR_EXTENSO}';
-  const subject = form.receiptService || (form.receiptSource === 'SALE' ? '{PRODUTOS}' : '{SERVIÇO}');
-  const description = form.receiptDescription.trim();
+  const description = form.receiptDescription.trim() || '{DESCRIÇÃO DOS SERVIÇOS}';
   const first =
     form.receiptSource === 'SALE'
-      ? [
-          `Recebemos de ${customerLabel} a quantia de ${formattedAmount} (${amountInWords}), correspondente à venda de produtos: ${sentence(subject)}`,
-          description ? `Itens fornecidos: ${sentence(description)}` : '',
-        ]
-          .filter(Boolean)
-          .join('\n\n')
-      : [
-          `Recebemos de ${customerLabel} a quantia de ${formattedAmount} (${amountInWords}), correspondente aos serviços prestados: ${sentence(subject)}`,
-          description && description.trim() !== subject.trim()
-            ? `Descrição dos serviços: ${sentence(description)}`
-            : '',
-        ]
-          .filter(Boolean)
-          .join('\n\n');
+      ? `Recebemos de ${customerLabel} a quantia de ${formattedAmount} (${amountInWords}), correspondente à venda realizada. Descrição da venda: ${sentence(description)}`
+      : `Recebemos de ${customerLabel} a quantia de ${formattedAmount} (${amountInWords}), correspondente aos serviços prestados. Descrição dos serviços: ${sentence(description)}`;
   const second = Number(form.receiptWarrantyDays)
     ? `Damos, por este recibo, a devida quitação e garantia de ${receiptWarrantyLabel(form.receiptWarrantyDays)} ${form.receiptSource === 'SALE' ? 'sobre os produtos fornecidos' : 'sobre os serviços prestados'}, contados a partir da data deste documento.`
     : 'Damos, por este recibo, a devida quitação.';
@@ -748,6 +733,10 @@ function ReportWorkflowDrawer({
     type,
     form.receiptSource,
     form.receiptDeclarationEdited,
+    form.receiptDescription,
+    form.receiptAmountInWords,
+    form.receiptWarrantyDays,
+    form.amount,
     form.customerId,
     selectedCustomer,
   ]);
@@ -898,8 +887,7 @@ function ReportWorkflowDrawer({
           receiptDate: prefill.issuedAt.slice(0, 10),
           amount: amount.toFixed(2).replace('.', ','),
           receiptAmountInWords: brlAmountInWords(amount),
-          receiptService: prefill.service,
-          receiptDescription: prefill.description,
+          receiptDescription: prefill.description || prefill.service,
           receiptWarrantyPreset: 'CUSTOM',
           receiptWarrantyDays: prefill.warrantyDays ? String(prefill.warrantyDays) : '',
           receiptDeclaration: '',
@@ -964,13 +952,15 @@ function ReportWorkflowDrawer({
               receiptDate: localDateInputValue(),
               amount: receiptAmount === null ? '' : receiptAmount.toFixed(2).replace('.', ','),
               receiptAmountInWords: receiptAmount === null ? '' : brlAmountInWords(receiptAmount),
-              receiptService:
-                detail.receiptService ?? detail.serviceDescription ?? 'serviços técnicos prestados',
-              receiptDescription: detail.receiptDescription ?? receiptDescription,
+              receiptDescription:
+                detail.receiptDescription ||
+                receiptDescription ||
+                detail.receiptService ||
+                'Serviços técnicos prestados',
               receiptWarrantyPreset: '90' as const,
               receiptWarrantyDays: '90',
-              receiptDeclaration: detail.receiptDeclaration ?? '',
-              receiptDeclarationEdited: Boolean(detail.receiptDeclaration),
+              receiptDeclaration: '',
+              receiptDeclarationEdited: false,
             }
           : {}),
         objective: detail.reportedIssue ?? '',
@@ -1295,7 +1285,6 @@ function ReportWorkflowDrawer({
           throw new Error('Informe uma data e um valor monetário válido.');
         if (
           !form.receiptAmountInWords.trim() ||
-          !form.receiptService.trim() ||
           !form.receiptDescription.trim() ||
           !form.receiptDeclaration.trim()
         )
@@ -2535,26 +2524,8 @@ function ReceiptDataStep({
           }}
         />
         <div className="md:col-span-2">
-          <Text
-            label={form.receiptSource === 'SALE' ? 'Produtos vendidos' : 'Serviço prestado'}
-            value={form.receiptService}
-            onChange={(value) => {
-              onSet('receiptService', value);
-              if (!form.receiptDeclarationEdited)
-                onSet(
-                  'receiptDeclaration',
-                  receiptDeclaration({ ...form, receiptService: value }, customer),
-                );
-            }}
-          />
-        </div>
-        <div className="md:col-span-2">
           <Area
-            label={
-              form.receiptSource === 'SALE'
-                ? 'Itens e observações da venda'
-                : 'Descrição dos serviços'
-            }
+            label={form.receiptSource === 'SALE' ? 'Descrição da venda' : 'Descrição dos serviços'}
             value={form.receiptDescription}
             onChange={(value) => {
               onSet('receiptDescription', value);
@@ -3575,7 +3546,6 @@ function contentFor(type: DocumentKind, form: WorkflowForm) {
       receiptIssuedAt: form.receiptDate,
       receiptAmount: parseBrl(form.amount),
       receiptAmountInWords: form.receiptAmountInWords.trim(),
-      receiptService: form.receiptService.trim(),
       receiptDescription: form.receiptDescription.trim(),
       receiptWarrantyDays: Number(form.receiptWarrantyDays) || null,
       receiptDeclaration: form.receiptDeclaration.trim(),

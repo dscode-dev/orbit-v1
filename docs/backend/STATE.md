@@ -1,5 +1,11 @@
 # Backend State
 
+## Recibo com fonte descritiva única — 2026-08-24
+
+- O Document Builder usa `receiptDescription` como fonte oficial da descrição em novos Recibos.
+- `receiptService` é somente fallback de leitura para documentos históricos; não existe migration
+  destrutiva nem mudança no download, Preview, Renderer ou PDF Engine.
+
 ## Portal do Cliente e Central de Chamados — 2026-08-21
 
 - Identidade externa isolada em `CustomerPortalAccount`; nunca utiliza `User`, `Role` ou refresh
