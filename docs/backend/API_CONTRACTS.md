@@ -534,7 +534,6 @@ negados com `403`. OWNER/MANAGER/VIEWER mantêm o RBAC previamente documentado.
   "receiptIssuedAt": "2026-07-18",
   "receiptAmount": 1275.90,
   "receiptAmountInWords": "um mil duzentos e setenta e cinco reais e noventa centavos",
-  "receiptService": "manutenção preventiva",
   "receiptDescription": "Higienização e revisão do sistema",
   "receiptWarrantyDays": 90,
   "receiptDeclaration": "Texto final editável da declaração."
@@ -544,6 +543,10 @@ negados com `403`. OWNER/MANAGER/VIEWER mantêm o RBAC previamente documentado.
 `receiptNumber` omitido usa `REC-<operação>`; garantia nula significa “Sem garantia”. Preview,
 seleção da assinatura técnica, revisão, render e download reutilizam os endpoints oficiais de
 `/documents`. O download é PDF binário autenticado.
+
+Novos Recibos utilizam `receiptDescription` como única fonte descritiva no Wizard e no documento.
+`receiptService` permanece aceito somente para compatibilidade com registros históricos e não é
+mais enviado pela Central de Relatórios.
 
 
 ## PMOC — evidências e assinaturas no wizard

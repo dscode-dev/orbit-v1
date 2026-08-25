@@ -82,6 +82,8 @@ ao término da cobertura.
 - `ReceiptDataStep` adapta labels e declaração conforme `receiptSource`.
 - `receiptCustomerLabel` formata nome + CPF/CNPJ.
 - `receiptDeclaration` separa venda de produtos e serviços prestados, preservando edição manual.
+- `ReceiptDataStep` utiliza um único campo descritivo: `Descrição dos serviços` (ou `Descrição da
+  venda` para essa origem), sem o antigo campo redundante `Serviço prestado`.
 - `ReceiptWarrantyStep` atualiza a garantia sem perder a semântica da origem.
 
 ## OS originada em PMOC

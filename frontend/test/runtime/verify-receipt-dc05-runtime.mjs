@@ -45,10 +45,9 @@ const operation = await request('/operations', token, {
     receiptIssuedAt: '2026-07-18',
     receiptAmount: 1275.9,
     receiptAmountInWords: 'um mil duzentos e setenta e cinco reais e noventa centavos',
-    receiptService: 'manutenção preventiva',
     receiptDescription: 'Higienização e revisão do sistema de climatização',
     receiptWarrantyDays: 90,
-    receiptDeclaration: `Recebemos de ${customer.tradeName ?? customer.name} a importância de R$ 1.275,90 (um mil duzentos e setenta e cinco reais e noventa centavos), referente ao serviço de manutenção preventiva, descrito como higienização e revisão do sistema de climatização.\n\nDamos por este recibo a devida quitação e garantia de 90 dias, contados a partir da data deste documento.`,
+    receiptDeclaration: `Recebemos de ${customer.tradeName ?? customer.name} a quantia de R$ 1.275,90 (um mil duzentos e setenta e cinco reais e noventa centavos), correspondente aos serviços prestados. Descrição dos serviços: Higienização e revisão do sistema de climatização.\n\nDamos, por este recibo, a devida quitação e garantia de 90 dias sobre os serviços prestados, contados a partir da data deste documento.`,
   }),
 });
 let handoff = await request('/documents/handoffs', token, { method: 'POST', body: JSON.stringify({ operationId: operation.id, type: 'RECEIPT' }) });

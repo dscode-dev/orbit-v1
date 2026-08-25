@@ -1020,15 +1020,15 @@ export class DocumentBuilderService {
       : 'R$ 0,00';
     const customerLabel = this.receiptCustomerLabel(operation.customer);
     const isSaleReceipt = Boolean(operation.sourceSaleId);
-    const subject =
-      operation.receiptService ?? (isSaleReceipt ? 'produtos fornecidos' : 'serviços prestados');
-    const description = operation.receiptDescription ?? 'sem descrição complementar';
+    // Campo legado mantido apenas como fallback para recibos históricos.
+    const description =
+      operation.receiptDescription ?? operation.receiptService ?? 'sem descrição informada';
     const declaration =
       operation.receiptDeclaration ??
       [
         isSaleReceipt
-          ? `Recebemos de ${customerLabel} a quantia de ${amount} (${operation.receiptAmountInWords ?? 'valor não informado'}), correspondente à venda de produtos: ${subject}. Itens fornecidos: ${description}.`
-          : `Recebemos de ${customerLabel} a quantia de ${amount} (${operation.receiptAmountInWords ?? 'valor não informado'}), correspondente aos serviços prestados: ${subject}. Descrição dos serviços: ${description}.`,
+          ? `Recebemos de ${customerLabel} a quantia de ${amount} (${operation.receiptAmountInWords ?? 'valor não informado'}), correspondente à venda realizada. Descrição da venda: ${description}.`
+          : `Recebemos de ${customerLabel} a quantia de ${amount} (${operation.receiptAmountInWords ?? 'valor não informado'}), correspondente aos serviços prestados. Descrição dos serviços: ${description}.`,
         operation.receiptWarrantyDays
           ? `Damos, por este recibo, a devida quitação e garantia de ${warranty} ${isSaleReceipt ? 'sobre os produtos fornecidos' : 'sobre os serviços prestados'}, contados a partir da data deste documento.`
           : 'Damos, por este recibo, a devida quitação.',
