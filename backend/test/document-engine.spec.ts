@@ -1876,20 +1876,26 @@ describe('DocumentEngine foundation', () => {
     const services = built.sections.find((section) => section.id === 'budget-services')?.components[0];
     const descriptions = built.sections.find((section) => section.id === 'budget-material-descriptions')?.components[0];
     const materials = built.sections.find((section) => section.id === 'budget-commercial-materials')?.components[0];
-    expect(services?.kind === 'table' ? services.rows : []).toHaveLength(1);
-    expect(built.sections.find((section) => section.id === 'budget-services')?.components[1]).toMatchObject({
-      id: 'budget-service-discount',
-      kind: 'observation',
-      text: 'Condição especial para contratação integral: R$ 50,00.',
+    expect(services?.kind === 'table' ? services.rows : []).toHaveLength(2);
+    expect(services?.kind === 'table' ? services.rows[1] : null).toEqual({
+      item: 'Condição especial para contratação integral',
+      quantity: '',
+      unit: '',
+      unitPrice: '',
+      total: '- R$ 50,00',
     });
+    expect(services?.kind === 'table' ? services.emphasizedRowIndexes : []).toEqual([1]);
     expect(descriptions?.kind === 'table' ? descriptions.columns.map((column) => column.key) : []).toEqual(['item', 'quantity']);
     expect(descriptions?.kind === 'table' ? descriptions.rows[0] : null).not.toHaveProperty('unitPrice');
-    expect(materials?.kind === 'table' ? materials.rows : []).toHaveLength(1);
-    expect(built.sections.find((section) => section.id === 'budget-commercial-materials')?.components[1]).toMatchObject({
-      id: 'budget-material-discount',
-      kind: 'observation',
-      text: 'Desconto comercial nos fornecimentos: R$ 25,00.',
+    expect(materials?.kind === 'table' ? materials.rows : []).toHaveLength(2);
+    expect(materials?.kind === 'table' ? materials.rows[1] : null).toEqual({
+      item: 'Desconto comercial nos fornecimentos',
+      quantity: '',
+      unit: '',
+      unitPrice: '',
+      total: '- R$ 25,00',
     });
+    expect(materials?.kind === 'table' ? materials.emphasizedRowIndexes : []).toEqual([1]);
     const totals = built.sections.find((section) => section.id === 'budget-totals')?.components[0];
     expect(totals?.kind === 'metadata' ? totals.items : []).toEqual(expect.arrayContaining([
       { label: 'Desconto nos serviços', value: 'R$ 50,00' },

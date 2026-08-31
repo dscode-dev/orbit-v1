@@ -1684,24 +1684,39 @@ export class DocumentBuilderService {
     const itemTable = (
       id: string,
       items: typeof budget.items,
-    ): Extract<DocumentBlueprintComponent, { kind: 'table' }> => ({
-      id,
-      kind: 'table',
-      columns: [
-        { key: 'item', label: 'Descrição', width: 0.48 },
-        { key: 'quantity', label: 'Qtd.', width: 0.12 },
-        { key: 'unit', label: 'Un.', width: 0.1 },
-        { key: 'unitPrice', label: 'Valor unit.', width: 0.15 },
-        { key: 'total', label: 'Subtotal', width: 0.15 },
-      ],
-      rows: items.map((item) => ({
+      discount?: { amount: Prisma.Decimal | number | string; description: string | null },
+    ): Extract<DocumentBlueprintComponent, { kind: 'table' }> => {
+      const rows = items.map((item) => ({
         item: this.clean(item.description || item.product?.name || 'Item'),
         quantity: this.decimal(item.quantity),
         unit: this.clean(item.unit),
         unitPrice: this.money(item.unitPrice),
         total: this.money(item.total),
-      })),
-    });
+      }));
+      const hasDiscount = discount && Number(discount.amount) > 0;
+      if (hasDiscount) {
+        rows.push({
+          item: this.clean(discount.description || 'Desconto comercial'),
+          quantity: '',
+          unit: '',
+          unitPrice: '',
+          total: `- ${this.money(discount.amount)}`,
+        });
+      }
+      return {
+        id,
+        kind: 'table',
+        columns: [
+          { key: 'item', label: 'Descrição', width: 0.48 },
+          { key: 'quantity', label: 'Qtd.', width: 0.12 },
+          { key: 'unit', label: 'Un.', width: 0.1 },
+          { key: 'unitPrice', label: 'Valor unit.', width: 0.15 },
+          { key: 'total', label: 'Subtotal', width: 0.15 },
+        ],
+        rows,
+        ...(hasDiscount ? { emphasizedRowIndexes: [rows.length - 1] } : {}),
+      };
+    };
     const descriptionTable = (
       id: string,
       items: typeof budget.items,
@@ -1819,21 +1834,15 @@ export class DocumentBuilderService {
     });
 
     if (services.length) {
-      const serviceDiscount = Number(budget.serviceDiscount);
       sections.push({
         id: 'budget-services',
         title: 'Serviços',
         critical: true,
         components: [
-          itemTable('budget-services-table', services),
-          ...(serviceDiscount > 0
-            ? [{
-                id: 'budget-service-discount',
-                kind: 'observation' as const,
-                text: `${this.clean(budget.serviceDiscountDescription || 'Desconto especial aplicado aos serviços')}: ${this.money(budget.serviceDiscount)}.`,
-                keepTogether: true,
-              }]
-            : []),
+          itemTable('budget-services-table', services, {
+            amount: budget.serviceDiscount,
+            description: budget.serviceDiscountDescription,
+          }),
         ],
       });
     }
@@ -1862,21 +1871,15 @@ export class DocumentBuilderService {
       });
     }
     if (commercialMaterials.length) {
-      const materialDiscount = Number(budget.materialDiscount);
       sections.push({
         id: 'budget-commercial-materials',
         title: 'Materiais e fornecimentos',
         critical: true,
         components: [
-          itemTable('budget-commercial-materials-table', commercialMaterials),
-          ...(materialDiscount > 0
-            ? [{
-                id: 'budget-material-discount',
-                kind: 'observation' as const,
-                text: `${this.clean(budget.materialDiscountDescription || 'Desconto especial aplicado aos materiais e fornecimentos')}: ${this.money(budget.materialDiscount)}.`,
-                keepTogether: true,
-              }]
-            : []),
+          itemTable('budget-commercial-materials-table', commercialMaterials, {
+            amount: budget.materialDiscount,
+            description: budget.materialDiscountDescription,
+          }),
         ],
       });
     }

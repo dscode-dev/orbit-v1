@@ -498,11 +498,16 @@ export class DocumentRendererService {
       component.rows.length > 0
         ? component.rows
         : [Object.fromEntries(component.columns.map((column) => [column.key, '—']))];
-    const measuredRows = sourceRows.map((row) => {
+    const measuredRows = sourceRows.map((row, rowIndex) => {
       const lines = component.columns.map((column, index) =>
         this.wrap(row[column.key] ?? '—', Math.max(20, widths[index] - 8), 8),
       );
-      return { row, lines, height: Math.max(17, ...lines.map((cell) => cell.length * 9 + 7)) };
+      return {
+        row,
+        lines,
+        height: Math.max(17, ...lines.map((cell) => cell.length * 9 + 7)),
+        emphasized: component.emphasizedRowIndexes?.includes(rowIndex) === true,
+      };
     });
     const chunks: (typeof measuredRows)[] = [];
     const fullBudget = this.layout.availableHeight() - headerHeight - blockPadding;
@@ -539,6 +544,7 @@ export class DocumentRendererService {
       row: Record<string, string>;
       lines: string[][];
       height: number;
+      emphasized: boolean;
     }>,
     x: number,
     y: number,
@@ -571,8 +577,19 @@ export class DocumentRendererService {
       cursor += widths[index];
     });
     let rowsHeight = 0;
-    rows.forEach(({ lines, height }) => {
+    rows.forEach(({ lines, height, emphasized }) => {
       const rowY = y - headerHeight - rowsHeight;
+      if (emphasized) {
+        elements.push({
+          type: 'rect',
+          x,
+          y: rowY - height,
+          width,
+          height,
+          fillColor: '#f0f9ff',
+          strokeColor: '#dbeafe',
+        });
+      }
       elements.push({ type: 'line', x1: x, y1: rowY, x2: x + width, y2: rowY });
       cursor = x;
       component.columns.forEach((_column, columnIndex) => {
@@ -583,6 +600,8 @@ export class DocumentRendererService {
             y: rowY - 11 - lineIndex * 9,
             text: line,
             size: 8,
+            bold: emphasized,
+            color: emphasized && columnIndex === component.columns.length - 1 ? '#075985' : undefined,
           }),
         );
         cursor += widths[columnIndex];

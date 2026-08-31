@@ -556,15 +556,24 @@ function ComponentPreview({
           </tr>
         </thead>
         <tbody>
-          {component.rows.map((row, index) => (
-            <tr key={index} className="border-b border-slate-100">
+          {component.rows.map((row, index) => {
+            const emphasized = component.emphasizedRowIndexes?.includes(index) === true;
+            return (
+            <tr
+              key={index}
+              className={`border-b border-slate-100 ${emphasized ? 'bg-sky-50/70 font-medium text-slate-700' : ''}`}
+            >
               {component.columns.map((col) => (
-                <td key={col.key} className="break-words px-1 py-2 align-top">
+                <td
+                  key={col.key}
+                  className={`break-words px-1 py-2 align-top ${emphasized && col.key === 'total' ? 'font-semibold text-sky-800' : ''}`}
+                >
                   {row[col.key] ?? '—'}
                 </td>
               ))}
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     );
