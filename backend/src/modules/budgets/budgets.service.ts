@@ -81,6 +81,9 @@ type SnapshotItem = {
 
 const DEFAULT_BUDGET_INTRODUCTION =
   'Atendendo à honrosa solicitação de V.Sa., apresentamos nosso orçamento conforme solicitado.';
+const DEFAULT_SERVICE_DISCOUNT_DESCRIPTION = 'Desconto especial aplicado aos serviços';
+const DEFAULT_MATERIAL_DISCOUNT_DESCRIPTION =
+  'Desconto especial aplicado aos materiais e fornecimentos';
 
 @Injectable()
 export class BudgetsService {
@@ -121,7 +124,12 @@ export class BudgetsService {
     const equipmentRows = await this.resolveEquipmentRows(relations.customerId, equipmentIds);
     const primaryEquipmentId = equipmentIds[0] ?? relations.equipmentId ?? null;
     const items = await this.resolveSnapshotItems(dto.items);
-    const totals = this.calculateTotals(items, dto.discount, dto.additional);
+    const totals = this.calculateTotals(items, {
+      discount: dto.discount,
+      serviceDiscount: dto.serviceDiscount,
+      materialDiscount: dto.materialDiscount,
+      additional: dto.additional,
+    });
     const issuedAt = dto.issuedAt ? new Date(dto.issuedAt) : new Date();
     const validityDays = dto.validityDays ?? 30;
     const expirationDate = dto.expirationDate
@@ -143,6 +151,16 @@ export class BudgetsService {
           introduction: this.clean(dto.introduction || DEFAULT_BUDGET_INTRODUCTION),
           serviceSubtotal: totals.serviceSubtotal,
           materialSubtotal: totals.materialSubtotal,
+          serviceDiscount: totals.serviceDiscount,
+          materialDiscount: totals.materialDiscount,
+          serviceDiscountDescription:
+            Number(totals.serviceDiscount) > 0
+              ? this.clean(dto.serviceDiscountDescription || DEFAULT_SERVICE_DISCOUNT_DESCRIPTION)
+              : null,
+          materialDiscountDescription:
+            Number(totals.materialDiscount) > 0
+              ? this.clean(dto.materialDiscountDescription || DEFAULT_MATERIAL_DISCOUNT_DESCRIPTION)
+              : null,
           subtotal: totals.subtotal,
           discount: totals.discount,
           additional: totals.additional,
@@ -208,26 +226,39 @@ export class BudgetsService {
       primaryEquipmentId = equipmentIds[0] ?? null;
     }
     const items = dto.items ? await this.resolveSnapshotItems(dto.items) : undefined;
-    const totals = items
-      ? this.calculateTotals(items, dto.discount ?? Number(current.discount), dto.additional ?? Number(current.additional))
-      : this.calculateTotals(
-          current.items.map((item) => ({
-            productId: item.productId,
-            type: item.type,
-            source: item.source,
-            description: item.description,
-            quantity: Number(item.quantity),
-            unit: item.unit,
-            unitPrice: item.unitPrice.toString(),
-            sortOrder: item.sortOrder,
-            snapshotCost: item.snapshotCost.toString(),
-            snapshotSalePrice: item.snapshotSalePrice.toString(),
-            snapshotMargin: item.snapshotMargin.toString(),
-            total: item.total.toString(),
-          })),
-          dto.discount ?? Number(current.discount),
-          dto.additional ?? Number(current.additional),
-        );
+    const totalItems =
+      items ??
+      current.items.map((item) => ({
+        productId: item.productId,
+        type: item.type,
+        source: item.source,
+        description: item.description,
+        quantity: Number(item.quantity),
+        unit: item.unit,
+        unitPrice: item.unitPrice.toString(),
+        sortOrder: item.sortOrder,
+        snapshotCost: item.snapshotCost.toString(),
+        snapshotSalePrice: item.snapshotSalePrice.toString(),
+        snapshotMargin: item.snapshotMargin.toString(),
+        total: item.total.toString(),
+      }));
+    const hasScopedDiscountUpdate =
+      dto.serviceDiscount !== undefined || dto.materialDiscount !== undefined;
+    const totals = this.calculateTotals(totalItems, {
+      ...(hasScopedDiscountUpdate
+        ? {
+            discount: dto.discount,
+            serviceDiscount: dto.serviceDiscount ?? Number(current.serviceDiscount),
+            materialDiscount: dto.materialDiscount ?? Number(current.materialDiscount),
+          }
+        : dto.discount !== undefined
+          ? { discount: dto.discount }
+          : {
+              serviceDiscount: Number(current.serviceDiscount),
+              materialDiscount: Number(current.materialDiscount),
+            }),
+      additional: dto.additional ?? Number(current.additional),
+    });
     const issuedAt = dto.issuedAt ? new Date(dto.issuedAt) : current.issuedAt;
     const validityDays = dto.validityDays ?? current.validityDays;
     const expirationDate = dto.expirationDate
@@ -265,6 +296,24 @@ export class BudgetsService {
           status: nextStatus,
           serviceSubtotal: totals.serviceSubtotal,
           materialSubtotal: totals.materialSubtotal,
+          serviceDiscount: totals.serviceDiscount,
+          materialDiscount: totals.materialDiscount,
+          serviceDiscountDescription:
+            Number(totals.serviceDiscount) > 0
+              ? this.clean(
+                  dto.serviceDiscountDescription ||
+                    current.serviceDiscountDescription ||
+                    DEFAULT_SERVICE_DISCOUNT_DESCRIPTION,
+                )
+              : null,
+          materialDiscountDescription:
+            Number(totals.materialDiscount) > 0
+              ? this.clean(
+                  dto.materialDiscountDescription ||
+                    current.materialDiscountDescription ||
+                    DEFAULT_MATERIAL_DISCOUNT_DESCRIPTION,
+                )
+              : null,
           subtotal: totals.subtotal,
           discount: totals.discount,
           additional: totals.additional,
@@ -638,9 +687,19 @@ export class BudgetsService {
     return items;
   }
 
-  private calculateTotals(items: SnapshotItem[], discount = 0, additional = 0): {
+  private calculateTotals(
+    items: SnapshotItem[],
+    input: {
+      discount?: number;
+      serviceDiscount?: number;
+      materialDiscount?: number;
+      additional?: number;
+    } = {},
+  ): {
     serviceSubtotal: string;
     materialSubtotal: string;
+    serviceDiscount: string;
+    materialDiscount: string;
     subtotal: string;
     discount: string;
     additional: string;
@@ -653,13 +712,51 @@ export class BudgetsService {
       .filter((item) => item.type === BudgetItemType.MATERIAL)
       .reduce((sum, item) => sum + Number(item.total), 0);
     const subtotal = serviceSubtotal + materialSubtotal;
+    const hasScopedDiscount =
+      input.serviceDiscount !== undefined || input.materialDiscount !== undefined;
+    const legacyDiscount = input.discount ?? 0;
+    const serviceDiscount = hasScopedDiscount
+      ? input.serviceDiscount ?? 0
+      : Math.min(legacyDiscount, serviceSubtotal);
+    const materialDiscount = hasScopedDiscount
+      ? input.materialDiscount ?? 0
+      : Math.max(legacyDiscount - serviceDiscount, 0);
+    const discount = serviceDiscount + materialDiscount;
+    const additional = input.additional ?? 0;
+    if (hasScopedDiscount && input.discount !== undefined && Math.abs(input.discount - discount) > 0.005) {
+      throw new ApplicationException(
+        ERROR_CODES.VALIDATION_ERROR,
+        'O desconto total deve corresponder à soma dos descontos de serviços e materiais',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (serviceDiscount > serviceSubtotal) {
+      throw new ApplicationException(
+        ERROR_CODES.VALIDATION_ERROR,
+        'O desconto dos serviços não pode superar o subtotal dos serviços',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (materialDiscount > materialSubtotal) {
+      throw new ApplicationException(
+        ERROR_CODES.VALIDATION_ERROR,
+        'O desconto dos materiais não pode superar o subtotal dos materiais',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
     const total = subtotal - discount + additional;
     if (total < 0) {
-      throw new ApplicationException(ERROR_CODES.VALIDATION_ERROR, 'Budget total cannot be negative', HttpStatus.BAD_REQUEST);
+      throw new ApplicationException(
+        ERROR_CODES.VALIDATION_ERROR,
+        'O valor total do orçamento não pode ser negativo',
+        HttpStatus.BAD_REQUEST,
+      );
     }
     return {
       serviceSubtotal: this.money(serviceSubtotal),
       materialSubtotal: this.money(materialSubtotal),
+      serviceDiscount: this.money(serviceDiscount),
+      materialDiscount: this.money(materialDiscount),
       subtotal: this.money(subtotal),
       discount: this.money(discount),
       additional: this.money(additional),

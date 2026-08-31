@@ -2459,6 +2459,10 @@ export type Budget = {
   introduction: string;
   serviceSubtotal: string | number;
   materialSubtotal: string | number;
+  serviceDiscount: string | number;
+  materialDiscount: string | number;
+  serviceDiscountDescription: string | null;
+  materialDiscountDescription: string | null;
   subtotal: string | number;
   discount: string | number;
   additional: string | number;
@@ -2550,6 +2554,10 @@ export type BudgetPayload = {
   issuedAt?: string;
   introduction?: string;
   discount?: number;
+  serviceDiscount?: number;
+  materialDiscount?: number;
+  serviceDiscountDescription?: string | null;
+  materialDiscountDescription?: string | null;
   additional?: number;
   expirationDate?: string;
   validityDays?: number;

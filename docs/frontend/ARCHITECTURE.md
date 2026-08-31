@@ -753,6 +753,8 @@ Camadas:
 Regras arquiteturais:
 
 - frontend nunca calcula preço, custo, margem, subtotal ou total como fonte de verdade;
+- o Wizard pode apresentar uma estimativa imediata dos descontos por categoria, mas o total
+  persistido e renderizado é sempre recalculado pelo Budget backend;
 - criação envia apenas cliente/operação/equipamento, data, observações e itens;
 - snapshots comerciais vêm exclusivamente do backend;
 - histórico vem de `/budgets/history/:id`;

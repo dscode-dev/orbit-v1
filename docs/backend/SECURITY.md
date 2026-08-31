@@ -2220,6 +2220,9 @@ The catalog is scoped to the installation Organization in every query. Reads req
 - Somente OWNER/MANAGER criam, editam, assinam, visualizam, renderizam e baixam orçamentos.
 - DTOs validam UUIDs, valores monetários não negativos, quantidades positivas, limites textuais, datas, enums e ao menos um item/forma de pagamento.
 - Totais não são aceitos como autoridade do request: o backend recalcula e o documento usa os valores persistidos, sem consultar Pricing durante renderização.
+- Descontos de serviços e materiais são monetários não negativos, não podem superar o subtotal da
+  própria categoria e têm limite de 500 caracteres para o texto documental. O agregado
+  `discount` é derivado no backend.
 - Assinaturas reutilizam validação MIME/binária, limite e Storage UUID do handoff oficial.
 - PDF e imagens passam por endpoints autenticados; contratos não expõem storageKey, paths, tokens ou Base64 documental.
 # Sales security controls — 2026-07-22

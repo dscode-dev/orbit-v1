@@ -896,7 +896,7 @@ Tipos:
 - `PmocDetailPage`: reúne editar, evidências, assinaturas, pausa/retomada, responsáveis e finalização confirmada.
 ## DC-06
 
-- BudgetWizardDrawer: wizard oficial reutilizado em /budgets e OperationDetailDrawer; suporta origem, dados, itens, valores, condições e assinaturas.
+- BudgetWizardDrawer: wizard oficial reutilizado em /budgets e OperationDetailDrawer; suporta origem, dados, itens, descontos independentes em serviços/materiais, valores, condições e assinaturas. `DiscountEditor` recebe valores em reais, permite editar o texto padrão e bloqueia avanço quando o desconto supera o subtotal exibido; o backend repete a validação e calcula o total oficial.
 - BudgetItemsEditor: etapa interna do wizard para SERVICE/MATERIAL, com adicionar, remover e reordenar.
 - Reutilizados SignaturePad, CustomerSignaturePreview, TechnicalSignaturePreview e DocumentViewer; nenhum capturador, preview ou gerador PDF paralelo foi criado.
 # Customer Workspace components

@@ -1,5 +1,13 @@
 # STATE — Frontend
 
+## Orçamento — descontos em serviços e materiais — 2026-08-31
+
+- Os passos Serviços e Materiais aceitam desconto opcional em reais e um texto documental
+  editável, preenchido inicialmente com uma mensagem comercial padrão.
+- O resumo exibe os descontos por categoria e o total líquido; o payload envia somente os valores
+  de entrada e o backend permanece responsável pelo cálculo oficial.
+- Preview e PDF mostram cada desconto em uma linha própria após a tabela correspondente.
+
 ## Recibo rápido a partir de Operações — 2026-08-25
 
 - A tabela de Operações oferece `Gerar Recibo` para OWNER/MANAGER somente em Ordens de Serviço

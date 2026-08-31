@@ -1837,8 +1837,11 @@ describe('DocumentEngine foundation', () => {
         id: '10000000-0000-4000-8000-000000000001', operationId: null, number: 27,
         status: 'DRAFT', title: 'Climatização do laboratório', description: 'Escopo técnico conforme vistoria.',
         issuedAt: now, introduction: 'Atendendo à honrosa solicitação de V.Sa., apresentamos nosso orçamento conforme solicitado.',
-        serviceSubtotal: 850, materialSubtotal: 425, subtotal: 1275, discount: 0, additional: 0,
-        total: 1275, amountInWords: 'um mil duzentos e setenta e cinco reais', validityDays: 30,
+        serviceSubtotal: 850, materialSubtotal: 425, serviceDiscount: 50, materialDiscount: 25,
+        serviceDiscountDescription: 'Condição especial para contratação integral',
+        materialDiscountDescription: 'Desconto comercial nos fornecimentos',
+        subtotal: 1275, discount: 75, additional: 0,
+        total: 1200, amountInWords: 'um mil e duzentos reais', validityDays: 30,
         paymentMethods: ['PIX', 'CREDIT_CARD'], commercialNotes: 'Pagamento após aprovação.',
         expirationDate: new Date('2026-08-17T12:00:00.000Z'), observations: 'Validade sujeita à disponibilidade.',
         createdAt: now, creator: { name: 'Darlan Owner' }, operation: null, equipment: null,
@@ -1874,9 +1877,25 @@ describe('DocumentEngine foundation', () => {
     const descriptions = built.sections.find((section) => section.id === 'budget-material-descriptions')?.components[0];
     const materials = built.sections.find((section) => section.id === 'budget-commercial-materials')?.components[0];
     expect(services?.kind === 'table' ? services.rows : []).toHaveLength(1);
+    expect(built.sections.find((section) => section.id === 'budget-services')?.components[1]).toMatchObject({
+      id: 'budget-service-discount',
+      kind: 'observation',
+      text: 'Condição especial para contratação integral: R$ 50,00.',
+    });
     expect(descriptions?.kind === 'table' ? descriptions.columns.map((column) => column.key) : []).toEqual(['item', 'quantity']);
     expect(descriptions?.kind === 'table' ? descriptions.rows[0] : null).not.toHaveProperty('unitPrice');
     expect(materials?.kind === 'table' ? materials.rows : []).toHaveLength(1);
+    expect(built.sections.find((section) => section.id === 'budget-commercial-materials')?.components[1]).toMatchObject({
+      id: 'budget-material-discount',
+      kind: 'observation',
+      text: 'Desconto comercial nos fornecimentos: R$ 25,00.',
+    });
+    const totals = built.sections.find((section) => section.id === 'budget-totals')?.components[0];
+    expect(totals?.kind === 'metadata' ? totals.items : []).toEqual(expect.arrayContaining([
+      { label: 'Desconto nos serviços', value: 'R$ 50,00' },
+      { label: 'Desconto nos materiais', value: 'R$ 25,00' },
+      { label: 'Valor total', value: 'R$ 1.200,00' },
+    ]));
     const identification = built.sections.find((section) => section.id === 'budget-identification')?.components[0];
     expect(
       identification?.kind === 'metadata'

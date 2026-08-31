@@ -1819,11 +1819,22 @@ export class DocumentBuilderService {
     });
 
     if (services.length) {
+      const serviceDiscount = Number(budget.serviceDiscount);
       sections.push({
         id: 'budget-services',
         title: 'Serviços',
         critical: true,
-        components: [itemTable('budget-services-table', services)],
+        components: [
+          itemTable('budget-services-table', services),
+          ...(serviceDiscount > 0
+            ? [{
+                id: 'budget-service-discount',
+                kind: 'observation' as const,
+                text: `${this.clean(budget.serviceDiscountDescription || 'Desconto especial aplicado aos serviços')}: ${this.money(budget.serviceDiscount)}.`,
+                keepTogether: true,
+              }]
+            : []),
+        ],
       });
     }
     if (budget.description) {
@@ -1851,12 +1862,21 @@ export class DocumentBuilderService {
       });
     }
     if (commercialMaterials.length) {
+      const materialDiscount = Number(budget.materialDiscount);
       sections.push({
         id: 'budget-commercial-materials',
         title: 'Materiais e fornecimentos',
         critical: true,
         components: [
           itemTable('budget-commercial-materials-table', commercialMaterials),
+          ...(materialDiscount > 0
+            ? [{
+                id: 'budget-material-discount',
+                kind: 'observation' as const,
+                text: `${this.clean(budget.materialDiscountDescription || 'Desconto especial aplicado aos materiais e fornecimentos')}: ${this.money(budget.materialDiscount)}.`,
+                keepTogether: true,
+              }]
+            : []),
         ],
       });
     }
@@ -1868,8 +1888,14 @@ export class DocumentBuilderService {
       components: [
         this.metadata('budget-totals-metadata', [
           ['Subtotal dos serviços', this.money(budget.serviceSubtotal)],
+          ...(Number(budget.serviceDiscount) > 0
+            ? [['Desconto nos serviços', this.money(budget.serviceDiscount)] as [string, string]]
+            : []),
           ['Subtotal de materiais e fornecimentos', this.money(budget.materialSubtotal)],
-          ['Desconto', this.money(budget.discount)],
+          ...(Number(budget.materialDiscount) > 0
+            ? [['Desconto nos materiais', this.money(budget.materialDiscount)] as [string, string]]
+            : []),
+          ['Total de descontos', this.money(budget.discount)],
           ['Adicional', this.money(budget.additional)],
           ['Valor total', this.money(budget.total)],
           ['Valor por extenso', budget.amountInWords],

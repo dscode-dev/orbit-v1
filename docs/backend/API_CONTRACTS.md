@@ -4502,7 +4502,10 @@ Payload:
   "equipmentId": "uuid-opcional",
   "title": "Troca de componentes",
   "description": "Proposta para manutenção corretiva",
-  "discount": 0,
+  "serviceDiscount": 50,
+  "serviceDiscountDescription": "Desconto especial aplicado aos serviços",
+  "materialDiscount": 25,
+  "materialDiscountDescription": "Desconto especial aplicado aos materiais e fornecimentos",
   "additional": 0,
   "issuedAt": "2026-06-17T00:00:00.000Z",
   "introduction": "Atendendo à honrosa solicitação de V.Sa., apresentamos nosso orçamento conforme solicitado.",
@@ -4538,7 +4541,8 @@ Payload parcial:
 ```json
 {
   "title": "Troca de componentes revisada",
-  "discount": 25,
+  "serviceDiscount": 25,
+  "serviceDiscountDescription": "Condição especial para contratação integral",
   "items": [{ "type": "MATERIAL", "description": "Filtro G4", "quantity": 3, "unit": "UN", "unitPrice": 78 }]
 }
 ```
@@ -5945,6 +5949,11 @@ OWNER/MANAGER. Criação manual omite operationId; criação pela OS informa o U
 ```
 
 productId é opcional. A resposta inclui serviceSubtotal, materialSubtotal, subtotal, total, amountInWords, paymentMethods e document. Totais são calculados pelo backend.
+
+`serviceDiscount` e `materialDiscount` são opcionais, monetários e validados individualmente contra
+o subtotal da respectiva categoria. Quando positivos, seus textos editáveis são projetados em uma
+linha própria logo após a tabela correspondente. `discount` continua retornado como a soma oficial
+dos dois e permanece aceito no request somente para retrocompatibilidade.
 
 ### PATCH /api/v1/budgets/:id
 
