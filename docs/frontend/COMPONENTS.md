@@ -140,8 +140,9 @@ O `PmocPlanWizard` reutiliza o `ConfirmDialog` oficial para confirmar uma nova c
 
 ## PMOC UX-02.1
 
-- `PhotoInput`: galeria responsiva 2/4 colunas, PNG/JPEG até 5 MiB, legenda, progresso, erro,
-  reordenação, remoção e limpeza de object URLs; aceita mínimo/limite e fotos já persistidas.
+- `PhotoInput`: coleta responsiva com ações separadas para câmera e seleção múltipla da galeria,
+  PNG/JPEG até 5 MiB, legenda, progresso, erro, reordenação, remoção e limpeza de object URLs;
+  aceita mínimo/limite e fotos já persistidas.
 - `OperationCreationDrawer`: MultiSelect oficial de equipamentos, inclusive prefill integral do PMOC.
 - `OperationDetailDrawer`: seção `PmocExecutionEvidenceSection` para evidências e assinatura conforme
   Template, sem criar fluxo ou storage paralelo.
@@ -452,7 +453,7 @@ Primitivos (Sprint 2): `status-pill`, `status-chip`, `skeletons`, `empty-state`,
 | `Stepper`              | `wizard/stepper.tsx`          | progresso segmentado                              |
 | `WizardProgressHeader` | `wizard/progress-header.tsx`  | header sticky (etapa X/N)                         |
 | `WizardFooter`         | `wizard/step-footer.tsx`      | controles voltar/continuar/enviar                 |
-| `PhotoInput`           | `photo-input.tsx`             | captura multi-foto (preview/remover/reordenar)    |
+| `PhotoInput`           | `photo-input.tsx`             | câmera/galeria (preview/remover/reordenar)         |
 | `SignaturePad`         | `documents/signature-pad.tsx` | **refinado**: desfazer/limpar/confirmar/indicador |
 | `applyBranding`        | `auth/auth-provider.tsx`      | aplica cores da empresa ao tema (export)          |
 
@@ -878,7 +879,7 @@ Tipos:
 ## PMOC FIX-02B
 
 - `PmocPlanWizard.EvidenceStep`: etapa interna do Wizard oficial; lista, autoria, legenda, remoção e atualização do Viewer.
-- `PhotoInput`: uploader oficial evoluído com dropzone, múltiplos arquivos e grade responsiva.
+- `PhotoInput`: uploader oficial com câmera, galeria múltipla, dropzone e grade responsiva.
 - Reutilizados `ConfirmDialog` e `DocumentViewer`; não há novo componente documental ou uploader PMOC.
 
 ## Operator attendance workflow

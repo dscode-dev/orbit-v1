@@ -1,5 +1,13 @@
 # STATE — Frontend
 
+## Operator — câmera e galeria nas evidências — 2026-09-01
+
+- O `PhotoInput` compartilhado agora apresenta ações explícitas para `Tirar foto` e
+  `Escolher da galeria`, incluindo seleção múltipla nesta última.
+- OS, RVT, execuções PMOC, relatório de campo e cancelamento no Operator recebem
+  ambas as opções por reutilizarem o mesmo coletor oficial; upload, limites,
+  legendas, ordenação e validações permanecem inalterados.
+
 ## Orçamento — descontos em serviços e materiais — 2026-08-31
 
 - Os passos Serviços e Materiais aceitam desconto opcional em reais e um texto documental
