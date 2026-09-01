@@ -2009,7 +2009,10 @@ type CreateBudgetPayload = {
   equipmentId?: string;
   title: string;
   description?: string;
-  discount?: number;
+  serviceDiscount?: number;
+  materialDiscount?: number;
+  serviceDiscountDescription?: string;
+  materialDiscountDescription?: string;
   additional?: number;
   expirationDate: string;
   observations?: string;

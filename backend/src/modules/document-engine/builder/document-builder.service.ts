@@ -1684,24 +1684,39 @@ export class DocumentBuilderService {
     const itemTable = (
       id: string,
       items: typeof budget.items,
-    ): Extract<DocumentBlueprintComponent, { kind: 'table' }> => ({
-      id,
-      kind: 'table',
-      columns: [
-        { key: 'item', label: 'Descrição', width: 0.48 },
-        { key: 'quantity', label: 'Qtd.', width: 0.12 },
-        { key: 'unit', label: 'Un.', width: 0.1 },
-        { key: 'unitPrice', label: 'Valor unit.', width: 0.15 },
-        { key: 'total', label: 'Subtotal', width: 0.15 },
-      ],
-      rows: items.map((item) => ({
+      discount?: { amount: Prisma.Decimal | number | string; description: string | null },
+    ): Extract<DocumentBlueprintComponent, { kind: 'table' }> => {
+      const rows = items.map((item) => ({
         item: this.clean(item.description || item.product?.name || 'Item'),
         quantity: this.decimal(item.quantity),
         unit: this.clean(item.unit),
         unitPrice: this.money(item.unitPrice),
         total: this.money(item.total),
-      })),
-    });
+      }));
+      const hasDiscount = discount && Number(discount.amount) > 0;
+      if (hasDiscount) {
+        rows.push({
+          item: this.clean(discount.description || 'Desconto comercial'),
+          quantity: '',
+          unit: '',
+          unitPrice: '',
+          total: `- ${this.money(discount.amount)}`,
+        });
+      }
+      return {
+        id,
+        kind: 'table',
+        columns: [
+          { key: 'item', label: 'Descrição', width: 0.48 },
+          { key: 'quantity', label: 'Qtd.', width: 0.12 },
+          { key: 'unit', label: 'Un.', width: 0.1 },
+          { key: 'unitPrice', label: 'Valor unit.', width: 0.15 },
+          { key: 'total', label: 'Subtotal', width: 0.15 },
+        ],
+        rows,
+        ...(hasDiscount ? { emphasizedRowIndexes: [rows.length - 1] } : {}),
+      };
+    };
     const descriptionTable = (
       id: string,
       items: typeof budget.items,
@@ -1823,7 +1838,12 @@ export class DocumentBuilderService {
         id: 'budget-services',
         title: 'Serviços',
         critical: true,
-        components: [itemTable('budget-services-table', services)],
+        components: [
+          itemTable('budget-services-table', services, {
+            amount: budget.serviceDiscount,
+            description: budget.serviceDiscountDescription,
+          }),
+        ],
       });
     }
     if (budget.description) {
@@ -1856,7 +1876,10 @@ export class DocumentBuilderService {
         title: 'Materiais e fornecimentos',
         critical: true,
         components: [
-          itemTable('budget-commercial-materials-table', commercialMaterials),
+          itemTable('budget-commercial-materials-table', commercialMaterials, {
+            amount: budget.materialDiscount,
+            description: budget.materialDiscountDescription,
+          }),
         ],
       });
     }
@@ -1868,8 +1891,14 @@ export class DocumentBuilderService {
       components: [
         this.metadata('budget-totals-metadata', [
           ['Subtotal dos serviços', this.money(budget.serviceSubtotal)],
+          ...(Number(budget.serviceDiscount) > 0
+            ? [['Desconto nos serviços', this.money(budget.serviceDiscount)] as [string, string]]
+            : []),
           ['Subtotal de materiais e fornecimentos', this.money(budget.materialSubtotal)],
-          ['Desconto', this.money(budget.discount)],
+          ...(Number(budget.materialDiscount) > 0
+            ? [['Desconto nos materiais', this.money(budget.materialDiscount)] as [string, string]]
+            : []),
+          ['Total de descontos', this.money(budget.discount)],
           ['Adicional', this.money(budget.additional)],
           ['Valor total', this.money(budget.total)],
           ['Valor por extenso', budget.amountInWords],

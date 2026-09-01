@@ -1492,7 +1492,11 @@ Campos importantes:
 
 - `number`: sequencial oficial do orçamento;
 - `status`: estado comercial;
-- `subtotal`, `discount`, `additional`, `total`: strings decimais vindas do backend;
+- `serviceSubtotal`, `materialSubtotal`, `serviceDiscount`, `materialDiscount`, `discount`,
+  `additional` e `total`: strings decimais vindas do backend; `discount` é a soma dos descontos
+  por categoria;
+- `serviceDiscountDescription` e `materialDiscountDescription`: textos editáveis exibidos na linha
+  de desconto da respectiva tabela documental;
 - `items[].snapshotCost`: custo congelado no momento da criação/revisão;
 - `items[].snapshotSalePrice`: preço de venda congelado;
 - `items[].snapshotMargin`: margem congelada;

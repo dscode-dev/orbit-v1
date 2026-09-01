@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { Drawer } from "@erp/ui/drawer";
 import { MultiSelect } from "@erp/ui/multi-select";
@@ -28,6 +28,8 @@ import { brlAmountInWords, formatCurrencyBRL, formatNumber } from "@erp/utils";
 import { TechnicalSignaturePreview } from "./document-handoff-inbox";
 
 const STEPS = ["Origem", "Dados gerais", "Serviços", "Materiais", "Valores", "Condições", "Responsável técnico"];
+const DEFAULT_SERVICE_DISCOUNT_TEXT = "Desconto especial aplicado aos serviços";
+const DEFAULT_MATERIAL_DISCOUNT_TEXT = "Desconto especial aplicado aos materiais e fornecimentos";
 
 export function BudgetWizardDrawer({
   open,
@@ -53,6 +55,10 @@ export function BudgetWizardDrawer({
   const [issuedAt, setIssuedAt] = useState(today());
   const [introduction, setIntroduction] = useState("Atendendo à honrosa solicitação de V.Sa., apresentamos nosso orçamento conforme solicitado.");
   const [items, setItems] = useState<BudgetItemPayload[]>([]);
+  const [serviceDiscount, setServiceDiscount] = useState("0");
+  const [materialDiscount, setMaterialDiscount] = useState("0");
+  const [serviceDiscountDescription, setServiceDiscountDescription] = useState(DEFAULT_SERVICE_DISCOUNT_TEXT);
+  const [materialDiscountDescription, setMaterialDiscountDescription] = useState(DEFAULT_MATERIAL_DISCOUNT_TEXT);
   const [amountInWords, setAmountInWords] = useState("");
   const [amountEdited, setAmountEdited] = useState(false);
   const [validityDays, setValidityDays] = useState("30");
@@ -83,6 +89,8 @@ export function BudgetWizardDrawer({
     setTitle(budget?.title ?? "Orçamento de manutenção"); setDescription(budget?.description ?? ""); setIssuedAt(budget?.issuedAt?.slice(0, 10) ?? today());
     setIntroduction(budget?.introduction ?? "Atendendo à honrosa solicitação de V.Sa., apresentamos nosso orçamento conforme solicitado.");
     setItems(budget?.items.map((item) => ({ productId: item.productId, type: item.type, source: item.source ?? "MANUAL", description: item.description, quantity: Number(item.quantity), unit: item.unit, unitPrice: Number(item.unitPrice), sortOrder: item.sortOrder })) ?? []);
+    setServiceDiscount(String(budget?.serviceDiscount ?? 0)); setMaterialDiscount(String(budget?.materialDiscount ?? 0));
+    setServiceDiscountDescription(budget?.serviceDiscountDescription ?? DEFAULT_SERVICE_DISCOUNT_TEXT); setMaterialDiscountDescription(budget?.materialDiscountDescription ?? DEFAULT_MATERIAL_DISCOUNT_TEXT);
     setAmountInWords(budget?.amountInWords ?? ""); setAmountEdited(Boolean(budget?.amountInWords)); setValidityDays(String(budget?.validityDays ?? 30)); setPaymentMethods(budget?.paymentMethods ?? ["PIX"]);
     setCommercialNotes(budget?.commercialNotes ?? ""); setObservations(budget?.observations ?? ""); setTechnicalSignatureId(budget?.document?.technicalSignatureId ?? "");
     setError(null);
@@ -115,20 +123,25 @@ export function BudgetWizardDrawer({
     return () => { active = false; };
   }, [open, origin, operationId]);
 
-  const total = useMemo(() => items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0), [items]);
   const services = items.filter((item) => item.type === "SERVICE");
   const materials = items.filter((item) => item.type === "MATERIAL" && item.source !== "CATALOG");
+  const serviceSubtotal = sum(services);
+  const materialSubtotal = sum(materials);
+  const serviceDiscountValue = moneyInputValue(serviceDiscount);
+  const materialDiscountValue = moneyInputValue(materialDiscount);
+  const total = serviceSubtotal + materialSubtotal - serviceDiscountValue - materialDiscountValue;
   const selectedSignature = signatures.data?.items.find((signature) => signature.id === technicalSignatureId) ?? null;
 
   useEffect(() => {
-    if (!amountEdited) setAmountInWords(brlAmountInWords(total));
+    if (!amountEdited) setAmountInWords(brlAmountInWords(Math.max(total, 0)));
   }, [amountEdited, total]);
 
   function canContinue(): boolean {
     if (step === 0) return origin === "MANUAL" || Boolean(operationId);
     if (step === 1) return Boolean(customerId && title.trim() && issuedAt && introduction.trim());
-    if (step === 2) return services.length > 0;
-    if (step === 4) return Boolean(amountInWords.trim());
+    if (step === 2) return services.length > 0 && serviceDiscountValue <= serviceSubtotal && (serviceDiscountValue === 0 || Boolean(serviceDiscountDescription.trim()));
+    if (step === 3) return materialDiscountValue <= materialSubtotal && (materialDiscountValue === 0 || Boolean(materialDiscountDescription.trim()));
+    if (step === 4) return total >= 0 && Boolean(amountInWords.trim());
     if (step === 5) return Number(validityDays) > 0 && paymentMethods.length > 0;
     if (step === 6) return Boolean(technicalSignatureId);
     return true;
@@ -146,6 +159,10 @@ export function BudgetWizardDrawer({
         description: description || undefined,
         issuedAt: new Date(`${issuedAt}T12:00:00`).toISOString(),
         introduction,
+        serviceDiscount: serviceDiscountValue,
+        materialDiscount: materialDiscountValue,
+        serviceDiscountDescription: serviceDiscountValue > 0 ? serviceDiscountDescription : undefined,
+        materialDiscountDescription: materialDiscountValue > 0 ? materialDiscountDescription : undefined,
         validityDays: Number(validityDays),
         amountInWords,
         paymentMethods,
@@ -177,16 +194,16 @@ export function BudgetWizardDrawer({
 
       {step === 0 && <OriginStep origin={origin} setOrigin={setOrigin} operationId={operationId} setOperationId={setOperationId} operations={operations.data?.items ?? []} />}
       {step === 1 && <div className="grid gap-3 sm:grid-cols-2"><Field label="Cliente"><select value={customerId} onChange={(event) => { setCustomerId(event.target.value); setAddressId(""); setEquipmentIds([]); }} className={inputCls}><option value="">Selecione</option>{customers.data?.items.map((row: Customer) => <option key={row.id} value={row.id}>{row.tradeName || row.name}</option>)}</select></Field><Field label="Endereço"><select value={addressId} onChange={(event) => setAddressId(event.target.value)} className={inputCls}><option value="">Selecione</option>{customer.data?.addresses?.map((address) => <option key={address.id} value={address.id}>{address.street}, {address.number} · {address.city}/{address.state}</option>)}</select></Field><div className="sm:col-span-2"><MultiSelect label="Equipamentos (opcional)" placeholder="Selecione um ou mais equipamentos" emptyMessage={customerId ? "Nenhum equipamento para este cliente." : "Selecione um cliente primeiro."} value={equipmentIds} onChange={setEquipmentIds} options={(equipments.data?.items ?? []).map((equipment: EquipmentSummary) => ({ value: equipment.id, label: equipment.name, description: equipment.tag ?? undefined }))} /></div><Field label="Data"><input type="date" value={issuedAt} onChange={(event) => setIssuedAt(event.target.value)} className={inputCls} /></Field><Field label="Título"><input value={title} onChange={(event) => setTitle(event.target.value)} className={inputCls} /></Field><Field label="Descrição"><textarea value={description} onChange={(event) => setDescription(event.target.value)} className={`${inputCls} min-h-20 py-2`} /></Field><div className="sm:col-span-2"><Field label="Texto introdutório"><textarea value={introduction} onChange={(event) => setIntroduction(event.target.value)} className={`${inputCls} min-h-24 py-2`} /></Field></div></div>}
-      {step === 2 && <BudgetItemsEditor type="SERVICE" items={items} onChange={setItems} />}
+      {step === 2 && <div className="space-y-4"><BudgetItemsEditor type="SERVICE" items={items} onChange={setItems} /><DiscountEditor scope="SERVICE" value={serviceDiscount} onValueChange={setServiceDiscount} description={serviceDiscountDescription} onDescriptionChange={setServiceDiscountDescription} subtotal={serviceSubtotal} /></div>}
       {step === 3 && (
-        <BudgetItemsEditor
-          type="MATERIAL"
-          items={items}
-          onChange={setItems}
-          catalog={materialDescriptions.data ?? []}
-        />
+        <div className="space-y-4"><BudgetItemsEditor
+            type="MATERIAL"
+            items={items}
+            onChange={setItems}
+            catalog={materialDescriptions.data ?? []}
+          /><DiscountEditor scope="MATERIAL" value={materialDiscount} onValueChange={setMaterialDiscount} description={materialDiscountDescription} onDescriptionChange={setMaterialDiscountDescription} subtotal={materialSubtotal} /></div>
       )}
-      {step === 4 && <div className="grid gap-4 md:grid-cols-2"><Summary services={services} materials={materials} total={total} /><Field label="Valor por extenso"><textarea value={amountInWords} onChange={(event) => { setAmountInWords(event.target.value); setAmountEdited(true); }} className={`${inputCls} min-h-28 py-2`} /><span className="text-caption">Gerado automaticamente e editável.</span></Field></div>}
+      {step === 4 && <div className="grid gap-4 md:grid-cols-2"><Summary services={services} materials={materials} serviceDiscount={serviceDiscountValue} materialDiscount={materialDiscountValue} total={total} /><Field label="Valor por extenso"><textarea value={amountInWords} onChange={(event) => { setAmountInWords(event.target.value); setAmountEdited(true); }} className={`${inputCls} min-h-28 py-2`} /><span className="text-caption">Gerado automaticamente e editável.</span></Field></div>}
       {step === 5 && <Conditions validityDays={validityDays} setValidityDays={setValidityDays} paymentMethods={paymentMethods} setPaymentMethods={setPaymentMethods} commercialNotes={commercialNotes} setCommercialNotes={setCommercialNotes} observations={observations} setObservations={setObservations} />}
       {step === 6 && <Signatures signatures={signatures.data?.items ?? []} selected={selectedSignature} technicalSignatureId={technicalSignatureId} setTechnicalSignatureId={setTechnicalSignatureId} />}
     </div>
@@ -303,7 +320,14 @@ function BudgetItemsEditor({ type, items, onChange, catalog = [] }: { type: Budg
   </div>;
 }
 
-function Summary({ services, materials, total }: { services: BudgetItemPayload[]; materials: BudgetItemPayload[]; total: number }) { return <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4"><h3 className="font-semibold">Valores</h3><div className="mt-3 space-y-2"><Info label="Serviços" value={money(sum(services))} /><Info label="Materiais" value={money(sum(materials))} /><Info label="Valor total" value={money(total)} strong /></div></div>; }
+function DiscountEditor({ scope, value, onValueChange, description, onDescriptionChange, subtotal }: { scope: BudgetItemType; value: string; onValueChange: (value: string) => void; description: string; onDescriptionChange: (value: string) => void; subtotal: number }) {
+  const amount = moneyInputValue(value);
+  const label = scope === "SERVICE" ? "serviços" : "materiais e fornecimentos";
+  const invalid = amount > subtotal;
+  return <section className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-muted)]/20 p-4"><div><h4 className="text-sm font-semibold">Desconto nos {label}</h4><p className="text-caption">Opcional. O backend valida o valor contra o subtotal de {label}.</p></div><div className="grid gap-3 md:grid-cols-[220px_1fr]"><Field label="Valor do desconto (R$)"><div className="relative"><span className="pointer-events-none absolute left-3 top-2 text-sm text-[var(--color-muted-foreground)]">R$</span><input inputMode="decimal" value={value} onChange={(event) => onValueChange(event.target.value.replace(/[^\d.,]/g, ""))} className={`${inputCls} pl-10`} placeholder="0,00" /></div>{invalid && <span className="text-xs text-[var(--color-danger)]">O desconto não pode superar {money(subtotal)}.</span>}</Field>{amount > 0 && <Field label="Texto exibido no orçamento"><input value={description} maxLength={500} onChange={(event) => onDescriptionChange(event.target.value)} className={inputCls} /><span className="text-caption">O valor será acrescentado automaticamente ao final desta linha.</span></Field>}</div></section>;
+}
+
+function Summary({ services, materials, serviceDiscount, materialDiscount, total }: { services: BudgetItemPayload[]; materials: BudgetItemPayload[]; serviceDiscount: number; materialDiscount: number; total: number }) { return <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4"><h3 className="font-semibold">Valores</h3><div className="mt-3 space-y-2"><Info label="Serviços" value={money(sum(services))} />{serviceDiscount > 0 && <Info label="Desconto nos serviços" value={`− ${money(serviceDiscount)}`} />}<Info label="Materiais" value={money(sum(materials))} />{materialDiscount > 0 && <Info label="Desconto nos materiais" value={`− ${money(materialDiscount)}`} />}<Info label="Valor total" value={money(total)} strong /></div></div>; }
 function Conditions({ validityDays, setValidityDays, paymentMethods, setPaymentMethods, commercialNotes, setCommercialNotes, observations, setObservations }: { validityDays: string; setValidityDays: (value: string) => void; paymentMethods: BudgetPaymentMethod[]; setPaymentMethods: (value: BudgetPaymentMethod[]) => void; commercialNotes: string; setCommercialNotes: (value: string) => void; observations: string; setObservations: (value: string) => void }) { const options: Array<[BudgetPaymentMethod, string]> = [["CASH", "Espécie"], ["PIX", "PIX"], ["CREDIT_CARD", "Cartão de crédito"]]; return <div className="space-y-4"><Field label="Validade da proposta (dias)"><input type="number" min="1" max="3650" value={validityDays} onChange={(event) => setValidityDays(event.target.value)} className={inputCls} /></Field><div><p className="mb-2 text-sm font-medium">Formas de pagamento</p><div className="flex flex-wrap gap-2">{options.map(([value, label]) => <label key={value} className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 py-2 text-sm"><input type="checkbox" checked={paymentMethods.includes(value)} onChange={() => setPaymentMethods(paymentMethods.includes(value) ? paymentMethods.filter((item) => item !== value) : [...paymentMethods, value])} />{label}</label>)}</div></div><Field label="Observações comerciais"><textarea value={commercialNotes} onChange={(event) => setCommercialNotes(event.target.value)} className={`${inputCls} min-h-24 py-2`} /></Field><Field label="Observações gerais"><textarea value={observations} onChange={(event) => setObservations(event.target.value)} className={`${inputCls} min-h-20 py-2`} /></Field></div>; }
 function Signatures({ signatures, selected, technicalSignatureId, setTechnicalSignatureId }: { signatures: Signature[]; selected: Signature | null; technicalSignatureId: string; setTechnicalSignatureId: (value: string) => void }) { return <div className="max-w-xl space-y-3"><div><h3 className="font-semibold">Responsável técnico</h3><p className="text-caption">O orçamento é uma proposta e não coleta assinatura do cliente — apenas o responsável técnico.</p></div><Field label="Assinatura técnica"><select value={technicalSignatureId} onChange={(event) => setTechnicalSignatureId(event.target.value)} className={inputCls}><option value="">Selecione</option>{signatures.map((signature) => <option key={signature.id} value={signature.id}>{signature.name} · {signature.title}{signature.isDefault ? " · padrão" : ""}</option>)}</select></Field>{selected && <TechnicalSignaturePreview signature={selected} />}</div>; }
 
@@ -312,6 +336,7 @@ function Info({ label, value, strong }: { label: string; value: string; strong?:
 function IconButton({ onClick, disabled, label, danger, children }: { onClick: () => void; disabled?: boolean; label: string; danger?: boolean; children: ReactNode }) { return <button type="button" onClick={onClick} disabled={disabled} aria-label={label} className={`inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] border disabled:opacity-30 ${danger ? "border-[var(--color-danger)]/30 text-[var(--color-danger)]" : "border-[var(--color-border)]"}`}>{children}</button>; }
 function choiceCls(active: boolean) { return `rounded-[var(--radius-lg)] border p-5 text-left ${active ? "border-[var(--color-primary)] bg-[var(--color-primary)]/5" : "border-[var(--color-border)]"}`; }
 function sum(items: BudgetItemPayload[]) { return items.reduce((total, item) => total + item.quantity * item.unitPrice, 0); }
+function moneyInputValue(value: string) { const raw = value.trim(); const normalized = raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw; const parsed = Number(normalized); return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0; }
 function money(value: number) { return formatCurrencyBRL(value); }
 function today() { return new Date().toISOString().slice(0, 10); }
 

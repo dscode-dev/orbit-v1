@@ -65,6 +65,10 @@ export class CreateBudgetDto {
   @IsOptional() @IsDateString() issuedAt?: string;
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(5000) introduction?: string;
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) discount?: number;
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) serviceDiscount?: number;
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) materialDiscount?: number;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(500) serviceDiscountDescription?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(500) materialDiscountDescription?: string;
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) additional?: number;
   @IsOptional() @IsDateString() expirationDate?: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(3650) validityDays?: number;
@@ -87,6 +91,10 @@ export class UpdateBudgetDto {
   @IsOptional() @IsDateString() issuedAt?: string;
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(5000) introduction?: string;
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) discount?: number;
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) serviceDiscount?: number;
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) materialDiscount?: number;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(500) serviceDiscountDescription?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(500) materialDiscountDescription?: string;
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) additional?: number;
   @IsOptional() @IsDateString() expirationDate?: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(3650) validityDays?: number;

@@ -2105,47 +2105,51 @@ model ProductPricing {
 }
 
 model Budget {
-  id                String                @id @default(uuid()) @db.Uuid
-  organizationId    String                @map("organization_id") @db.Uuid
-  operationId       String?               @map("operation_id") @db.Uuid
-  customerId        String                @map("customer_id") @db.Uuid
-  customerAddressId String?               @map("customer_address_id") @db.Uuid
-  equipmentId       String?               @map("equipment_id") @db.Uuid
-  number            Int                   @unique @default(autoincrement())
-  status            BudgetStatus          @default(DRAFT)
-  title             String                @db.VarChar(180)
-  description       String?               @db.Text
-  issuedAt          DateTime              @default(now()) @map("issued_at") @db.Timestamptz(3)
-  introduction      String                @db.Text
-  serviceSubtotal   Decimal               @default(0) @map("service_subtotal") @db.Decimal(14, 2)
-  materialSubtotal  Decimal               @default(0) @map("material_subtotal") @db.Decimal(14, 2)
-  subtotal          Decimal               @default(0) @db.Decimal(14, 2)
-  discount          Decimal               @default(0) @db.Decimal(14, 2)
-  additional        Decimal               @default(0) @db.Decimal(14, 2)
-  total             Decimal               @default(0) @db.Decimal(14, 2)
-  amountInWords     String                @map("amount_in_words") @db.VarChar(500)
-  validityDays      Int                   @default(30) @map("validity_days")
-  paymentMethods    BudgetPaymentMethod[] @default([]) @map("payment_methods")
-  commercialNotes   String?               @map("commercial_notes") @db.Text
-  expirationDate    DateTime              @map("expiration_date") @db.Timestamptz(3)
-  observations      String?               @db.Text
-  createdBy         String                @map("created_by") @db.Uuid
-  approvedAt        DateTime?             @map("approved_at") @db.Timestamptz(3)
-  rejectedAt        DateTime?             @map("rejected_at") @db.Timestamptz(3)
-  canceledAt        DateTime?             @map("canceled_at") @db.Timestamptz(3)
-  createdAt         DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt         DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
-  organization      Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  operation         Operation?            @relation(fields: [operationId], references: [id], onDelete: SetNull)
-  customer          Customer              @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  customerAddress   CustomerAddress?      @relation(fields: [customerAddressId], references: [id], onDelete: SetNull)
-  equipment         Equipment?            @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
-  creator           User                  @relation("BudgetCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
-  items             BudgetItem[]
-  equipments        BudgetEquipment[]
-  approvals         BudgetApproval[]
-  history           BudgetHistory[]
-  document          OperationDocument?
+  id                          String                @id @default(uuid()) @db.Uuid
+  organizationId              String                @map("organization_id") @db.Uuid
+  operationId                 String?               @map("operation_id") @db.Uuid
+  customerId                  String                @map("customer_id") @db.Uuid
+  customerAddressId           String?               @map("customer_address_id") @db.Uuid
+  equipmentId                 String?               @map("equipment_id") @db.Uuid
+  number                      Int                   @unique @default(autoincrement())
+  status                      BudgetStatus          @default(DRAFT)
+  title                       String                @db.VarChar(180)
+  description                 String?               @db.Text
+  issuedAt                    DateTime              @default(now()) @map("issued_at") @db.Timestamptz(3)
+  introduction                String                @db.Text
+  serviceSubtotal             Decimal               @default(0) @map("service_subtotal") @db.Decimal(14, 2)
+  materialSubtotal            Decimal               @default(0) @map("material_subtotal") @db.Decimal(14, 2)
+  serviceDiscount             Decimal               @default(0) @map("service_discount") @db.Decimal(14, 2)
+  materialDiscount            Decimal               @default(0) @map("material_discount") @db.Decimal(14, 2)
+  serviceDiscountDescription  String?               @map("service_discount_description") @db.VarChar(500)
+  materialDiscountDescription String?               @map("material_discount_description") @db.VarChar(500)
+  subtotal                    Decimal               @default(0) @db.Decimal(14, 2)
+  discount                    Decimal               @default(0) @db.Decimal(14, 2)
+  additional                  Decimal               @default(0) @db.Decimal(14, 2)
+  total                       Decimal               @default(0) @db.Decimal(14, 2)
+  amountInWords               String                @map("amount_in_words") @db.VarChar(500)
+  validityDays                Int                   @default(30) @map("validity_days")
+  paymentMethods              BudgetPaymentMethod[] @default([]) @map("payment_methods")
+  commercialNotes             String?               @map("commercial_notes") @db.Text
+  expirationDate              DateTime              @map("expiration_date") @db.Timestamptz(3)
+  observations                String?               @db.Text
+  createdBy                   String                @map("created_by") @db.Uuid
+  approvedAt                  DateTime?             @map("approved_at") @db.Timestamptz(3)
+  rejectedAt                  DateTime?             @map("rejected_at") @db.Timestamptz(3)
+  canceledAt                  DateTime?             @map("canceled_at") @db.Timestamptz(3)
+  createdAt                   DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                   DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization                Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  operation                   Operation?            @relation(fields: [operationId], references: [id], onDelete: SetNull)
+  customer                    Customer              @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  customerAddress             CustomerAddress?      @relation(fields: [customerAddressId], references: [id], onDelete: SetNull)
+  equipment                   Equipment?            @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
+  creator                     User                  @relation("BudgetCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  items                       BudgetItem[]
+  equipments                  BudgetEquipment[]
+  approvals                   BudgetApproval[]
+  history                     BudgetHistory[]
+  document                    OperationDocument?
 
   @@index([organizationId, status, createdAt])
   @@index([operationId, status])

@@ -32,6 +32,7 @@ export type DocumentComponent =
       kind: 'table';
       columns: Array<{ key: string; label: string; width?: number }>;
       rows: Array<Record<string, string>>;
+      emphasizedRowIndexes?: number[];
       keepTogether?: boolean;
     }
   | { id: string; kind: 'list'; items: string[]; keepTogether?: boolean }

@@ -1,5 +1,16 @@
 # Backend State
 
+## Orçamento — descontos por categoria — 2026-08-31
+
+- Budget persiste descontos independentes para serviços e materiais, seus textos documentais e o
+  desconto agregado compatível.
+- O backend valida cada desconto contra o subtotal da categoria e permanece como autoridade do
+  total líquido e do valor por extenso.
+- Migration aditiva `20260831120000_budget_scoped_discounts` preserva descontos históricos,
+  alocando-os primeiro aos serviços e depois aos materiais, sem remover ou renomear colunas.
+- DocumentBuilder apresenta cada desconto logo após sua tabela e repete os valores no resumo;
+  Preview e PDF continuam derivados do mesmo Blueprint.
+
 ## Recibo com fonte descritiva única — 2026-08-24
 
 - O Document Builder usa `receiptDescription` como fonte oficial da descrição em novos Recibos.

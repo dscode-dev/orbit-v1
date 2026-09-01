@@ -98,6 +98,7 @@ export interface TableComponent extends BlueprintBaseComponent {
   kind: 'table';
   columns: Array<{ key: string; label: string; width?: number }>;
   rows: Array<Record<string, string>>;
+  emphasizedRowIndexes?: number[];
 }
 
 export interface ListComponent extends BlueprintBaseComponent {
