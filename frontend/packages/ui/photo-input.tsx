@@ -3,11 +3,11 @@
 /**
  * PhotoInput — field photo capture: multiple images, preview, remove, reorder.
  *
- * Mobile-first (uses the camera via capture). Holds the File + an object URL so
- * the surrounding flow can later upload to the backend (offline-ready). Sprint 3
- * does not upload — generation/storage stays with the backend.
+ * Mobile-first: offers explicit camera capture and gallery selection. Holds the
+ * File + an object URL so the surrounding flow can upload it through the
+ * official evidence endpoint.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import Image from "next/image";
 import { Camera, X, ArrowLeft, ArrowRight, ImagePlus } from "lucide-react";
 
@@ -36,7 +36,8 @@ export function PhotoInput({
   requiredMinimum?: number;
   disabled?: boolean;
 }) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const cameraInputId = useId();
+  const galleryInputId = useId();
   const photosRef = useRef(photos);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -122,24 +123,46 @@ export function PhotoInput({
         ))}
 
         {total < max && (
-          <button
-            type="button"
-            onClick={() => inputRef.current?.click()} disabled={disabled}
+          <div
             onDragEnter={(event) => { event.preventDefault(); if (!disabled) setDragging(true); }}
             onDragOver={(event) => { event.preventDefault(); if (!disabled) setDragging(true); }}
             onDragLeave={() => setDragging(false)}
             onDrop={(event) => { event.preventDefault(); setDragging(false); if (!disabled) addFiles(Array.from(event.dataTransfer.files)); }}
-            className={`aspect-square rounded-[var(--radius-md)] border border-dashed grid place-items-center text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] active:scale-[0.98] ${dragging ? "border-[var(--color-primary)] bg-[var(--color-primary)]/5" : "border-[var(--color-border)]"}`}
+            className={`aspect-square rounded-[var(--radius-md)] border border-dashed p-3 text-[var(--color-muted-foreground)] transition-colors ${dragging ? "border-[var(--color-primary)] bg-[var(--color-primary)]/5" : "border-[var(--color-border)]"}`}
           >
-            <span className="flex flex-col items-center gap-1">
-              {photos.length === 0 ? <Camera className="h-6 w-6" /> : <ImagePlus className="h-6 w-6" />}
-              <span className="text-[11px] font-medium">{dragging ? "Solte aqui" : photos.length === 0 ? "Adicionar fotos" : "Adicionar"}</span>
-            </span>
-          </button>
+            <div className="flex h-full flex-col justify-center gap-2">
+              {dragging ? (
+                <span className="flex flex-1 flex-col items-center justify-center gap-2 text-xs font-medium text-[var(--color-primary)]">
+                  <ImagePlus className="h-6 w-6" />
+                  Solte as fotos aqui
+                </span>
+              ) : (
+                <>
+                  <label
+                    htmlFor={cameraInputId}
+                    aria-disabled={disabled}
+                    className={`flex min-h-11 items-center justify-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 text-xs font-semibold text-white transition-transform active:scale-[0.98] ${disabled ? "pointer-events-none opacity-50" : "cursor-pointer"}`}
+                  >
+                    <Camera className="h-4 w-4" />
+                    Tirar foto
+                  </label>
+                  <label
+                    htmlFor={galleryInputId}
+                    aria-disabled={disabled}
+                    className={`flex min-h-11 items-center justify-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-xs font-semibold text-[var(--color-foreground)] transition-colors hover:bg-[var(--color-muted)] active:scale-[0.98] ${disabled ? "pointer-events-none opacity-50" : "cursor-pointer"}`}
+                  >
+                    <ImagePlus className="h-4 w-4" />
+                    Escolher da galeria
+                  </label>
+                </>
+              )}
+            </div>
+          </div>
         )}
       </div>
 
-      <input ref={inputRef} type="file" accept="image/png,image/jpeg" capture="environment" multiple onChange={add} className="hidden" aria-label="Adicionar fotos" />
+      <input id={cameraInputId} type="file" accept="image/png,image/jpeg" capture="environment" disabled={disabled} onChange={add} className="sr-only" aria-label="Tirar foto com a câmera" />
+      <input id={galleryInputId} type="file" accept="image/png,image/jpeg" multiple disabled={disabled} onChange={add} className="sr-only" aria-label="Escolher fotos da galeria" />
       {validationError && <p className="text-xs text-[var(--color-danger)]">{validationError}</p>}
       <p className="text-[11px] text-[var(--color-muted-foreground)]">{total}/{max} imagens · PNG ou JPEG · até 5 MiB cada{requiredMinimum ? ` · mínimo ${requiredMinimum} para concluir e emitir` : ""}</p>
     </div>
