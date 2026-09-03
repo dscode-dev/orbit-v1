@@ -21,7 +21,7 @@ import {
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
 import { dateRangeFilter } from '../../shared/utils/date-range.util';
 import { PMOC_MIN_PROCEDURE_IMAGES } from '../../shared/constants/pmoc.constants';
-import { OPERATION_DOCUMENT_PREFIX, formatDocumentNumber } from '../../shared/constants/operations.constants';
+import { reserveDocumentNumber } from '../../shared/utils/document-number.util';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
 import { buildPaginatedResponse } from '../../shared/types/pagination.types';
@@ -105,6 +105,7 @@ const COLLECTION_OPERATION_INCLUDE = {
     select: {
       id: true,
       type: true,
+      number: true,
       renderedAt: true,
       collectedById: true,
       technicalSignatureId: true,
@@ -202,12 +203,17 @@ export class DocumentHandoffService {
         ? actor.id
         : null,
     );
-    const documentNumber =
-      dto.type === DocumentTemplateType.RECEIPT && operation.receiptNumber
-        ? operation.receiptNumber
-        : formatDocumentNumber(OPERATION_DOCUMENT_PREFIX[dto.type], operation.number);
     const existingDocument = operation.documents.find((item) => item.type === dto.type) ?? null;
     const document = await this.prisma.$transaction(async (tx) => {
+      // Reserva um número (por tipo) só quando o documento ainda não existe;
+      // atualizações preservam o número já atribuído, sem consumir a sequência.
+      const documentNumber =
+        existingDocument?.number ??
+        (await reserveDocumentNumber(
+          tx,
+          dto.type,
+          dto.type === DocumentTemplateType.RECEIPT ? operation.receiptNumber : null,
+        ));
       const saved = await tx.operationDocument.upsert({
         where: { operationId_type: { operationId: dto.operationId, type: dto.type } },
         create: {
@@ -222,7 +228,6 @@ export class DocumentHandoffService {
           collectionSnapshot: this.operationSnapshot(operation),
         },
         update: {
-          number: documentNumber,
           handoffOrigin: origin,
           ...(existingDocument?.collectedById ? {} : { collectedById: actor.id }),
           ...(existingDocument?.technicalSignatureId

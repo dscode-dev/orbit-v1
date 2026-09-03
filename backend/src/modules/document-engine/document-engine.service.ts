@@ -12,10 +12,7 @@ import {
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
 import { dateRangeFilter } from '../../shared/utils/date-range.util';
 import { PMOC_MIN_PROCEDURE_IMAGES } from '../../shared/constants/pmoc.constants';
-import {
-  formatDocumentNumber,
-  OPERATION_DOCUMENT_PREFIX,
-} from '../../shared/constants/operations.constants';
+import { reserveDocumentNumber } from '../../shared/utils/document-number.util';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
 import type { RequestWithId } from '../../shared/types/request-with-id.type';
@@ -233,15 +230,23 @@ export class DocumentEngineService {
         HttpStatus.NOT_FOUND,
       );
     }
-    const document = await this.prisma.operationDocument.upsert({
-      where: { operationId_type: { operationId, type } },
-      create: {
-        operationId,
-        type,
-        number: formatDocumentNumber(OPERATION_DOCUMENT_PREFIX[type], operation.number),
-        status: 'DRAFT',
-      },
-      update: {},
+    // Garante o documento para renderização. Se ainda não existir, cria com um
+    // número reservado da sequência POR TIPO (não do contador global da Operation).
+    const document = await this.prisma.$transaction(async (tx) => {
+      const found = await tx.operationDocument.findUnique({
+        where: { operationId_type: { operationId, type } },
+        select: { id: true },
+      });
+      if (found) return found;
+      return tx.operationDocument.create({
+        data: {
+          operationId,
+          type,
+          number: await reserveDocumentNumber(tx, type),
+          status: 'DRAFT',
+        },
+        select: { id: true },
+      });
     });
     return this.renderDocument(document.id, actor, context);
   }

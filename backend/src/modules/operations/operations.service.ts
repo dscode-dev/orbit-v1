@@ -12,12 +12,11 @@ import {
   MAX_OPERATION_PHOTOS,
   MAX_OPERATION_SIGNATURE_SIZE_BYTES,
   OPERATION_AUDIT_ACTIONS,
-  OPERATION_DOCUMENT_PREFIX,
   OPERATION_PHOTO_RESOURCE,
   OPERATION_RESOURCE,
   OPERATION_SIGNATURE_MIME_TYPES,
-  formatDocumentNumber,
 } from '../../shared/constants/operations.constants';
+import { reserveDocumentNumber } from '../../shared/utils/document-number.util';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
 import { buildPaginatedResponse } from '../../shared/types/pagination.types';
@@ -469,7 +468,7 @@ export class OperationsService {
           data: {
             operationId: operation.id,
             type: DocumentTemplateType.WORK_ORDER,
-            number: formatDocumentNumber(OPERATION_DOCUMENT_PREFIX.WORK_ORDER, operation.number),
+            number: await reserveDocumentNumber(tx, DocumentTemplateType.WORK_ORDER),
             status: 'DRAFT',
           },
         });
@@ -479,10 +478,11 @@ export class OperationsService {
           data: {
             operationId: operation.id,
             type: dto.documentType,
-            number:
-              dto.documentType === DocumentTemplateType.RECEIPT && dto.receiptNumber
-                ? dto.receiptNumber
-                : formatDocumentNumber(OPERATION_DOCUMENT_PREFIX[dto.documentType], operation.number),
+            number: await reserveDocumentNumber(
+              tx,
+              dto.documentType,
+              dto.documentType === DocumentTemplateType.RECEIPT ? dto.receiptNumber : null,
+            ),
             status: 'DRAFT',
           },
         });
