@@ -23,7 +23,7 @@ describe('Field Report Handoff', () => {
   const storage = new ControlledStorage();
   const service = new DocumentHandoffService(
     prisma as never,
-    new DocumentAssetResolver(storage),
+    new DocumentAssetResolver(storage, { warn() {} } as never),
     new OperationAccessService(prisma as never),
   );
 

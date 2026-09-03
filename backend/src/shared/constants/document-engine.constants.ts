@@ -41,10 +41,12 @@ export const DOCUMENT_ONLY_DOCUMENT_TYPES = ['RECEIPT'] as const;
 
 /**
  * Documentos que nunca criam a OS (documento WORK_ORDER) automaticamente junto.
- * O RVT é um atendimento de campo legítimo (mantém operador/assignment), mas a
- * OS deve ser criada depois, manualmente, a partir dele — nunca em conjunto.
+ * O RVT e o PMOC são atendimentos de campo legítimos (mantêm operador/assignment),
+ * mas geram somente o seu próprio relatório: um atendimento de execução PMOC
+ * produz apenas o documento PMOC daquela execução, nunca uma OS junto. A OS, se
+ * necessária, é criada depois, manualmente, a partir do relatório.
  */
-export const SKIP_AUTO_WORK_ORDER_DOCUMENT_TYPES = ['RECEIPT', 'TECHNICAL_REPORT'] as const;
+export const SKIP_AUTO_WORK_ORDER_DOCUMENT_TYPES = ['RECEIPT', 'TECHNICAL_REPORT', 'PMOC'] as const;
 
 // Orçamento (BUDGET) não coleta assinatura do cliente — é apenas uma proposta.
 // PMOC também não coleta assinatura do cliente: usa somente o responsável técnico
@@ -53,13 +55,27 @@ export const CUSTOMER_SIGNATURE_REQUIRED_DOCUMENT_TYPES = [
   'WORK_ORDER',
 ] as const;
 
+/**
+ * Compressão das evidências fotográficas antes de embutir no PDF. A galeria
+ * exibe as fotos pequenas, então uma dimensão máxima moderada com JPEG de
+ * qualidade reduzida corta drasticamente o peso (laudos PMOC saíam com 7-8 MB)
+ * sem prejuízo visual perceptível.
+ */
+export const DOCUMENT_PHOTO_MAX_DIMENSION = 1280;
+export const DOCUMENT_PHOTO_JPEG_QUALITY = 60;
+
 export const DOCUMENT_MIME_TYPE = 'application/pdf';
 export const DOCUMENT_STORAGE_PREFIX = 'documents/operations';
 export const DOCUMENT_MAX_SECTIONS = 80;
 export const DOCUMENT_MAX_COMPONENTS = 600;
 export const DOCUMENT_MAX_TABLE_ROWS = 400;
 export const DOCUMENT_MAX_PAGES = 80;
-export const DOCUMENT_MAX_PDF_BYTES = 10 * 1024 * 1024;
+// Teto de segurança do PDF renderizado. As fotos de evidência já são
+// recomprimidas (ver DocumentAssetResolver.compressPhoto), então o tamanho real
+// fica pequeno; a folga aqui evita que a geração falhe quando um laudo reúne
+// várias fotos (ex.: PMOC com até 6 evidências) ou quando a compressão cai no
+// fallback (imagem original preservada).
+export const DOCUMENT_MAX_PDF_BYTES = 25 * 1024 * 1024;
 
 export const DOCUMENT_PAGE = {
   width: 595.28,

@@ -66,7 +66,13 @@ export class DocumentEngineService {
     const where: Prisma.OperationDocumentWhereInput = {
       ...(query.type ? { type: query.type } : {}),
       ...(query.status ? { status: query.status } : {}),
-      ...(query.editorialStatus ? { editorialStatus: query.editorialStatus } : {}),
+      // Um status explícito sempre vence. Sem filtro explícito, o catálogo
+      // esconde rascunhos (DRAFT) por padrão — inclui-os só com includeDrafts.
+      ...(query.editorialStatus
+        ? { editorialStatus: query.editorialStatus }
+        : query.includeDrafts
+          ? {}
+          : { editorialStatus: { not: 'DRAFT' } }),
       ...(actor.role === Role.OWNER
         ? {}
         : actor.role === Role.MANAGER
@@ -739,7 +745,15 @@ export class DocumentEngineService {
         return Object.fromEntries(
           Object.entries(value).map(([key, item]) => [
             key,
-            key === 'sourceFingerprint' ? undefined : normalize(item),
+            // O fingerprint mede mudança de FONTE, não os bytes renderizados.
+            // Bytes/tamanho de imagens são detalhe de renderização (a compressão
+            // pode produzir bytes diferentes entre render e download, sobretudo
+            // com fotos grandes ou troca de motor sharp↔jimp) e não podem tornar
+            // o documento "desatualizado". A identidade das fotos permanece no
+            // fingerprint via `sourceId`.
+            key === 'sourceFingerprint' || key === 'contentBase64' || key === 'fileSize'
+              ? undefined
+              : normalize(item),
           ]),
         );
       }

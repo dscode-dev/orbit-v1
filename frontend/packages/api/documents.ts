@@ -29,7 +29,7 @@ export type DocumentCatalogItem = {
 export function listDocuments(params?: {
   page?: number; limit?: number; search?: string; type?: DocumentKind;
   status?: OperationDocumentStatus; customerId?: string; equipmentId?: string;
-  editorialStatus?: DocumentEditorialStatus;
+  editorialStatus?: DocumentEditorialStatus; includeDrafts?: boolean;
   operatorId?: string; from?: string; to?: string; signal?: AbortSignal;
 }): Promise<Paginated<DocumentCatalogItem>> {
   const { signal, ...query } = params ?? {};

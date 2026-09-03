@@ -102,6 +102,15 @@ const DOCUMENT_CONTEXT_OPERATION_INCLUDE = {
       executionNumber: true,
     },
   },
+  // Numeração do relatório PMOC segue a ordem da execução POR EQUIPAMENTO
+  // (equipmentExecutionNumber) — nunca o contador global de operações. Ambas as
+  // relações apontam para a mesma execução; a primeira presente é usada.
+  pmocExecutionRequest: {
+    select: { equipmentExecutionNumber: true, executionNumber: true },
+  },
+  generatedPmocExecutionRequest: {
+    select: { equipmentExecutionNumber: true, executionNumber: true },
+  },
   parts: {
     where: { deletedAt: null },
     orderBy: { createdAt: 'asc' as const },

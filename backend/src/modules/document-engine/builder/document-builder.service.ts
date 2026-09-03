@@ -97,6 +97,9 @@ export class DocumentBuilderService {
       number: formatDocumentNumber(OPERATION_DOCUMENT_PREFIX[type], operation.number),
     };
 
+    // Cabeçalho e rodapé usam o número da OPERAÇÃO com o prefixo do documento
+    // (ex.: PMOC-000042), igual ao RVT. O número da EXECUÇÃO por equipamento
+    // (PMOC-001) aparece apenas na seção "Identificação do PMOC".
     const generatedAt = new Date().toISOString();
     const sections = this.sections(context, generatedAt, document.number);
     this.assertBlueprintLimits(sections);
@@ -863,6 +866,27 @@ export class DocumentBuilderService {
     };
   }
 
+  /**
+   * Número do relatório PMOC na ordem da execução POR EQUIPAMENTO
+   * (PMOC-001, PMOC-002, ...). Cai no número persistido apenas se a execução
+   * não estiver vinculada (não deveria ocorrer em documentos PMOC reais).
+   */
+  private pmocDisplayNumber(operation: DocumentContextOperation, fallback: string): string {
+    const request = operation.pmocExecutionRequest ?? operation.generatedPmocExecutionRequest ?? null;
+    if (request?.equipmentExecutionNumber == null) return fallback;
+    return `PMOC-${String(request.equipmentExecutionNumber).padStart(3, '0')}`;
+  }
+
+  /** Título "PMOC — CLIENTE — EQUIPAMENTO" da seção de identificação. */
+  private pmocTitle(operation: DocumentContextOperation): string {
+    const customer = operation.customer.tradeName ?? operation.customer.name;
+    const equipment = operation.equipment;
+    const equipmentRef = equipment
+      ? `${equipment.name}${equipment.tag ? ` · ${equipment.tag}` : ''}`
+      : null;
+    return equipmentRef ? `PMOC — ${customer} — ${equipmentRef}` : `PMOC — ${customer}`;
+  }
+
   private pmocReportSections(
     context: DocumentContext,
     generatedAt: string,
@@ -889,8 +913,9 @@ export class DocumentBuilderService {
         critical: true,
         components: [
           this.metadata('pmoc-identification-metadata', [
-            ['Título', `PMOC — ${operation.customer.tradeName ?? operation.customer.name}`],
-            ['Número', documentNumber],
+            ['Título', this.pmocTitle(operation)],
+            // Número da EXECUÇÃO por equipamento (PMOC-001), só aqui.
+            ['Número', this.pmocDisplayNumber(operation, documentNumber)],
             ['Emissão', this.date(generatedAt)],
             ['Responsável técnico', this.technicalResponsibleName(context) ?? pmoc.responsibleTechnician],
             ['ART/registro', pmoc.artNumber ?? '—'],

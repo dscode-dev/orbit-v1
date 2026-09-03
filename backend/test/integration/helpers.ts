@@ -453,7 +453,7 @@ export function createDocumentEngine(storage = new ControlledStorage()): {
   builder: DocumentBuilderService;
   storage: ControlledStorage;
 } {
-  const assets = new DocumentAssetResolver(storage);
+  const assets = new DocumentAssetResolver(storage, { warn() {} } as never);
   const configuration = new DocumentConfigurationService(prisma as never);
   const contextService = new DocumentContextService(prisma as never, configuration, assets);
   const builder = new DocumentBuilderService(contextService);

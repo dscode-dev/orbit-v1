@@ -1,6 +1,6 @@
 import { DocumentEditorialStatus, DocumentTemplateType } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
-import { IsDateString, IsEnum, IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsDateString, IsEnum, IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
 import { OperationDocumentStatus } from '@prisma/client';
 
 const trim = (value: unknown): unknown => typeof value === 'string' ? value.trim() : value;
@@ -12,6 +12,8 @@ export class ListDocumentsQueryDto {
   @IsOptional() @IsEnum(DocumentTemplateType) type?: DocumentTemplateType;
   @IsOptional() @IsEnum(OperationDocumentStatus) status?: OperationDocumentStatus;
   @IsOptional() @IsEnum(DocumentEditorialStatus) editorialStatus?: DocumentEditorialStatus;
+  /** Por padrão o catálogo esconde documentos em rascunho (DRAFT); enviar true os inclui. */
+  @IsOptional() @Type(() => Boolean) @IsBoolean() includeDrafts?: boolean;
   @IsOptional() @IsUUID('4') customerId?: string;
   @IsOptional() @IsUUID('4') equipmentId?: string;
   @IsOptional() @IsUUID('4') operatorId?: string;
