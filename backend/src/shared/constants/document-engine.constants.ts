@@ -55,13 +55,27 @@ export const CUSTOMER_SIGNATURE_REQUIRED_DOCUMENT_TYPES = [
   'WORK_ORDER',
 ] as const;
 
+/**
+ * Compressão das evidências fotográficas antes de embutir no PDF. A galeria
+ * exibe as fotos pequenas, então uma dimensão máxima moderada com JPEG de
+ * qualidade reduzida corta drasticamente o peso (laudos PMOC saíam com 7-8 MB)
+ * sem prejuízo visual perceptível.
+ */
+export const DOCUMENT_PHOTO_MAX_DIMENSION = 1280;
+export const DOCUMENT_PHOTO_JPEG_QUALITY = 60;
+
 export const DOCUMENT_MIME_TYPE = 'application/pdf';
 export const DOCUMENT_STORAGE_PREFIX = 'documents/operations';
 export const DOCUMENT_MAX_SECTIONS = 80;
 export const DOCUMENT_MAX_COMPONENTS = 600;
 export const DOCUMENT_MAX_TABLE_ROWS = 400;
 export const DOCUMENT_MAX_PAGES = 80;
-export const DOCUMENT_MAX_PDF_BYTES = 10 * 1024 * 1024;
+// Teto de segurança do PDF renderizado. As fotos de evidência já são
+// recomprimidas (ver DocumentAssetResolver.compressPhoto), então o tamanho real
+// fica pequeno; a folga aqui evita que a geração falhe quando um laudo reúne
+// várias fotos (ex.: PMOC com até 6 evidências) ou quando a compressão cai no
+// fallback (imagem original preservada).
+export const DOCUMENT_MAX_PDF_BYTES = 25 * 1024 * 1024;
 
 export const DOCUMENT_PAGE = {
   width: 595.28,

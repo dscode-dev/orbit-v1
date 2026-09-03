@@ -28,9 +28,10 @@ export default function DocumentosPage() {
   const [search, setSearch] = useState(""); const [customerId, setCustomerId] = useState("");
   const [equipmentId, setEquipmentId] = useState(""); const [operatorId, setOperatorId] = useState("");
   const [kind, setKind] = useState<"" | DocumentKind>(""); const [status, setStatus] = useState<"" | DocumentEditorialStatus>("");
+  const [includeDrafts, setIncludeDrafts] = useState(false);
   const [from, setFrom] = useState(""); const [to, setTo] = useState("");
   const [detail, setDetail] = useState<DocumentCatalogItem | null>(null);
-  const docs = useQuery((signal) => documentsApi.listDocuments({ page, limit, search: search || undefined, customerId: customerId || undefined, equipmentId: equipmentId || undefined, operatorId: operatorId || undefined, type: kind || undefined, editorialStatus: status || undefined, from: from || undefined, to: to || undefined, signal }), [page, limit, search, customerId, equipmentId, operatorId, kind, status, from, to]);
+  const docs = useQuery((signal) => documentsApi.listDocuments({ page, limit, search: search || undefined, customerId: customerId || undefined, equipmentId: equipmentId || undefined, operatorId: operatorId || undefined, type: kind || undefined, editorialStatus: status || undefined, includeDrafts: includeDrafts || undefined, from: from || undefined, to: to || undefined, signal }), [page, limit, search, customerId, equipmentId, operatorId, kind, status, includeDrafts, from, to]);
   const items = useMemo(() => docs.data?.items ?? [], [docs.data]);
   const options = useMemo(() => ({
     customers: unique(items.flatMap((item) => item.customer ? [item.customer] : [])),
@@ -58,6 +59,7 @@ export default function DocumentosPage() {
       <select className={selectCls} value={status} onChange={(e) => resetPage(setStatus)(e.target.value as DocumentEditorialStatus | "")}><option value="">Todos os status</option>{Object.entries(STATUS).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}</select>
       <input className={selectCls} type="date" value={from} onChange={(e) => resetPage(setFrom)(e.target.value)} aria-label="Data inicial" />
       <input className={selectCls} type="date" value={to} onChange={(e) => resetPage(setTo)(e.target.value)} aria-label="Data final" />
+      <Toggle checked={includeDrafts} onChange={resetPage(setIncludeDrafts)} label="Mostrar rascunhos" />
     </FilterBar>
     {docs.loading && !docs.data ? <SkeletonList rows={6} /> : docs.error && !docs.data ? <ErrorState error={docs.error} onRetry={docs.refetch} /> : items.length === 0 ? <EmptyState icon={FileText} title="Nenhum documento" description="Nenhum documento emitido corresponde aos filtros." /> : <div className="space-y-3"><DataTable columns={columns} rows={items} onRowClick={setDetail} />{docs.data && <Pagination pagination={docs.data.pagination} onPageChange={setPage} onPageSizeChange={(value) => { setLimit(value); setPage(1); }} />}</div>}
     <Drawer open={Boolean(detail)} onClose={() => setDetail(null)} eyebrow="Documento oficial" title={detail?.number ?? ""} width="max-w-[1280px]">
@@ -73,3 +75,11 @@ export default function DocumentosPage() {
 function unique<T extends { id: string; name: string }>(items: T[]): T[] { return Array.from(new Map(items.map((item) => [item.id, item])).values()); }
 function Select({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: Array<{ id: string; name: string }> }) { return <select className={selectCls} aria-label={label} value={value} onChange={(e) => onChange(e.target.value)}><option value="">Todos · {label.toLowerCase()}</option>{options.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>; }
 function Meta({ label, value }: { label: string; value?: string | null }) { return <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] p-3"><div className="text-caption">{label}</div><div className="text-sm font-medium">{value || "—"}</div></div>; }
+function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (value: boolean) => void; label: string }) {
+  return <button type="button" role="switch" aria-checked={checked} onClick={() => onChange(!checked)} className="inline-flex items-center gap-2 h-9 px-1 text-sm text-[var(--color-foreground)]" title="Rascunhos (ex.: OS ainda não emitidas) ficam ocultos por padrão">
+    <span className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${checked ? "bg-[var(--color-primary)]" : "bg-[var(--color-border)]"}`}>
+      <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${checked ? "translate-x-[18px]" : "translate-x-0.5"}`} />
+    </span>
+    {label}
+  </button>;
+}

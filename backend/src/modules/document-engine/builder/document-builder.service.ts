@@ -97,18 +97,11 @@ export class DocumentBuilderService {
       number: formatDocumentNumber(OPERATION_DOCUMENT_PREFIX[type], operation.number),
     };
 
-    // Número exibido no documento. Para o PMOC, segue a ordem da execução POR
-    // EQUIPAMENTO (PMOC-001, PMOC-002, ...), reiniciando a cada equipamento e
-    // nunca reaproveitando o contador global de operações/OS. Calculado a cada
-    // render (resiliente a regeneração); a identidade persistida permanece em
-    // `document.number`.
-    const displayNumber =
-      type === DocumentTemplateType.PMOC
-        ? this.pmocDisplayNumber(operation, document.number)
-        : document.number;
-
+    // Cabeçalho e rodapé usam o número da OPERAÇÃO com o prefixo do documento
+    // (ex.: PMOC-000042), igual ao RVT. O número da EXECUÇÃO por equipamento
+    // (PMOC-001) aparece apenas na seção "Identificação do PMOC".
     const generatedAt = new Date().toISOString();
-    const sections = this.sections(context, generatedAt, displayNumber);
+    const sections = this.sections(context, generatedAt, document.number);
     this.assertBlueprintLimits(sections);
 
     return {
@@ -149,7 +142,7 @@ export class DocumentBuilderService {
         organization,
         context.assets.logo,
         this.titleFor(type),
-        displayNumber,
+        document.number,
         `Operação ${String(operation.number).padStart(6, '0')}`,
       ),
       footer: {
@@ -157,9 +150,9 @@ export class DocumentBuilderService {
           type === DocumentTemplateType.RECEIPT
             ? ''
             : type === DocumentTemplateType.PMOC
-            ? `${organization.tradeName || organization.legalName} · ${organization.phone} · ${organization.email} · ${displayNumber} · Versão documental 1 · Emissão ${this.date(generatedAt)}`
+            ? `${organization.tradeName || organization.legalName} · ${organization.phone} · ${organization.email} · ${document.number} · Versão documental 1 · Emissão ${this.date(generatedAt)}`
             : context.template?.footerContent ||
-                `${organization.tradeName || organization.legalName} · ${displayNumber}`,
+                `${organization.tradeName || organization.legalName} · ${document.number}`,
         ),
         generatedAt,
       },
@@ -921,7 +914,8 @@ export class DocumentBuilderService {
         components: [
           this.metadata('pmoc-identification-metadata', [
             ['Título', this.pmocTitle(operation)],
-            ['Número', documentNumber],
+            // Número da EXECUÇÃO por equipamento (PMOC-001), só aqui.
+            ['Número', this.pmocDisplayNumber(operation, documentNumber)],
             ['Emissão', this.date(generatedAt)],
             ['Responsável técnico', this.technicalResponsibleName(context) ?? pmoc.responsibleTechnician],
             ['ART/registro', pmoc.artNumber ?? '—'],

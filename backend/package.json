@@ -44,11 +44,13 @@
     "class-validator": "^0.14.2",
     "express": "5.2.1",
     "helmet": "^8.1.0",
+    "jimp": "^0.22.12",
     "pdfkit": "^0.19.1",
     "prisma": "^6.9.0",
     "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2"
+    "rxjs": "^7.8.2",
+    "sharp": "^0.33.5"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",

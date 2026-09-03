@@ -116,7 +116,7 @@ describe('DocumentEngine foundation', () => {
 
   it('generates a scannable equipment QR and preserves the same image in Blueprint and PDF', async () => {
     const payload = 'equipment:7de712a5-692a-481f-b080-189e518628c0';
-    const asset = await new DocumentAssetResolver({} as never).generateQrCode(payload);
+    const asset = await new DocumentAssetResolver({} as never, { warn() {} } as never).generateQrCode(payload);
     const png = PNG.sync.read(Buffer.from(asset.contentBase64, 'base64'));
     const luminance = new Uint8ClampedArray(png.width * png.height);
     for (let index = 0; index < luminance.length; index += 1) {
