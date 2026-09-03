@@ -1454,6 +1454,19 @@ model OperationDocument {
   @@map("operation_documents")
 }
 
+/// Contador de numeração POR TIPO de documento de operação. Cada tipo (OS, PMOC,
+/// RVT, etc.) tem sua própria sequência, para que os números não se misturem
+/// entre tipos. Documentos de orçamento (BUDGET/QUOTE) seguem o número do próprio
+/// Budget e não usam esta tabela. Incrementado atomicamente na criação de um
+/// documento; o formato final continua PREFIXO-000000 (ver formatDocumentNumber).
+model DocumentNumberSequence {
+  type       DocumentTemplateType @id
+  lastNumber Int                  @default(0) @map("last_number")
+  updatedAt  DateTime             @updatedAt @map("updated_at")
+
+  @@map("document_number_sequences")
+}
+
 model DocumentRevision {
   id            String                 @id @default(uuid()) @db.Uuid
   documentId    String                 @map("document_id") @db.Uuid
