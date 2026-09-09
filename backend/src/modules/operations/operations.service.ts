@@ -1,5 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { DocumentHandoffOrigin, DocumentRevisionAction, DocumentTemplateType, EquipmentStatus, EquipmentType, OperationStatus, OperationType, Prisma, Role, TechnicalCatalogType } from '@prisma/client';
+import { AssignmentEventType, AssignmentStatus, DocumentHandoffOrigin, DocumentRevisionAction, DocumentTemplateType, EquipmentStatus, EquipmentType, OperationStatus, OperationType, Prisma, Role, TechnicalCatalogType } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import {
   STORAGE_PROVIDER_TOKEN,
@@ -188,6 +188,30 @@ type OperationAssignment = {
   delegated: boolean;
   ignoredOperatorId?: string;
 };
+const OPERATION_CORE_EDIT_FIELDS = new Set<keyof UpdateOperationDto>([
+  'customerId',
+  'addressId',
+  'equipmentId',
+  'type',
+  'serviceTypes',
+  'status',
+  'scheduledFor',
+  'checklist',
+  'observations',
+  'reportedIssue',
+  'serviceDescription',
+  'serviceValue',
+  'inspectedEquipments',
+  'auxiliaryOperatorIds',
+]);
+const OPERATION_MANAGEMENT_EDIT_FIELDS = new Set<keyof UpdateOperationDto>([
+  'customerId',
+  'addressId',
+  'equipmentId',
+  'type',
+  'scheduledFor',
+  'serviceValue',
+]);
 type InspectedEquipmentSnapshot = {
   equipmentId: string;
   position: number;
@@ -618,8 +642,11 @@ export class OperationsService {
       select: {
         id: true,
         customerId: true,
+        addressId: true,
         operatorId: true,
         status: true,
+        startedAt: true,
+        completedAt: true,
         type: true,
         serviceTypes: true,
         referenceMonth: true,
@@ -627,6 +654,7 @@ export class OperationsService {
         equipmentId: true,
         inspectedEquipments: { select: { equipmentId: true } },
         maintenanceExecution: { select: { plan: { select: { pmocPlan: { select: { id: true } } } } } },
+        rvtExecution: { select: { id: true } },
         _count: { select: { photos: true } },
       },
     });
@@ -636,6 +664,63 @@ export class OperationsService {
         'Operation was not found',
         HttpStatus.NOT_FOUND,
       );
+    const changedFields = Object.keys(dto) as Array<keyof UpdateOperationDto>;
+    const coreEditRequested = changedFields.some((field) => OPERATION_CORE_EDIT_FIELDS.has(field));
+    if (existing.status === OperationStatus.COMPLETED && changedFields.length > 0) {
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_COMPLETED_IMMUTABLE,
+        'Operações concluídas não podem ser editadas. Crie uma cópia para um novo atendimento',
+        HttpStatus.CONFLICT,
+      );
+    }
+    if (dto.status === OperationStatus.CANCELED) {
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_INVALID_TRANSITION,
+        'Utilize a ação de cancelamento da operação',
+        HttpStatus.CONFLICT,
+      );
+    }
+    if (existing.status === OperationStatus.CANCELED && coreEditRequested) {
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_INVALID_TRANSITION,
+        'Reative a operação antes de editá-la',
+        HttpStatus.CONFLICT,
+      );
+    }
+    const managementEditRequested = changedFields.some((field) =>
+      OPERATION_MANAGEMENT_EDIT_FIELDS.has(field),
+    );
+    if (managementEditRequested && actor.role !== Role.OWNER && actor.role !== Role.MANAGER) {
+      throw new ApplicationException(
+        ERROR_CODES.FORBIDDEN,
+        'Somente OWNER e MANAGER podem alterar os dados administrativos da operação',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+    if (
+      (existing.maintenanceExecution || existing.rvtExecution) &&
+      (dto.customerId !== undefined || dto.equipmentId !== undefined || dto.type !== undefined)
+    ) {
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_INVALID_TRANSITION,
+        'Cliente, equipamento e tipo são definidos pelo planejamento vinculado e não podem ser alterados nesta operação',
+        HttpStatus.CONFLICT,
+      );
+    }
+    const targetCustomerId = dto.customerId ?? existing.customerId;
+    const targetAddressId =
+      dto.addressId === undefined ? (existing.addressId ?? undefined) : (dto.addressId ?? undefined);
+    const targetEquipmentId =
+      dto.equipmentId === undefined
+        ? (existing.equipmentId ?? undefined)
+        : (dto.equipmentId ?? undefined);
+    if (
+      dto.customerId !== undefined ||
+      dto.addressId !== undefined ||
+      dto.equipmentId !== undefined
+    ) {
+      await this.validateRelations(targetCustomerId, targetAddressId, targetEquipmentId);
+    }
     if (dto.auxiliaryOperatorIds !== undefined && actor.role !== Role.OWNER && actor.role !== Role.MANAGER) {
       throw new ApplicationException(
         ERROR_CODES.FORBIDDEN,
@@ -650,7 +735,7 @@ export class OperationsService {
     const inspectedEquipments =
       dto.inspectedEquipments === undefined
         ? null
-        : await this.resolveInspectedEquipments(existing.customerId, dto.inspectedEquipments);
+        : await this.resolveInspectedEquipments(targetCustomerId, dto.inspectedEquipments);
     if (actor.role === Role.OPERATOR && dto.inspectedEquipments !== undefined) {
       const allowedEquipmentIds = new Set([
         ...(existing.equipmentId ? [existing.equipmentId] : []),
@@ -668,7 +753,7 @@ export class OperationsService {
         );
       }
     }
-    await this.validateChecklistEquipments(existing.customerId, dto.maintenanceChecklist);
+    await this.validateChecklistEquipments(targetCustomerId, dto.maintenanceChecklist);
     const photos = (dto.photos ?? []).map((p) => this.decodePhoto(p));
     if (existing._count.photos + photos.length > MAX_OPERATION_PHOTOS) {
       throw new ApplicationException(
@@ -697,18 +782,37 @@ export class OperationsService {
       await tx.operation.update({
         where: { id },
         data: {
+          ...(dto.customerId !== undefined ? { customerId: dto.customerId } : {}),
+          ...(dto.addressId !== undefined ? { addressId: dto.addressId } : {}),
+          ...(dto.equipmentId !== undefined ? { equipmentId: dto.equipmentId } : {}),
+          ...(dto.type !== undefined ? { type: dto.type } : {}),
           ...(dto.status ? { status: dto.status } : {}),
-          ...(dto.serviceTypes !== undefined
-            ? { serviceTypes: this.operationTypes(existing.type, dto.serviceTypes) }
+          ...(dto.serviceTypes !== undefined || dto.type !== undefined
+            ? {
+                serviceTypes: this.operationTypes(
+                  dto.type ?? existing.type,
+                  dto.serviceTypes ?? existing.serviceTypes,
+                ),
+              }
+            : {}),
+          ...(dto.scheduledFor !== undefined
+            ? { scheduledFor: dto.scheduledFor ? new Date(dto.scheduledFor) : null }
             : {}),
           ...(dto.startedAt ? { startedAt: new Date(dto.startedAt) } : {}),
+          ...(dto.status === OperationStatus.IN_PROGRESS && !existing.startedAt && !dto.startedAt
+            ? { startedAt: new Date() }
+            : {}),
           ...(dto.completedAt ? { completedAt: new Date(dto.completedAt) } : {}),
+          ...(dto.status === OperationStatus.COMPLETED && !existing.completedAt && !dto.completedAt
+            ? { completedAt: new Date() }
+            : {}),
           ...(dto.checklist ? { checklist: this.normalizeChecklist(dto.checklist) } : {}),
           ...(dto.observations !== undefined ? { observations: dto.observations } : {}),
           ...(dto.reportedIssue !== undefined ? { reportedIssue: dto.reportedIssue } : {}),
           ...(dto.serviceDescription !== undefined
             ? { serviceDescription: dto.serviceDescription }
             : {}),
+          ...(dto.serviceValue !== undefined ? { serviceValue: dto.serviceValue } : {}),
           ...(dto.receiptNumber !== undefined ? { receiptNumber: dto.receiptNumber } : {}),
           ...(dto.receiptIssuedAt !== undefined
             ? { receiptIssuedAt: new Date(dto.receiptIssuedAt) }
@@ -782,6 +886,9 @@ export class OperationsService {
           actor.id,
           context,
         );
+      }
+      if (dto.status !== undefined && dto.status !== existing.status) {
+        await this.syncAssignmentStatusTx(tx, id, dto.status, actor.id);
       }
       const documentChangedFields = Object.keys(dto).filter((field) => field !== 'auxiliaryOperatorIds');
       if (documentChangedFields.length > 0) await this.markDocumentsChangedTx(tx, id, actor, documentChangedFields);
@@ -863,6 +970,204 @@ export class OperationsService {
     if (dto.receiptAmount != null) {
       await this.financial.syncReceiptEntry(id, actor.id, context).catch(() => undefined);
     }
+    return this.operationOrThrow(id);
+  }
+
+  async remove(
+    id: string,
+    actor: AuthenticatedUser,
+    context: OperationAuditContext,
+  ): Promise<{ deleted: true }> {
+    const operation = await this.prisma.operation.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        number: true,
+        status: true,
+        maintenanceExecution: { select: { id: true } },
+        pmocExecutionRequest: { select: { id: true } },
+        generatedPmocExecutionRequest: { select: { id: true } },
+        rvtExecution: { select: { id: true } },
+        customerServiceTicket: { select: { id: true } },
+        documents: {
+          where: { OR: [{ renderedAt: { not: null } }, { revision: { gt: 0 } }] },
+          select: { id: true },
+          take: 1,
+        },
+        _count: { select: { parts: true, budgets: true, stockMovements: true } },
+      },
+    });
+    if (!operation) {
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_NOT_FOUND,
+        'Operation was not found',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    if (operation.status === OperationStatus.COMPLETED) {
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_COMPLETED_IMMUTABLE,
+        'Operações concluídas não podem ser excluídas',
+        HttpStatus.CONFLICT,
+      );
+    }
+    if (
+      operation.maintenanceExecution ||
+      operation.pmocExecutionRequest ||
+      operation.generatedPmocExecutionRequest ||
+      operation.rvtExecution ||
+      operation.customerServiceTicket ||
+      operation.documents.length > 0 ||
+      operation._count.parts > 0 ||
+      operation._count.budgets > 0 ||
+      operation._count.stockMovements > 0
+    ) {
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_INVALID_TRANSITION,
+        'A operação possui vínculos operacionais ou comerciais e deve ser cancelada, não excluída',
+        HttpStatus.CONFLICT,
+      );
+    }
+    const storageKeys = await this.prisma.operationPhoto.findMany({
+      where: { operationId: id },
+      select: { storageKey: true },
+    });
+    await this.prisma.$transaction(async (tx) => {
+      const eligible = await tx.operation.findFirst({
+        where: {
+          id,
+          status: { not: OperationStatus.COMPLETED },
+          maintenanceExecution: { is: null },
+          pmocExecutionRequest: { is: null },
+          generatedPmocExecutionRequest: { is: null },
+          rvtExecution: { is: null },
+          customerServiceTicket: { is: null },
+          documents: { none: { OR: [{ renderedAt: { not: null } }, { revision: { gt: 0 } }] } },
+          parts: { none: {} },
+          budgets: { none: {} },
+          stockMovements: { none: {} },
+        },
+        select: { id: true },
+      });
+      if (!eligible) {
+        throw new ApplicationException(
+          ERROR_CODES.OPERATION_INVALID_TRANSITION,
+          'A operação foi alterada por outra requisição',
+          HttpStatus.CONFLICT,
+        );
+      }
+      await tx.auditLog.create({
+        data: this.audit(
+          OPERATION_AUDIT_ACTIONS.OPERATION_DELETED,
+          OPERATION_RESOURCE,
+          actor,
+          context,
+          { operationId: id, number: operation.number, previousStatus: operation.status },
+        ),
+      });
+      await tx.assignmentHistory.deleteMany({ where: { operationId: id } });
+      await tx.assignment.deleteMany({ where: { operationId: id } });
+      await tx.operation.delete({ where: { id } });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    await Promise.all(storageKeys.map(({ storageKey }) => this.storage.delete(storageKey).catch(() => undefined)));
+    return { deleted: true };
+  }
+
+  async cancel(
+    id: string,
+    actor: AuthenticatedUser,
+    context: OperationAuditContext,
+  ): Promise<unknown> {
+    const operation = await this.prisma.operation.findUnique({
+      where: { id },
+      select: { id: true, number: true, status: true },
+    });
+    if (!operation) {
+      throw new ApplicationException(ERROR_CODES.OPERATION_NOT_FOUND, 'Operation was not found', HttpStatus.NOT_FOUND);
+    }
+    if (operation.status === OperationStatus.COMPLETED) {
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_COMPLETED_IMMUTABLE,
+        'Operações concluídas não podem ser canceladas',
+        HttpStatus.CONFLICT,
+      );
+    }
+    if (operation.status === OperationStatus.CANCELED) return this.operationOrThrow(id);
+    const now = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      const assignments = await tx.assignment.findMany({
+        where: { operationId: id, status: { notIn: [AssignmentStatus.CANCELED, AssignmentStatus.REJECTED] } },
+        select: { id: true, status: true },
+      });
+      const updated = await tx.operation.updateMany({
+        where: { id, status: operation.status },
+        data: { status: OperationStatus.CANCELED },
+      });
+      if (updated.count !== 1) {
+        throw new ApplicationException(ERROR_CODES.OPERATION_INVALID_TRANSITION, 'A operação foi alterada por outra requisição', HttpStatus.CONFLICT);
+      }
+      for (const assignment of assignments) {
+        await tx.assignment.update({
+          where: { id: assignment.id },
+          data: { status: AssignmentStatus.CANCELED, operatorVisible: false, canceledAt: now },
+        });
+        await tx.assignmentHistory.create({
+          data: {
+            assignmentId: assignment.id,
+            operationId: id,
+            event: AssignmentEventType.CANCELED,
+            actorId: actor.id,
+            previousStatus: assignment.status,
+            newStatus: AssignmentStatus.CANCELED,
+            notes: 'Operação cancelada pela gestão',
+          },
+        });
+      }
+      await tx.auditLog.create({
+        data: this.audit(OPERATION_AUDIT_ACTIONS.OPERATION_CANCELED, OPERATION_RESOURCE, actor, context, {
+          operationId: id,
+          number: operation.number,
+          previousStatus: operation.status,
+        }),
+      });
+      await this.markDocumentsChangedTx(tx, id, actor, ['status']);
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    return this.operationOrThrow(id);
+  }
+
+  async reactivate(
+    id: string,
+    actor: AuthenticatedUser,
+    context: OperationAuditContext,
+  ): Promise<unknown> {
+    const operation = await this.prisma.operation.findUnique({
+      where: { id },
+      select: { id: true, number: true, status: true },
+    });
+    if (!operation) {
+      throw new ApplicationException(ERROR_CODES.OPERATION_NOT_FOUND, 'Operation was not found', HttpStatus.NOT_FOUND);
+    }
+    if (operation.status !== OperationStatus.CANCELED) {
+      throw new ApplicationException(ERROR_CODES.OPERATION_INVALID_TRANSITION, 'Somente operações canceladas podem ser reativadas', HttpStatus.CONFLICT);
+    }
+    await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.operation.updateMany({
+        where: { id, status: OperationStatus.CANCELED },
+        data: { status: OperationStatus.DRAFT, startedAt: null, completedAt: null },
+      });
+      if (updated.count !== 1) {
+        throw new ApplicationException(ERROR_CODES.OPERATION_INVALID_TRANSITION, 'A operação foi alterada por outra requisição', HttpStatus.CONFLICT);
+      }
+      await tx.auditLog.create({
+        data: this.audit(OPERATION_AUDIT_ACTIONS.OPERATION_REACTIVATED, OPERATION_RESOURCE, actor, context, {
+          operationId: id,
+          number: operation.number,
+          previousStatus: operation.status,
+          requiresReassignment: true,
+        }),
+      });
+      await this.markDocumentsChangedTx(tx, id, actor, ['status']);
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     return this.operationOrThrow(id);
   }
 
@@ -1478,14 +1783,84 @@ export class OperationsService {
         'Operation was not found',
         HttpStatus.NOT_FOUND,
       );
-    const { signatureData: _privateSignature, assignments, ...safeOperation } = operation;
+    const { signatureData: privateSignature, assignments, ...safeOperation } = operation;
     const primaryAssignment = assignments?.find((item) => item.isPrimary) ?? null;
     const auxiliaryAssignments = assignments?.filter((item) => !item.isPrimary) ?? [];
     return {
       ...safeOperation,
       ...(assignments ? { assignment: primaryAssignment, auxiliaryAssignments } : {}),
-      signatureCaptured: Boolean(_privateSignature),
+      signatureCaptured: Boolean(privateSignature),
     };
+  }
+
+  private async syncAssignmentStatusTx(
+    tx: Prisma.TransactionClient,
+    operationId: string,
+    operationStatus: OperationStatus,
+    actorId: string,
+  ): Promise<void> {
+    const targetStatus =
+      operationStatus === OperationStatus.IN_PROGRESS
+        ? AssignmentStatus.STARTED
+        : operationStatus === OperationStatus.REVIEW || operationStatus === OperationStatus.COMPLETED
+          ? AssignmentStatus.COMPLETED
+          : operationStatus === OperationStatus.CANCELED
+            ? AssignmentStatus.CANCELED
+            : AssignmentStatus.ASSIGNED;
+    const assignments = await tx.assignment.findMany({
+      where: {
+        operationId,
+        ...(targetStatus === AssignmentStatus.CANCELED ? {} : { isPrimary: true }),
+        status: { not: targetStatus },
+      },
+      select: { id: true, status: true },
+    });
+    const now = new Date();
+    const event =
+      targetStatus === AssignmentStatus.STARTED
+        ? AssignmentEventType.STARTED
+        : targetStatus === AssignmentStatus.COMPLETED
+          ? AssignmentEventType.COMPLETED
+          : targetStatus === AssignmentStatus.CANCELED
+            ? AssignmentEventType.CANCELED
+            : AssignmentEventType.ASSIGNED;
+    for (const assignment of assignments) {
+      await tx.assignment.update({
+        where: { id: assignment.id },
+        data: {
+          status: targetStatus,
+          ...(targetStatus === AssignmentStatus.ASSIGNED
+            ? {
+                assignedAt: now,
+                acceptedAt: null,
+                startedAt: null,
+                completedAt: null,
+                canceledAt: null,
+                rejectedAt: null,
+                rejectionReason: null,
+              }
+            : {}),
+          ...(targetStatus === AssignmentStatus.STARTED
+            ? { acceptedAt: now, startedAt: now, completedAt: null, canceledAt: null }
+            : {}),
+          ...(targetStatus === AssignmentStatus.COMPLETED
+            ? { completedAt: now, canceledAt: null }
+            : {}),
+          ...(targetStatus === AssignmentStatus.CANCELED ? { canceledAt: now } : {}),
+        },
+      });
+      await tx.assignmentHistory.create({
+        data: {
+          assignmentId: assignment.id,
+          operationId,
+          event,
+          actorId,
+          previousStatus: assignment.status,
+          newStatus: targetStatus,
+          notes: 'Status sincronizado pela edição administrativa da operação',
+        },
+      });
+    }
   }
 
   private async photoOrThrow(photoId: string): Promise<{ id: string; operationId: string; storageKey: string; caption: string | null }> {

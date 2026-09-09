@@ -110,6 +110,8 @@ export function OperationCreationDrawer({
   submitLabel,
   contextNotice,
   lockCustomer = false,
+  intent = "create",
+  responsibleLabel,
 }: {
   open: boolean;
   mode?: Mode;
@@ -120,8 +122,15 @@ export function OperationCreationDrawer({
   submitLabel?: string;
   contextNotice?: string;
   lockCustomer?: boolean;
+  intent?: "create" | "edit" | "copy";
+  responsibleLabel?: string;
 }) {
-  const copy = MODE_COPY[mode];
+  const baseCopy = MODE_COPY[mode];
+  const copy = intent === "edit"
+    ? { ...baseCopy, eyebrow: "Operação", title: "Editar operação", description: "Atualize os dados da operação antes da conclusão.", success: "Operação atualizada com sucesso." }
+    : intent === "copy"
+      ? { ...baseCopy, eyebrow: "Operação", title: "Copiar operação", description: "Revise os dados copiados antes de criar o novo atendimento.", success: "Cópia criada com sucesso." }
+      : baseCopy;
   const [step, setStep] = useState<Step>(0);
   const [customerId, setCustomerId] = useState("");
   const [addressId, setAddressId] = useState("");
@@ -131,6 +140,7 @@ export function OperationCreationDrawer({
   const [auxiliaryOperatorIds, setAuxiliaryOperatorIds] = useState<string[]>([]);
   const [type, setType] = useState<OperationType>("PREVENTIVA");
   const [documentType, setDocumentType] = useState<DocumentKind>("WORK_ORDER");
+  const [status, setStatus] = useState<CreateOperationPayload["status"]>("DRAFT");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [checklist, setChecklist] = useState<string[]>([]);
@@ -159,7 +169,7 @@ export function OperationCreationDrawer({
   );
 
   // Rascunho local: só na criação de OS avulsa do zero (mode operation, sem prefill).
-  const draftEnabled = mode === "operation" && !initialValues;
+  const draftEnabled = intent === "create" && mode === "operation" && !initialValues;
   const draft = useLocalDraft<OperationDraftSnapshot>("operation-avulsa", draftEnabled);
   const [recoveredAt, setRecoveredAt] = useState<string | null>(null);
 
@@ -213,7 +223,7 @@ export function OperationCreationDrawer({
     setEquipmentId(value.equipmentId);
     setEquipmentIds(value.equipmentIds);
     setOperatorId(value.operatorId);
-    setAuxiliaryOperatorIds([]);
+    setAuxiliaryOperatorIds(activeInitialValues?.auxiliaryOperatorIds ?? []);
     setType(value.type);
     setDocumentType(value.documentType);
     setDate(value.date);
@@ -245,6 +255,7 @@ export function OperationCreationDrawer({
     setAuxiliaryOperatorIds([]);
     setType(activeInitialValues?.type ?? "PREVENTIVA");
     setDocumentType(activeInitialValues?.documentType ?? "WORK_ORDER");
+    setStatus(activeInitialValues?.status ?? "DRAFT");
     const schedule = activeInitialValues?.scheduledFor ? localDateTime(activeInitialValues.scheduledFor) : null;
     setDate(schedule?.date ?? "");
     setTime(schedule?.time ?? "");
@@ -290,7 +301,7 @@ export function OperationCreationDrawer({
   const documentTypeLocked = activeInitialValues?.documentType === "PMOC";
   const isPmocOperation = Boolean(pmocDraft || documentTypeLocked);
   // Origem PMOC disponível ao criar uma operação/agendamento (não em contexto já travado em PMOC).
-  const canChooseSource = !documentTypeLocked && (mode === "operation" || mode === "schedule");
+  const canChooseSource = intent === "create" && !documentTypeLocked && !initialValues && (mode === "operation" || mode === "schedule");
 
   const canNext =
     step === 0 ? Boolean(customerId)
@@ -315,6 +326,9 @@ export function OperationCreationDrawer({
             sector: existing?.sector ?? equipment?.name ?? "Equipamento selecionado",
             systemType: existing?.systemType ?? null,
             currentSituation: existing?.currentSituation ?? null,
+            manufacturer: existing?.manufacturer ?? equipment?.manufacturer ?? null,
+            model: existing?.model ?? equipment?.model ?? null,
+            capacity: existing?.capacity ?? equipment?.capacity ?? null,
           };
         }),
         type,
@@ -322,11 +336,18 @@ export function OperationCreationDrawer({
         // Nasce como rascunho; a atribuição ao operador leva a operação para
         // "Pendente" no backend, e só o início da execução muda para
         // "Em andamento".
-        status: activeInitialValues?.status ?? "DRAFT",
+        status: status ?? "DRAFT",
         scheduledFor,
         operatorId: operatorId || null,
         auxiliaryOperatorIds: auxiliaryOperatorIds.filter((id) => id && id !== operatorId),
-        checklist: checklist.map((label) => ({ label, done: false })),
+        checklist: checklist.map((label) => {
+          const existing = activeInitialValues?.checklist?.find((item) => item.label === label);
+          return {
+            label,
+            done: intent === "copy" ? false : (existing?.done ?? false),
+            ...(intent === "copy" || !existing?.note ? {} : { note: existing.note }),
+          };
+        }),
         observations: observations || null,
         reportedIssue: reportedIssue || null,
         serviceDescription: serviceDescription || null,
@@ -413,7 +434,7 @@ export function OperationCreationDrawer({
               </button>
             ) : (
               <button onClick={submit} disabled={saving || !canNext} className={primaryBtn}>
-                {saving ? "Criando…" : (pmocDraft ? "Criar Ordem de Serviço" : (submitLabel ?? "Criar"))}
+                {saving ? (intent === "edit" ? "Salvando…" : "Criando…") : (pmocDraft ? "Criar Ordem de Serviço" : (submitLabel ?? (intent === "edit" ? "Salvar alterações" : intent === "copy" ? "Criar cópia" : "Criar")))}
               </button>
             )}
           </>
@@ -619,7 +640,7 @@ export function OperationCreationDrawer({
                   </p>
                 </Field>
                 <Field label="Documento solicitado">
-                  <select value={documentType} onChange={(event) => setDocumentType(event.target.value as DocumentKind)} className={inputCls} disabled={documentTypeLocked}>
+                  <select value={documentType} onChange={(event) => setDocumentType(event.target.value as DocumentKind)} className={inputCls} disabled={documentTypeLocked || intent === "edit"}>
                     {(documentTypeLocked ? (["PMOC"] as DocumentKind[]) : ATTENDANCE_DOCUMENT_TYPES).map((item) => (
                       <option key={item} value={item}>{DOCUMENT_KIND_LABEL[item]}</option>
                     ))}
@@ -630,9 +651,29 @@ export function OperationCreationDrawer({
                     ? "A OS permanecerá vinculada a esta execução do PMOC. Selecione o técnico que receberá o atendimento no Operator."
                     : "PMOC continua sendo atribuído pelo plano oficial. Os demais atendimentos usarão o documento selecionado."}
                 </p>
-                <UserSelect value={operatorId} onChange={setOperatorId} />
-                <AuxiliaryOperatorSelect value={auxiliaryOperatorIds} onChange={setAuxiliaryOperatorIds} excludeId={operatorId || undefined} />
+                {intent === "edit" ? (
+                  <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-muted)]/30 p-3">
+                    <ReadonlyField label="Responsável pelo atendimento" value={responsibleLabel || "Definido na atribuição atual"} />
+                    <p className="mt-2 text-caption">Para trocar o responsável ou os auxiliares, utilize a seção de atribuição nos detalhes da operação.</p>
+                  </div>
+                ) : (
+                  <>
+                    <UserSelect value={operatorId} onChange={setOperatorId} />
+                    <AuxiliaryOperatorSelect value={auxiliaryOperatorIds} onChange={setAuxiliaryOperatorIds} excludeId={operatorId || undefined} />
+                  </>
+                )}
                 <DateTimePicker date={date} time={time} onDate={setDate} onTime={setTime} />
+                {intent === "edit" && (
+                  <Field label="Status da operação">
+                    <select value={status} onChange={(event) => setStatus(event.target.value as CreateOperationPayload["status"])} className={inputCls}>
+                      <option value="DRAFT">Rascunho</option>
+                      <option value="PENDING">Pendente</option>
+                      <option value="IN_PROGRESS">Em andamento</option>
+                      <option value="REVIEW">Em revisão</option>
+                      <option value="COMPLETED">Concluída</option>
+                    </select>
+                  </Field>
+                )}
               </div>
             )}
             {step === 3 && (

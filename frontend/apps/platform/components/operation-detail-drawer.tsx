@@ -6,8 +6,9 @@
  * OperationView (Sections → Renderers) foundation. Document previews use the
  * production Document Engine viewer.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
+import { Ban, Copy, Pencil, RotateCcw, Trash2 } from "lucide-react";
 import { Drawer } from "@erp/ui/drawer";
 import { StatusChip } from "@erp/ui/status-chip";
 import { SkeletonList } from "@erp/ui/skeletons";
@@ -20,23 +21,29 @@ import { SignaturePad } from "@erp/ui/documents/signature-pad";
 import { CustomerSignaturePreview } from "@erp/ui/documents/customer-signature-preview";
 import { PhotoInput, type CapturedPhoto } from "@erp/ui/photo-input";
 import { Gate } from "@erp/ui/auth/gate";
-import { assignmentsApi, budgetsApi, documentsApi, inventoryApi, operationApi, signaturesApi, useQuery, type Assignment, type Budget, type DocumentHandoff, type InventoryItem, type OperationDetail, type OperationDocument, type OperationPart, type Product } from "@erp/api";
+import { ConfirmDialog } from "@erp/ui/confirm-dialog";
+import { assignmentsApi, budgetsApi, documentsApi, inventoryApi, operationApi, signaturesApi, useQuery, type Assignment, type Budget, type CreateOperationPayload, type DocumentHandoff, type InventoryItem, type OperationDetail, type OperationDocument, type OperationPart, type Product } from "@erp/api";
 import type { DocumentConfiguration, SignatureMode } from "@erp/types";
 import { formatCurrencyBRL, formatDateTime, formatNumber } from "@erp/utils";
 import { ASSIGNMENT_STATUS_LABEL, assignmentTime } from "@erp/ui/assignments/assignment-shared";
 import { AuxiliaryOperatorSelect, UserSelect } from "./entity-select";
 import { BudgetWizardDrawer } from "./budget-wizard-drawer";
+import { OperationCreationDrawer } from "./operation-creation-drawer";
 
 export function OperationDetailDrawer({
   operationId,
   open,
   onClose,
   assignmentActionLabel = "Reatribuir",
+  onDeleted,
+  onCopied,
 }: {
   operationId: string | null;
   open: boolean;
   onClose: () => void;
   assignmentActionLabel?: string;
+  onDeleted?: () => void;
+  onCopied?: (operation: OperationDetail) => void;
 }) {
   const detail = useQuery<OperationDetail | null>(
     (signal) => (operationId ? operationApi.getOperation(operationId, { signal }) : Promise.resolve(null)),
@@ -48,8 +55,21 @@ export function OperationDetailDrawer({
   );
   const [photoSources, setPhotoSources] = useState<Record<string, string>>({});
   const [previewDoc, setPreviewDoc] = useState<OperationDocument | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [copyOpen, setCopyOpen] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const op = detail.data;
+  const editInitialValues = useMemo(
+    () => (op ? operationInitialValues(op, false) : undefined),
+    [op],
+  );
+  const copyInitialValues = useMemo(
+    () => (op ? operationInitialValues(op, true) : undefined),
+    [op],
+  );
   const activeCancellation = op?.cancellations?.find((item) => item.status === "REQUESTED") ?? null;
   const isPmoc = Boolean(op?.maintenanceExecution?.plan.pmocPlan);
   const pmocConfiguration = useQuery<DocumentConfiguration | null>(
@@ -88,7 +108,46 @@ export function OperationDetailDrawer({
           <div className="flex flex-wrap items-center gap-2">
             <StatusChip tone="primary">{OPERATION_TYPE_LABEL[op.type]}</StatusChip>
             <StatusChip tone={activeCancellation ? "danger" : OPERATION_STATUS[op.status].tone} dot>{activeCancellation ? "Cancelado pelo operador" : OPERATION_STATUS[op.status].label}</StatusChip>
+            <Gate roles={["OWNER", "MANAGER"]}>
+              <span className="ml-auto flex flex-wrap items-center gap-2">
+                {op.status !== "COMPLETED" ? (
+                  <>
+                    {op.status === "CANCELED" ? (
+                      <button type="button" onClick={async () => {
+                        try {
+                          setActionError(null);
+                          await operationApi.reactivateOperation(op.id);
+                          await Promise.all([detail.refetch(), assignmentQuery.refetch()]);
+                        } catch (cause) {
+                          setActionError(cause instanceof Error ? cause.message : "Não foi possível reativar a operação.");
+                        }
+                      }} className="btn-secondary h-8 px-2.5 text-xs">
+                        <RotateCcw className="h-3.5 w-3.5" /> Reativar
+                      </button>
+                    ) : (
+                      <>
+                        <button type="button" onClick={() => { setActionError(null); setEditOpen(true); }} className="btn-secondary h-8 px-2.5 text-xs">
+                          <Pencil className="h-3.5 w-3.5" /> Editar
+                        </button>
+                        <button type="button" onClick={() => { setActionError(null); setConfirmCancel(true); }} className="btn-secondary h-8 px-2.5 text-xs">
+                          <Ban className="h-3.5 w-3.5" /> Cancelar
+                        </button>
+                      </>
+                    )}
+                    <button type="button" onClick={() => { setActionError(null); setConfirmDelete(true); }} className="btn-secondary h-8 px-2.5 text-xs text-[var(--color-danger)]">
+                      <Trash2 className="h-3.5 w-3.5" /> Excluir
+                    </button>
+                  </>
+                ) : (
+                  <button type="button" onClick={() => { setActionError(null); setCopyOpen(true); }} className="btn-secondary h-8 px-2.5 text-xs">
+                    <Copy className="h-3.5 w-3.5" /> Copiar operação
+                  </button>
+                )}
+              </span>
+            </Gate>
           </div>
+
+          {actionError && <p className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{actionError}</p>}
 
           {activeCancellation ? (
             <CancellationReviewSection operation={op} photoSources={photoSources} onRefresh={() => { detail.refetch(); assignmentQuery.refetch(); }} onOpenDocument={setPreviewDoc} />
@@ -99,6 +158,7 @@ export function OperationDetailDrawer({
           <AssignmentSection
             assignment={assignmentQuery.data?.items.find((item) => item.isPrimary) ?? null}
             auxiliaryAssignments={op.auxiliaryAssignments ?? []}
+            operationStatus={op.status}
             loading={assignmentQuery.loading}
             actionLabel={assignmentActionLabel}
             onRefresh={() => { assignmentQuery.refetch(); detail.refetch(); }}
@@ -138,8 +198,128 @@ export function OperationDetailDrawer({
           />
         )}
       </Drawer>
+
+      {op && editInitialValues && (
+        <OperationCreationDrawer
+          open={editOpen}
+          intent="edit"
+          mode="operation"
+          initialValues={editInitialValues}
+          responsibleLabel={op.operator?.name ?? "Não informado"}
+          submitOperation={(payload) => operationApi.updateOperation(op.id, editableOperationPayload(payload))}
+          onClose={() => setEditOpen(false)}
+          onCreated={() => detail.refetch()}
+        />
+      )}
+
+      {op && copyInitialValues && (
+        <OperationCreationDrawer
+          open={copyOpen}
+          intent="copy"
+          mode="operation"
+          initialValues={copyInitialValues}
+          onClose={() => setCopyOpen(false)}
+          onCreated={(operation) => onCopied?.(operation)}
+        />
+      )}
+
+      <ConfirmDialog
+        open={confirmCancel}
+        title="Cancelar esta operação?"
+        description="A operação será cancelada e deixará imediatamente a fila do técnico. Depois, você poderá reativá-la como rascunho e fazer uma nova atribuição."
+        confirmLabel="Cancelar operação"
+        danger
+        onClose={() => setConfirmCancel(false)}
+        onConfirm={async () => {
+          if (!op) return;
+          try {
+            setActionError(null);
+            await operationApi.cancelOperation(op.id);
+            await Promise.all([detail.refetch(), assignmentQuery.refetch()]);
+            onDeleted?.();
+          } catch (cause) {
+            setActionError(cause instanceof Error ? cause.message : "Não foi possível cancelar a operação.");
+            throw cause;
+          }
+        }}
+      />
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Excluir esta operação?"
+        description="A operação e suas atribuições serão removidas definitivamente. Operações concluídas ou com vínculos históricos, documentais ou comerciais não podem ser excluídas."
+        confirmLabel="Excluir operação"
+        danger
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={async () => {
+          if (!op) return;
+          try {
+            setActionError(null);
+            await operationApi.deleteOperation(op.id);
+            onDeleted?.();
+            onClose();
+          } catch (cause) {
+            setActionError(cause instanceof Error ? cause.message : "Não foi possível excluir a operação.");
+            throw cause;
+          }
+        }}
+      />
     </Drawer>
   );
+}
+
+function operationInitialValues(
+  operation: OperationDetail,
+  copy: boolean,
+): Partial<CreateOperationPayload> {
+  return {
+    customerId: operation.customer?.id ?? "",
+    addressId: operation.address?.id ?? null,
+    equipmentId: operation.equipment?.id ?? null,
+    inspectedEquipments: operation.inspectedEquipments.map((item) => ({
+      equipmentId: item.equipmentId,
+      sector: item.sector,
+      systemType: item.systemTypeSnapshot ?? null,
+      currentSituation: item.currentSituationSnapshot ?? null,
+      manufacturer: item.brandSnapshot ?? item.equipment?.manufacturer ?? null,
+      model: item.modelSnapshot ?? item.equipment?.model ?? null,
+      capacity: item.capacitySnapshot ?? item.equipment?.capacity ?? null,
+    })),
+    operatorId: operation.operator?.id ?? null,
+    auxiliaryOperatorIds: (operation.auxiliaryAssignments ?? [])
+      .filter((item) => item.status !== "CANCELED" && item.status !== "REJECTED")
+      .map((item) => item.assignedTo),
+    type: operation.type,
+    serviceTypes: operation.serviceTypes,
+    documentType: operation.requestedDocumentType,
+    status: copy ? "DRAFT" : operation.status,
+    scheduledFor: operation.scheduledFor,
+    checklist: operation.checklist,
+    observations: operation.observations,
+    reportedIssue: operation.reportedIssue,
+    serviceDescription: operation.serviceDescription,
+    serviceValue: operation.serviceValue == null ? undefined : Number(operation.serviceValue),
+  };
+}
+
+function editableOperationPayload(
+  payload: CreateOperationPayload,
+): Parameters<typeof operationApi.updateOperation>[1] {
+  return {
+    customerId: payload.customerId,
+    addressId: payload.addressId,
+    equipmentId: payload.equipmentId,
+    type: payload.type,
+    serviceTypes: payload.serviceTypes,
+    status: payload.status,
+    scheduledFor: payload.scheduledFor,
+    checklist: payload.checklist,
+    observations: payload.observations,
+    reportedIssue: payload.reportedIssue,
+    serviceDescription: payload.serviceDescription,
+    serviceValue: payload.serviceValue ?? null,
+    inspectedEquipments: payload.inspectedEquipments,
+  };
 }
 
 function CancellationReviewSection({ operation, photoSources, onRefresh, onOpenDocument }: { operation: OperationDetail; photoSources: Record<string, string>; onRefresh: () => void; onOpenDocument: (document: OperationDocument) => void }) {
@@ -571,12 +751,14 @@ function WorkOrderSignatureSection({ operation, onSaved }: { operation: Operatio
 function AssignmentSection({
   assignment,
   auxiliaryAssignments,
+  operationStatus,
   loading,
   actionLabel,
   onRefresh,
 }: {
   assignment: Assignment | null;
   auxiliaryAssignments: NonNullable<OperationDetail["auxiliaryAssignments"]>;
+  operationStatus: OperationDetail["status"];
   loading: boolean;
   actionLabel: string;
   onRefresh: () => void;
@@ -640,7 +822,11 @@ function AssignmentSection({
             </div>
             <AssignmentHistory operationId={assignment.operationId} />
             <Gate roles={["OWNER", "MANAGER"]}>
-              <div className="space-y-2 rounded-[var(--radius-md)] border border-[var(--color-border)] p-3">
+              {operationStatus === "CANCELED" ? (
+                <p className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-muted)]/30 p-3 text-sm text-[var(--color-muted-foreground)]">
+                  Reative a operação para definir uma nova atribuição.
+                </p>
+              ) : <div className="space-y-2 rounded-[var(--radius-md)] border border-[var(--color-border)] p-3">
                 <UserSelect value={operatorId} onChange={setOperatorId} />
                 <AuxiliaryOperatorSelect value={auxiliaryOperatorIds} onChange={setAuxiliaryOperatorIds} excludeId={operatorId || undefined} />
                 {error && <p className="text-xs text-[var(--color-danger)]">{error}</p>}
@@ -648,7 +834,7 @@ function AssignmentSection({
                 <button onClick={reassign} disabled={saving || !operatorId} className="rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] px-3 h-9 text-sm font-medium disabled:opacity-50">
                   {saving ? "Salvando atribuição…" : actionLabel}
                 </button>
-              </div>
+              </div>}
             </Gate>
           </div>
         )}

@@ -285,6 +285,17 @@ export class CreateOperationDto {
 }
 
 export class UpdateOperationDto {
+  @IsOptional() @IsUUID('4') customerId?: string;
+  @IsOptional() @IsUUID('4') addressId?: string | null;
+  @IsOptional() @IsUUID('4') equipmentId?: string | null;
+  @IsOptional() @IsEnum(OperationType) type?: OperationType;
+  @IsOptional() @IsDateString() scheduledFor?: string | null;
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(999_999_999.99)
+  serviceValue?: number | null;
   @IsOptional()
   @IsArray()
   @ArrayUnique()

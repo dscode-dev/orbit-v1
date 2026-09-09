@@ -8,7 +8,7 @@
 import { Suspense, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
-import { CalendarClock, Check, ClipboardList, Loader2, Plus, ReceiptText, ShieldCheck, Users } from "lucide-react";
+import { Ban, CalendarClock, Check, ClipboardList, Loader2, Plus, ReceiptText, RotateCcw, ShieldCheck, Trash2, Users } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { DataTable, type Column } from "@platform/components/data-table";
 import { Pagination } from "@platform/components/pagination";
@@ -21,6 +21,7 @@ import { ErrorState } from "@erp/ui/states";
 import { OperationDetailDrawer } from "@platform/components/operation-detail-drawer";
 import { OperationCreationDrawer } from "@platform/components/operation-creation-drawer";
 import { Gate } from "@erp/ui/auth/gate";
+import { ConfirmDialog } from "@erp/ui/confirm-dialog";
 import { useAuth } from "@erp/ui/auth/auth-provider";
 import { OPERATION_STATUS, OPERATION_TYPE_LABEL, operationCode } from "@erp/ui/operations/operation-shared";
 import { assignmentsApi, operationApi, useQuery, type OperationSummary, type OperationStatus, type PendingDemandGroup } from "@erp/api";
@@ -51,7 +52,7 @@ function OperacoesInner() {
 
   const { hasRole } = useAuth();
   const canAuthorize = hasRole("OWNER", "MANAGER");
-  const canGenerateReceipt = hasRole("OWNER", "MANAGER");
+  const canManage = hasRole("OWNER", "MANAGER");
   const [tab, setTab] = useState<OpsTab>("overview");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"all" | OperationStatus>(initialStatus);
@@ -61,6 +62,8 @@ function OperacoesInner() {
   const [detailId, setDetailId] = useState<string | null>(params.get("operationId"));
   const [receiptOperationId, setReceiptOperationId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [tableAction, setTableAction] = useState<{ kind: "cancel" | "delete"; operation: OperationSummary } | null>(null);
+  const [tableActionError, setTableActionError] = useState<string | null>(null);
   const debounced = useDebounce(search, 300);
 
   const list = useQuery(
@@ -96,31 +99,48 @@ function OperacoesInner() {
         const tone = cancellation?.status === "REQUESTED" || cancellation?.status === "APPROVED" ? "danger" : cancellation?.status === "RESCHEDULED" ? "info" : OPERATION_STATUS[o.status].tone;
         return <StatusChip tone={tone} dot className="whitespace-nowrap" >{label}</StatusChip>;
       } },
-      ...(canGenerateReceipt
+      ...(canManage
         ? [{
-            key: "receipt",
+            key: "actions",
             header: "Ações",
-            className: "w-[145px]",
+            className: "w-[170px]",
             link: false,
-            cell: (operation: OperationSummary) =>
-              operation.status === "COMPLETED" && operation.requestedDocumentType === "WORK_ORDER" ? (
-                <button
-                  type="button"
-                  title="Gerar Recibo a partir desta Ordem de Serviço"
-                  aria-label={`Gerar Recibo da ${operationCode(operation.number)}`}
-                  onClick={(event) => {
+            cell: (operation: OperationSummary) => (
+              <div className="flex items-center gap-1">
+                {operation.status === "COMPLETED" && operation.requestedDocumentType === "WORK_ORDER" && (
+                  <button type="button" title="Gerar Recibo" aria-label={`Gerar Recibo da ${operationCode(operation.number)}`} onClick={(event) => { event.stopPropagation(); setReceiptOperationId(operation.id); }} className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-[var(--radius-md)] border border-[var(--color-border)] px-2 text-xs font-medium text-[var(--color-primary)] transition hover:border-[var(--color-primary)] hover:bg-[var(--color-primary)]/5">
+                    <ReceiptText className="h-3.5 w-3.5" /> Recibo
+                  </button>
+                )}
+                {operation.status === "CANCELED" ? (
+                  <button type="button" title="Reativar operação" aria-label={`Reativar ${operationCode(operation.number)}`} onClick={async (event) => {
                     event.stopPropagation();
-                    setReceiptOperationId(operation.id);
-                  }}
-                  className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-[var(--radius-md)] border border-[var(--color-border)] px-2.5 text-xs font-medium text-[var(--color-primary)] transition hover:border-[var(--color-primary)] hover:bg-[var(--color-primary)]/5"
-                >
-                  <ReceiptText className="h-3.5 w-3.5" /> Gerar Recibo
-                </button>
-              ) : null,
+                    try {
+                      setTableActionError(null);
+                      await operationApi.reactivateOperation(operation.id);
+                      list.refetch();
+                    } catch (cause) {
+                      setTableActionError(cause instanceof Error ? cause.message : "Não foi possível reativar a operação.");
+                    }
+                  }} className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border)] hover:bg-[var(--color-muted)]">
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  </button>
+                ) : operation.status !== "COMPLETED" ? (
+                  <button type="button" title="Cancelar operação" aria-label={`Cancelar ${operationCode(operation.number)}`} onClick={(event) => { event.stopPropagation(); setTableAction({ kind: "cancel", operation }); }} className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border)] hover:bg-[var(--color-muted)]">
+                    <Ban className="h-3.5 w-3.5" />
+                  </button>
+                ) : null}
+                {operation.status !== "COMPLETED" && (
+                  <button type="button" title="Excluir operação" aria-label={`Excluir ${operationCode(operation.number)}`} onClick={(event) => { event.stopPropagation(); setTableAction({ kind: "delete", operation }); }} className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            ),
           } satisfies Column<OperationSummary>]
         : []),
     ],
-    [canGenerateReceipt],
+    [canManage, list],
   );
 
   return (
@@ -185,6 +205,7 @@ function OperacoesInner() {
           <FilterChip key={f.key} active={status === f.key} onClick={() => { setStatus(f.key); setPage(1); }}>{f.label}</FilterChip>
         ))}
       </FilterBar>
+      {tableActionError && <p className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{tableActionError}</p>}
 
       {list.loading && !list.data ? (
         <SkeletonList rows={6} />
@@ -211,7 +232,13 @@ function OperacoesInner() {
       ) : null}
       </>}
 
-      <OperationDetailDrawer operationId={detailId} open={detailId !== null} onClose={() => { setDetailId(null); list.refetch(); }} />
+      <OperationDetailDrawer
+        operationId={detailId}
+        open={detailId !== null}
+        onClose={() => { setDetailId(null); list.refetch(); }}
+        onDeleted={() => list.refetch()}
+        onCopied={(operation) => { setDetailId(operation.id); list.refetch(); }}
+      />
       <OperationCreationDrawer open={createOpen} mode="operation" onClose={() => setCreateOpen(false)} onCreated={(op) => { setDetailId(op.id); list.refetch(); }} />
       {receiptOperationId && (
         <ReportWorkflowDrawer
@@ -221,6 +248,28 @@ function OperacoesInner() {
           onRendered={list.refetch}
         />
       )}
+      <ConfirmDialog
+        open={tableAction !== null}
+        title={tableAction?.kind === "cancel" ? "Cancelar esta operação?" : "Excluir esta operação?"}
+        description={tableAction?.kind === "cancel"
+          ? "A operação deixará a fila do técnico. Ela poderá ser reativada como rascunho e atribuída novamente."
+          : "A operação e suas atribuições serão removidas definitivamente. Esta ação não pode ser desfeita."}
+        confirmLabel={tableAction?.kind === "cancel" ? "Cancelar operação" : "Excluir operação"}
+        danger
+        onClose={() => setTableAction(null)}
+        onConfirm={async () => {
+          if (!tableAction) return;
+          try {
+            setTableActionError(null);
+            if (tableAction.kind === "cancel") await operationApi.cancelOperation(tableAction.operation.id);
+            else await operationApi.deleteOperation(tableAction.operation.id);
+            await list.refetch();
+          } catch (cause) {
+            setTableActionError(cause instanceof Error ? cause.message : "Não foi possível concluir a ação.");
+            throw cause;
+          }
+        }}
+      />
     </div>
   );
 }

@@ -1,5 +1,21 @@
 # API Contracts
 
+## Gestão de Operations
+
+- `PATCH /api/v1/operations/:id` — OWNER/MANAGER podem alterar cliente, endereço, equipamento,
+  tipo, serviços, agenda, conteúdo operacional, valor informativo e status. Operações
+  `COMPLETED` não aceitam alterações; `CANCELED` deve ser tratada pelas ações dedicadas.
+- `PATCH /api/v1/operations/:id/cancel` — OWNER/MANAGER; cancela a Operation e suas Assignments
+  ativas, retirando-a da fila do Operator.
+- `PATCH /api/v1/operations/:id/reactivate` — OWNER/MANAGER; aceita somente `CANCELED`, retorna
+  `DRAFT` e não restaura a atribuição anterior.
+- `DELETE /api/v1/operations/:id` — OWNER/MANAGER; remoção física da Operation e Assignments.
+  Retorna `{ "deleted": true }`. É bloqueada para concluídas e para registros com vínculos
+  históricos/documentais/operacionais/comerciais.
+
+Copiar não cria contrato paralelo: o frontend lê a Operation concluída e envia seus campos
+editáveis ao `POST /api/v1/operations`; número, histórico, documentos e Assignment são novos.
+
 ## Portal do Cliente
 
 Identidades e tokens deste contrato não são aceitos em `/auth/*` nem nas APIs internas.

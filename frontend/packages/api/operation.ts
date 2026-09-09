@@ -92,7 +92,13 @@ export function updateOperation(
   payload: Partial<
     Pick<
       CreateOperationPayload,
+      | 'customerId'
+      | 'addressId'
+      | 'equipmentId'
+      | 'type'
+      | 'serviceTypes'
       | 'status'
+      | 'scheduledFor'
       | 'auxiliaryOperatorIds'
       | 'startedAt'
       | 'completedAt'
@@ -130,9 +136,21 @@ export function updateOperation(
       | 'signedAt'
       | 'photos'
     >
-  >,
+  > & { serviceValue?: number | null },
 ): Promise<OperationDetail> {
   return api.patch<OperationDetail>(`/operations/${id}`, payload);
+}
+
+export function deleteOperation(id: string): Promise<{ deleted: true }> {
+  return api.delete<{ deleted: true }>(`/operations/${id}`);
+}
+
+export function cancelOperation(id: string): Promise<OperationDetail> {
+  return api.patch<OperationDetail>(`/operations/${id}/cancel`, {});
+}
+
+export function reactivateOperation(id: string): Promise<OperationDetail> {
+  return api.patch<OperationDetail>(`/operations/${id}/reactivate`, {});
 }
 
 export function addFieldEquipments(

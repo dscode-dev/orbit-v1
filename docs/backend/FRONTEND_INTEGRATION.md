@@ -2777,3 +2777,11 @@ administrativa por equipamento e não reutilize IDs locais do formulário.
   compartilhamento e download autenticados na tela padrão de sucesso.
 - Não derive o número da execução a partir de `document.number` ou `operation.number`: no documento
   final essa distinção é resolvida pelo backend (`RVT-*` no título e `001..N` na identificação).
+# Edição, cópia, cancelamento e exclusão de Operations
+
+- Use `PATCH /operations/:id` apenas enquanto o status não for `COMPLETED` ou `CANCELED`.
+- Para uma concluída, ofereça “Copiar operação” e crie pelo `POST /operations` sem IDs de
+  documentos ou históricos.
+- Cancelar e excluir exigem confirmação visual. Cancelar é reversível por `/reactivate`; excluir
+  é definitivo e pode retornar `409` quando houver vínculos protegidos.
+- Após reativar, apresente a atribuição como cancelada e solicite uma reatribuição explícita.

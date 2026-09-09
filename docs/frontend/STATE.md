@@ -1,5 +1,14 @@
 # STATE — Frontend
 
+## Gestão de operações — 2026-09-09
+
+- O drawer reutiliza o Wizard oficial para editar Operations não concluídas e para copiar uma
+  concluída como novo atendimento.
+- Cancelar, reativar e excluir estão disponíveis no drawer e na coluna Ações da tabela para
+  OWNER/MANAGER. Cancelamento e exclusão usam `ConfirmDialog`, nunca `alert`.
+- Canceladas podem ser reativadas como rascunho e exigem reatribuição explícita; concluídas não
+  exibem controles de edição, cancelamento ou exclusão.
+
 ## Operator — câmera e galeria nas evidências — 2026-09-01
 
 - O `PhotoInput` compartilhado agora apresenta ações explícitas para `Tirar foto` e

@@ -2371,3 +2371,14 @@ The catalog is scoped to the installation Organization in every query. Reads req
   continuam resolvidos exclusivamente pelo `DocumentAssetResolver`.
 - O número da execução é carregado pela relação Operation → RvtExecution dentro do DocumentContext;
   nenhum identificador é aceito do cliente para compor o documento.
+# Segurança na gestão de Operations — 2026-09-09
+
+- Edição administrativa, cancelamento, reativação e exclusão exigem OWNER ou MANAGER no backend.
+- `COMPLETED` permanece imutável e não pode ser cancelada ou excluída.
+- Relações cliente/endereço/equipamento são revalidadas e identidades definidas por PMOC/RVT não
+  podem ser trocadas pela edição genérica.
+- Cancelamento usa atualização condicional e transação com Assignment/history/audit; a Assignment
+  recebe `operatorVisible=false`, impedindo acesso posterior pelo técnico.
+- Exclusão usa verificação concorrente e transação, remove Assignments e é recusada diante de
+  vínculos operacionais, documentais ou comerciais. Objetos de evidência são removidos do Storage
+  após o commit, sem expor chaves na API.

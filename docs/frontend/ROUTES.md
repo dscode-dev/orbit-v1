@@ -1,5 +1,10 @@
 # ROUTES — Frontend
 
+## `/operacoes`
+
+A listagem e o drawer suportam edição de registros abertos, cópia de concluídos, cancelamento,
+reativação e exclusão. Nenhuma nova rota foi criada; todas as ações preservam filtros e paginação.
+
 ## Portal do Cliente
 
 - `/customer/login` — login exclusivo de cliente.

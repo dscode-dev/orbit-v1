@@ -159,6 +159,36 @@ export class OperationsController {
     return this.operations.update(id, body, actor, this.context(request));
   }
 
+  @Roles(Role.OWNER, Role.MANAGER)
+  @Patch(':id/cancel')
+  cancel(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Req() request: RequestWithId,
+  ): Promise<unknown> {
+    return this.operations.cancel(id, actor, this.context(request));
+  }
+
+  @Roles(Role.OWNER, Role.MANAGER)
+  @Patch(':id/reactivate')
+  reactivate(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Req() request: RequestWithId,
+  ): Promise<unknown> {
+    return this.operations.reactivate(id, actor, this.context(request));
+  }
+
+  @Roles(Role.OWNER, Role.MANAGER)
+  @Delete(':id')
+  remove(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Req() request: RequestWithId,
+  ): Promise<{ deleted: true }> {
+    return this.operations.remove(id, actor, this.context(request));
+  }
+
   private context(request: RequestWithId): OperationAuditContext {
     return {
       requestId: request.requestId,

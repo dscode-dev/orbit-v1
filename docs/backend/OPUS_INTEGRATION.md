@@ -2144,3 +2144,8 @@ responsabilidade técnica pelo nome, cargo ou assinatura padrão.
   compartilhamento, Documentos, novo atendimento e início.
 - O cabeçalho do RVT continua exibindo seu identificador documental; a seção de identificação exibe
   a sequência própria da execução. O frontend não deve substituir esses valores no Preview.
+# Operation management lifecycle
+
+Administrative cancellation is represented by `OperationStatus.CANCELED` and canceled,
+non-visible Assignments. Reactivation returns the aggregate to `DRAFT` without implicitly
+restoring field ownership. Physical deletion is restricted to non-completed, unlinked records.

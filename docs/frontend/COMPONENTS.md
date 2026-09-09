@@ -1,5 +1,14 @@
 # COMPONENTS — Frontend
 
+## Gestão da Operation
+
+- `OperationCreationDrawer`: modos `create`, `edit` e `copy`; em edição mantém o responsável sob
+  gestão do bloco oficial de Assignment.
+- `OperationDetailDrawer`: ações contextuais de editar/copiar/cancelar/reativar/excluir e duas
+  confirmações reutilizando `ConfirmDialog`.
+- `DataTable` de Operações: coluna de ações rápidas impede propagação do clique da linha e oferece
+  cancelamento, reativação e exclusão conforme o estado.
+
 ## Portal do Cliente
 
 - `CustomerAuthProvider` / `RequireCustomerAuth`: sessão externa e troca obrigatória.

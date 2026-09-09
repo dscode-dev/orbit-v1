@@ -1,5 +1,20 @@
 # Backend State
 
+## Gestão do ciclo da Operation — 2026-09-09
+
+- OWNER/MANAGER podem editar Operations enquanto não concluídas; alterações administrativas
+  validam cliente, endereço, equipamento e vínculos com PMOC/RVT.
+- Operations concluídas são imutáveis. O frontend cria uma nova Operation por cópia usando o
+  contrato oficial de criação, sem compartilhar histórico, documentos ou atribuições.
+- Cancelamento gerencial preserva a Operation, muda o status para `CANCELED`, cancela as
+  Assignments ativas e remove sua visibilidade no Operator. A reativação retorna a Operation para
+  `DRAFT` e exige reatribuição.
+- Exclusão é física e remove Assignments e históricos de atribuição. É proibida para Operations
+  concluídas ou vinculadas a planejamento, documentos renderizados, chamados, materiais,
+  estoque ou orçamentos.
+- Não há migration: o cancelamento utiliza estados existentes e a exclusão respeita as relações
+  oficiais do banco.
+
 ## Orçamento — descontos por categoria — 2026-08-31
 
 - Budget persiste descontos independentes para serviços e materiais, seus textos documentais e o

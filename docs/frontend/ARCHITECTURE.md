@@ -1,5 +1,12 @@
 # ARCHITECTURE — Frontend
 
+## Ciclo administrativo da Operation
+
+O mesmo `OperationCreationDrawer` atende criação, edição e cópia. A cópia passa pelo endpoint de
+criação e recebe identidade própria; cancelamento/reativação são comandos explícitos do backend.
+A UI apenas controla disponibilidade e confirmação das ações, enquanto imutabilidade, vínculos,
+RBAC, concorrência e transições permanecem sob autoridade do backend.
+
 ## Wizard documental compartilhado
 
 `ReportCenterPage` e `ReportWorkflowDrawer` residem no módulo compartilhado
