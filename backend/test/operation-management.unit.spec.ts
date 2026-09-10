@@ -226,9 +226,18 @@ describe('Operation management', () => {
     expect(cancelAudit.data.action).toBe('OPERATION_CANCELED');
   });
 
-  it('reactivates as pending without restoring a canceled assignment', async () => {
+  it('reactivates as pending and restores the primary assignment to the operator queue', async () => {
     const tx = {
       operation: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      assignment: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: '44444444-4444-4444-8444-444444444444',
+          assignedTo: '55555555-5555-4555-8555-555555555555',
+          status: 'CANCELED',
+        }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      assignmentHistory: { create: jest.fn().mockResolvedValue({}) },
       auditLog: { create: jest.fn().mockResolvedValue({}) },
       operationDocument: { findMany: jest.fn().mockResolvedValue([]) },
     };
@@ -242,7 +251,17 @@ describe('Operation management', () => {
         findUnique: jest
           .fn()
           .mockResolvedValueOnce(operation)
-          .mockResolvedValueOnce({ ...operation, status: OperationStatus.PENDING, signatureData: null, assignments: [] }),
+          .mockResolvedValueOnce({
+            ...operation,
+            status: OperationStatus.PENDING,
+            signatureData: null,
+            assignments: [{
+              id: '44444444-4444-4444-8444-444444444444',
+              status: 'ASSIGNED',
+              operatorVisible: true,
+              isPrimary: true,
+            }],
+          }),
       },
       $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<void>) => callback(tx)),
     };
@@ -253,11 +272,36 @@ describe('Operation management', () => {
       where: { id: operation.id, status: OperationStatus.CANCELED },
       data: { status: OperationStatus.PENDING, startedAt: null, completedAt: null },
     });
-    expect(tx).not.toHaveProperty('assignment');
+    const restoredAssignment = (tx.assignment.updateMany.mock.calls as unknown[][])[0]?.[0] as {
+      where: { id: string; status: string };
+      data: { status: string; operatorVisible: boolean; canceledAt: Date | null };
+    };
+    expect(restoredAssignment).toMatchObject({
+      where: {
+        id: '44444444-4444-4444-8444-444444444444',
+        status: 'CANCELED',
+      },
+      data: {
+        status: 'ASSIGNED',
+        operatorVisible: true,
+        canceledAt: null,
+      },
+    });
+    const restoredHistory = (tx.assignmentHistory.create.mock.calls as unknown[][])[0]?.[0] as {
+      data: { event: string; previousStatus: string; newStatus: string };
+    };
+    expect(restoredHistory).toMatchObject({
+      data: {
+        event: 'ASSIGNED',
+        previousStatus: 'CANCELED',
+        newStatus: 'ASSIGNED',
+      },
+    });
     const audit = (tx.auditLog.create.mock.calls as unknown[][])[0]?.[0] as {
-      data: { action: string; metadata: { requiresReassignment: boolean } };
+      data: { action: string; metadata: { assignmentRestored: boolean; assignedTo: string } };
     };
     expect(audit.data.action).toBe('OPERATION_REACTIVATED');
-    expect(audit.data.metadata.requiresReassignment).toBe(true);
+    expect(audit.data.metadata.assignmentRestored).toBe(true);
+    expect(audit.data.metadata.assignedTo).toBe('55555555-5555-4555-8555-555555555555');
   });
 });

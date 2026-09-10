@@ -2400,6 +2400,9 @@ The catalog is scoped to the installation Organization in every query. Reads req
   administrativa e impede que payloads completos legados bloqueiem a conclusão em campo.
 - Cancelamento usa atualização condicional e transação com Assignment/history/audit; a Assignment
   recebe `operatorVisible=false`, impedindo acesso posterior pelo técnico.
+- Reativação restaura a Assignment principal somente quando o usuário atribuído continua ativo e
+  não removido. Operation, Assignment, histórico e auditoria são atualizados na mesma transação;
+  a visibilidade volta a ser explícita sem criar uma segunda atribuição.
 - O contrato legado de exclusão mantém verificação concorrente e é recusado diante de vínculos
   operacionais, documentais ou comerciais; o fluxo de produto utiliza cancelamento preservando o
   histórico e sem expor chaves de Storage.

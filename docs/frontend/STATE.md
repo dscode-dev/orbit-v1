@@ -13,8 +13,9 @@
   concluída como novo atendimento.
 - Cancelar e reativar estão disponíveis no drawer e na coluna Ações da tabela para OWNER/MANAGER.
   O cancelamento usa `ConfirmDialog`, nunca `alert`; exclusão não é exposta pela Platform.
-- Canceladas podem ser reativadas como pendentes e exigem reatribuição explícita; concluídas não
-  exibem controles de edição ou cancelamento.
+- Canceladas podem ser reativadas como pendentes. A atribuição principal anterior volta para a
+  fila do técnico quando ele continua ativo; concluídas não exibem controles de edição ou
+  cancelamento.
 - Após cancelar ou reativar, drawer e listagem sincronizam imediatamente com a API oficial.
   Ações rápidas exibem texto além dos ícones.
 - A confirmação de cancelamento fecha imediatamente após a ação do usuário, inclusive quando a

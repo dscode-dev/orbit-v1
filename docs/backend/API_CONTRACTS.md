@@ -20,7 +20,8 @@
 - `PATCH /api/v1/operations/:id/cancel` — OWNER/MANAGER; cancela a Operation e suas Assignments
   ativas, retirando-a da fila do Operator.
 - `PATCH /api/v1/operations/:id/reactivate` — OWNER/MANAGER; aceita somente `CANCELED`, retorna
-  `PENDING` e não restaura a atribuição anterior.
+  `PENDING`. Quando existe Assignment principal cancelada para um usuário operacional ativo, a
+  mesma atribuição é restaurada como `ASSIGNED` e volta a ficar visível no Operator.
 - `DELETE /api/v1/operations/:id` — OWNER/MANAGER; remoção física da Operation e Assignments.
   Retorna `{ "deleted": true }`. É bloqueada para concluídas e para registros com vínculos
   históricos/documentais/operacionais/comerciais. O contrato é preservado para compatibilidade,
