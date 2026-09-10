@@ -25,6 +25,10 @@ import {
   Matches,
   ValidateNested,
 } from 'class-validator';
+import {
+  MAX_MAINTENANCE_REMINDER_INTERVAL_MONTHS,
+  MIN_MAINTENANCE_REMINDER_INTERVAL_MONTHS,
+} from '../../../shared/constants/maintenance-reminders.constants';
 
 const trim = (value: unknown): unknown => (typeof value === 'string' ? value.trim() : value);
 const trimStringArray = (value: unknown): unknown =>
@@ -206,6 +210,12 @@ export class CreateOperationDto {
   @Min(0)
   @Max(999_999_999.99)
   serviceValue?: number;
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(MIN_MAINTENANCE_REMINDER_INTERVAL_MONTHS)
+  @Max(MAX_MAINTENANCE_REMINDER_INTERVAL_MONTHS)
+  maintenanceReminderIntervalMonths?: number;
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(40) @Matches(/^[A-Za-z0-9._/-]+$/) receiptNumber?: string;
   @IsOptional() @IsDateString() receiptIssuedAt?: string;
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(999_999_999.99) receiptAmount?: number;
@@ -285,6 +295,23 @@ export class CreateOperationDto {
 }
 
 export class UpdateOperationDto {
+  @IsOptional() @IsUUID('4') customerId?: string;
+  @IsOptional() @IsUUID('4') addressId?: string | null;
+  @IsOptional() @IsUUID('4') equipmentId?: string | null;
+  @IsOptional() @IsEnum(OperationType) type?: OperationType;
+  @IsOptional() @IsDateString() scheduledFor?: string | null;
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(999_999_999.99)
+  serviceValue?: number | null;
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(MIN_MAINTENANCE_REMINDER_INTERVAL_MONTHS)
+  @Max(MAX_MAINTENANCE_REMINDER_INTERVAL_MONTHS)
+  maintenanceReminderIntervalMonths?: number | null;
   @IsOptional()
   @IsArray()
   @ArrayUnique()

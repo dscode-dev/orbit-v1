@@ -1,5 +1,20 @@
 # COMPONENTS — Frontend
 
+## Lembretes de manutenção
+
+- `OperationCreationDrawer`: seletor contextual do intervalo para Preventiva/Instalação.
+- `ReminderPeriodDrawer`: editor reutilizando `Drawer`, com período atual, data-base, nova data
+  calculada e uma única ação de confirmação.
+
+## Gestão da Operation
+
+- `OperationCreationDrawer`: modos `create`, `edit` e `copy`; em edição mantém o responsável sob
+  gestão do bloco oficial de Assignment.
+- `OperationDetailDrawer`: ações contextuais de editar/copiar/cancelar/reativar; o cancelamento
+  reutiliza `ConfirmDialog` e a exclusão física não é apresentada ao usuário.
+- `DataTable` de Operações: coluna de ações rápidas impede propagação do clique da linha e oferece
+  cancelamento ou reativação conforme o estado.
+
 ## Portal do Cliente
 
 - `CustomerAuthProvider` / `RequireCustomerAuth`: sessão externa e troca obrigatória.

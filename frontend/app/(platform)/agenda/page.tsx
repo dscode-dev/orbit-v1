@@ -296,7 +296,6 @@ const STATUS_FILTERS: ReadonlyArray<readonly [MaintenanceReminderStatus, string]
   ["DONE", "Concluídos"],
   ["DISMISSED", "Dispensados"],
 ];
-const smallBtn = "inline-flex h-8 items-center gap-1.5 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 text-xs font-medium text-[var(--color-primary-foreground)] disabled:opacity-50";
 const smallGhost = "inline-flex h-8 items-center gap-1.5 rounded-[var(--radius-md)] border border-[var(--color-border)] px-2.5 text-xs font-medium hover:bg-[var(--color-muted)] disabled:opacity-50";
 
 function reminderChip(active: boolean): string {
@@ -308,8 +307,19 @@ function formatDate(iso: string): string {
   return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("pt-BR");
 }
 
+function reminderDateForInterval(baseDate: string, months: number): Date {
+  const next = new Date(baseDate);
+  const originalDay = next.getUTCDate();
+  next.setUTCDate(1);
+  next.setUTCMonth(next.getUTCMonth() + months);
+  const lastDay = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
+  next.setUTCDate(Math.min(originalDay, lastDay));
+  return next;
+}
+
 const REM_PAGE_SIZE = 10;
 const NEAR_DAYS = 5;
+const REMINDER_INTERVAL_OPTIONS = [1, 2, 3, 4, 6, 12, 18, 24] as const;
 
 function daysUntil(iso: string): number {
   return Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000);
@@ -330,6 +340,7 @@ function RemindersTab() {
   const [pagePmoc, setPagePmoc] = useState(1);
   const [confirming, setConfirming] = useState<{ reminder: MaintenanceReminder; action: "DONE" | "DISMISSED" } | null>(null);
   const [createOsFor, setCreateOsFor] = useState<MaintenanceReminder | null>(null);
+  const [editingPeriod, setEditingPeriod] = useState<MaintenanceReminder | null>(null);
 
   const stats = useQuery((s) => maintenanceRemindersApi.getReminderStats({ signal: s }), [tick]);
   const reminders = useQuery(
@@ -361,6 +372,7 @@ function RemindersTab() {
     onConclude: (r: MaintenanceReminder) => setConfirming({ reminder: r, action: "DONE" as const }),
     onDismiss: (r: MaintenanceReminder) => setConfirming({ reminder: r, action: "DISMISSED" as const }),
     onCreateOs: setCreateOsFor,
+    onEditPeriod: setEditingPeriod,
     onPatch: patch,
   };
 
@@ -413,11 +425,17 @@ function RemindersTab() {
         onClose={() => setCreateOsFor(null)}
         onCreated={() => { setCreateOsFor(null); bump(); }}
       />
+
+      <ReminderPeriodDrawer
+        reminder={editingPeriod}
+        onClose={() => setEditingPeriod(null)}
+        onSaved={() => { setEditingPeriod(null); bump(); }}
+      />
     </div>
   );
 }
 
-function ReminderSection({ title, icon: Icon, loading, items, page, onPage, emptyLabel, onConclude, onDismiss, onCreateOs, onPatch }: {
+function ReminderSection({ title, icon: Icon, loading, items, page, onPage, emptyLabel, onConclude, onDismiss, onCreateOs, onEditPeriod, onPatch }: {
   title: string;
   icon: typeof Wrench;
   loading: boolean;
@@ -428,6 +446,7 @@ function ReminderSection({ title, icon: Icon, loading, items, page, onPage, empt
   onConclude: (reminder: MaintenanceReminder) => void;
   onDismiss: (reminder: MaintenanceReminder) => void;
   onCreateOs: (reminder: MaintenanceReminder) => void;
+  onEditPeriod: (reminder: MaintenanceReminder) => void;
   onPatch: (id: string, payload: { dueDate?: string; status?: MaintenanceReminderStatus }) => Promise<void>;
 }) {
   const totalPages = Math.max(1, Math.ceil(items.length / REM_PAGE_SIZE));
@@ -442,7 +461,7 @@ function ReminderSection({ title, icon: Icon, loading, items, page, onPage, empt
         <p className="rounded-[var(--radius-md)] bg-[var(--color-muted)]/40 px-3 py-6 text-center text-caption">{emptyLabel}</p>
       ) : (
         <>
-          <ul className="space-y-2">{slice.map((r) => <ReminderRow key={r.id} reminder={r} highlighted={isNearReminder(r)} onConclude={onConclude} onDismiss={onDismiss} onCreateOs={onCreateOs} onPatch={onPatch} />)}</ul>
+          <ul className="space-y-2">{slice.map((r) => <ReminderRow key={r.id} reminder={r} highlighted={isNearReminder(r)} onConclude={onConclude} onDismiss={onDismiss} onCreateOs={onCreateOs} onEditPeriod={onEditPeriod} onPatch={onPatch} />)}</ul>
           <Pager page={current} totalPages={totalPages} onPage={onPage} />
         </>
       )}
@@ -513,18 +532,17 @@ function ReminderKpi({ icon: Icon, label, value, tone }: { icon: typeof AlarmClo
   );
 }
 
-function ReminderRow({ reminder, highlighted, onConclude, onDismiss, onCreateOs, onPatch }: {
+function ReminderRow({ reminder, highlighted, onConclude, onDismiss, onCreateOs, onEditPeriod, onPatch }: {
   reminder: MaintenanceReminder;
   highlighted: boolean;
   onConclude: (reminder: MaintenanceReminder) => void;
   onDismiss: (reminder: MaintenanceReminder) => void;
   onCreateOs: (reminder: MaintenanceReminder) => void;
+  onEditPeriod: (reminder: MaintenanceReminder) => void;
   onPatch: (id: string, payload: { dueDate?: string; status?: MaintenanceReminderStatus }) => Promise<void>;
 }) {
-  const [date, setDate] = useState(reminder.dueDate.slice(0, 10));
   const [busy, setBusy] = useState(false);
   const overdue = reminder.status === "PENDING" && new Date(reminder.dueDate) < new Date();
-  const changed = date !== reminder.dueDate.slice(0, 10);
 
   async function run(fn: () => Promise<void>) {
     setBusy(true);
@@ -543,7 +561,11 @@ function ReminderRow({ reminder, highlighted, onConclude, onDismiss, onCreateOs,
             {reminder.status === "DONE" && <StatusChip tone="success">Concluído</StatusChip>}
             {reminder.status === "DISMISSED" && <StatusChip tone="neutral">Dispensado</StatusChip>}
           </div>
-          <div className="text-caption truncate">{reminder.equipment?.name ?? "Sem equipamento"}{reminder.operation ? ` · OS-${String(reminder.operation.number).padStart(6, "0")}` : ""}</div>
+          <div className="text-caption truncate">
+            {reminder.equipment?.name ?? "Sem equipamento"}
+            {reminder.operation ? ` · OS-${String(reminder.operation.number).padStart(6, "0")}` : ""}
+            {` · a cada ${reminder.intervalMonths} ${reminder.intervalMonths === 1 ? "mês" : "meses"}`}
+          </div>
         </div>
         <div className={`shrink-0 text-right ${overdue ? "text-[var(--color-danger)]" : highlighted ? "text-[var(--color-warning)]" : ""}`}>
           <div className="text-[11px] uppercase tracking-wide text-[var(--color-muted-foreground)]">Próxima prevista</div>
@@ -552,8 +574,7 @@ function ReminderRow({ reminder, highlighted, onConclude, onDismiss, onCreateOs,
       </div>
       {reminder.status === "PENDING" ? (
         <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[var(--color-border)] pt-3">
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-8 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-2 text-sm outline-none focus:border-[var(--color-primary)]" />
-          <button type="button" disabled={!changed || busy} onClick={() => run(() => onPatch(reminder.id, { dueDate: new Date(`${date}T12:00:00`).toISOString() }))} className={smallBtn}>Salvar data</button>
+          <button type="button" disabled={busy} onClick={() => onEditPeriod(reminder)} className={smallGhost}><CalendarClock className="h-3.5 w-3.5" /> Alterar período</button>
           <button type="button" disabled={busy} onClick={() => onCreateOs(reminder)} className={smallGhost}><Plus className="h-3.5 w-3.5" /> Criar OS</button>
           {reminder.operationId && <Link href={`/operacoes?operationId=${reminder.operationId}`} className={smallGhost}>Abrir OS de origem</Link>}
           <span className="ml-auto flex gap-1.5">
@@ -562,10 +583,93 @@ function ReminderRow({ reminder, highlighted, onConclude, onDismiss, onCreateOs,
           </span>
         </div>
       ) : (
-        <div className="mt-2 flex justify-end border-t border-[var(--color-border)] pt-2">
+        <div className="mt-2 flex justify-end gap-2 border-t border-[var(--color-border)] pt-2">
+          <button type="button" disabled={busy} onClick={() => onEditPeriod(reminder)} className={smallGhost}><CalendarClock className="h-3.5 w-3.5" /> Alterar período</button>
           <button type="button" disabled={busy} onClick={() => run(() => onPatch(reminder.id, { status: "PENDING" }))} className={smallGhost}>Reabrir</button>
         </div>
       )}
     </li>
+  );
+}
+
+function ReminderPeriodDrawer({ reminder, onClose, onSaved }: {
+  reminder: MaintenanceReminder | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [intervalMonths, setIntervalMonths] = useState(6);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const calculatedDate = useMemo(
+    () => reminder ? reminderDateForInterval(reminder.baseDate, intervalMonths) : null,
+    [intervalMonths, reminder],
+  );
+
+  useEffect(() => {
+    if (!reminder) return;
+    setIntervalMonths(reminder.intervalMonths || 6);
+    setError(null);
+  }, [reminder]);
+
+  async function save() {
+    if (!reminder) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await maintenanceRemindersApi.updateReminder(reminder.id, { intervalMonths });
+      onSaved();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível alterar o período do lembrete.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Drawer
+      open={reminder !== null}
+      onClose={onClose}
+      eyebrow="Agenda"
+      title="Alterar período do lembrete"
+      footer={
+        <>
+          <button type="button" onClick={onClose} disabled={saving} className="btn-secondary">Cancelar</button>
+          <button type="button" onClick={() => void save()} disabled={saving} className="btn-primary">
+            {saving ? "Salvando…" : "Salvar período"}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-muted)]/30 p-4">
+          <p className="text-sm font-medium">{reminder?.customer?.tradeName ?? reminder?.customer?.name ?? "Cliente"}</p>
+          <p className="mt-1 text-caption">
+            {TYPE_LABEL[reminder?.operationType ?? ""] ?? reminder?.operationType} · data-base {reminder ? formatDate(reminder.baseDate) : "—"}
+          </p>
+        </div>
+        <label className="block space-y-1.5">
+          <span className="text-sm font-medium">Lembrar após</span>
+          <select
+            value={intervalMonths}
+            onChange={(event) => setIntervalMonths(Number(event.target.value))}
+            className="input w-full"
+          >
+            {REMINDER_INTERVAL_OPTIONS.map((months) => (
+              <option key={months} value={months}>{months === 1 ? "1 mês" : `${months} meses`}</option>
+            ))}
+          </select>
+        </label>
+        <p className="text-caption">
+          A data é calculada automaticamente a partir da data-base da operação e será confirmada junto com o período.
+        </p>
+        <div className="rounded-[var(--radius-lg)] border border-[var(--color-primary)]/20 bg-[var(--color-primary)]/5 p-4">
+          <p className="text-caption">Nova data prevista</p>
+          <p className="mt-1 text-lg font-semibold tabular-nums">
+            {calculatedDate ? calculatedDate.toLocaleDateString("pt-BR", { timeZone: "UTC" }) : "—"}
+          </p>
+        </div>
+        {error && <p role="alert" className="rounded-[var(--radius-md)] bg-[var(--color-danger)]/10 p-3 text-sm text-[var(--color-danger)]">{error}</p>}
+      </div>
+    </Drawer>
   );
 }

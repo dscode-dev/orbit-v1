@@ -8,7 +8,7 @@
 import { Suspense, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
-import { CalendarClock, Check, ClipboardList, Loader2, Plus, ReceiptText, ShieldCheck, Users } from "lucide-react";
+import { Ban, CalendarClock, Check, ClipboardList, Loader2, Plus, ReceiptText, RotateCcw, ShieldCheck, Users } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { DataTable, type Column } from "@platform/components/data-table";
 import { Pagination } from "@platform/components/pagination";
@@ -21,6 +21,7 @@ import { ErrorState } from "@erp/ui/states";
 import { OperationDetailDrawer } from "@platform/components/operation-detail-drawer";
 import { OperationCreationDrawer } from "@platform/components/operation-creation-drawer";
 import { Gate } from "@erp/ui/auth/gate";
+import { ConfirmDialog } from "@erp/ui/confirm-dialog";
 import { useAuth } from "@erp/ui/auth/auth-provider";
 import { OPERATION_STATUS, OPERATION_TYPE_LABEL, operationCode } from "@erp/ui/operations/operation-shared";
 import { assignmentsApi, operationApi, useQuery, type OperationSummary, type OperationStatus, type PendingDemandGroup } from "@erp/api";
@@ -51,7 +52,7 @@ function OperacoesInner() {
 
   const { hasRole } = useAuth();
   const canAuthorize = hasRole("OWNER", "MANAGER");
-  const canGenerateReceipt = hasRole("OWNER", "MANAGER");
+  const canManage = hasRole("OWNER", "MANAGER");
   const [tab, setTab] = useState<OpsTab>("overview");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"all" | OperationStatus>(initialStatus);
@@ -61,6 +62,8 @@ function OperacoesInner() {
   const [detailId, setDetailId] = useState<string | null>(params.get("operationId"));
   const [receiptOperationId, setReceiptOperationId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [tableAction, setTableAction] = useState<OperationSummary | null>(null);
+  const [tableActionError, setTableActionError] = useState<string | null>(null);
   const debounced = useDebounce(search, 300);
 
   const list = useQuery(
@@ -78,7 +81,6 @@ function OperacoesInner() {
     // "Como se fosse em tempo real": poll silencioso + refresh ao focar a aba.
     { refetchInterval: 10_000, refetchOnFocus: true },
   );
-
   const columns = useMemo<Column<OperationSummary>[]>(
     () => [
       { key: "number", header: "Número", className: "w-[120px]", cell: (o) => <span className="font-mono text-xs">{operationCode(o.number)}</span> },
@@ -96,31 +98,43 @@ function OperacoesInner() {
         const tone = cancellation?.status === "REQUESTED" || cancellation?.status === "APPROVED" ? "danger" : cancellation?.status === "RESCHEDULED" ? "info" : OPERATION_STATUS[o.status].tone;
         return <StatusChip tone={tone} dot className="whitespace-nowrap" >{label}</StatusChip>;
       } },
-      ...(canGenerateReceipt
+      ...(canManage
         ? [{
-            key: "receipt",
+            key: "actions",
             header: "Ações",
-            className: "w-[145px]",
+            className: "w-[290px]",
             link: false,
-            cell: (operation: OperationSummary) =>
-              operation.status === "COMPLETED" && operation.requestedDocumentType === "WORK_ORDER" ? (
-                <button
-                  type="button"
-                  title="Gerar Recibo a partir desta Ordem de Serviço"
-                  aria-label={`Gerar Recibo da ${operationCode(operation.number)}`}
-                  onClick={(event) => {
+            cell: (operation: OperationSummary) => (
+              <div className="flex items-center gap-1">
+                {operation.status === "COMPLETED" && operation.requestedDocumentType === "WORK_ORDER" && (
+                  <button type="button" title="Gerar Recibo" aria-label={`Gerar Recibo da ${operationCode(operation.number)}`} onClick={(event) => { event.stopPropagation(); setReceiptOperationId(operation.id); }} className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-[var(--radius-md)] border border-[var(--color-border)] px-2 text-xs font-medium text-[var(--color-primary)] transition hover:border-[var(--color-primary)] hover:bg-[var(--color-primary)]/5">
+                    <ReceiptText className="h-3.5 w-3.5" /> Recibo
+                  </button>
+                )}
+                {operation.status === "CANCELED" ? (
+                  <button type="button" title="Reativar operação" aria-label={`Reativar ${operationCode(operation.number)}`} onClick={async (event) => {
                     event.stopPropagation();
-                    setReceiptOperationId(operation.id);
-                  }}
-                  className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-[var(--radius-md)] border border-[var(--color-border)] px-2.5 text-xs font-medium text-[var(--color-primary)] transition hover:border-[var(--color-primary)] hover:bg-[var(--color-primary)]/5"
-                >
-                  <ReceiptText className="h-3.5 w-3.5" /> Gerar Recibo
-                </button>
-              ) : null,
+                    try {
+                      setTableActionError(null);
+                      await operationApi.reactivateOperation(operation.id);
+                      list.refetch();
+                    } catch (cause) {
+                      setTableActionError(cause instanceof Error ? cause.message : "Não foi possível reativar a operação.");
+                    }
+                  }} className="inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-[var(--radius-md)] border border-[var(--color-border)] px-2.5 text-xs font-medium hover:bg-[var(--color-muted)]">
+                    <RotateCcw className="h-3.5 w-3.5" /> Reativar
+                  </button>
+                ) : operation.status !== "COMPLETED" ? (
+                  <button type="button" title="Cancelar operação" aria-label={`Cancelar ${operationCode(operation.number)}`} onClick={(event) => { event.stopPropagation(); setTableAction(operation); }} className="inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-[var(--radius-md)] border border-[var(--color-border)] px-2.5 text-xs font-medium hover:bg-[var(--color-muted)]">
+                    <Ban className="h-3.5 w-3.5" /> Cancelar
+                  </button>
+                ) : null}
+              </div>
+            ),
           } satisfies Column<OperationSummary>]
         : []),
     ],
-    [canGenerateReceipt],
+    [canManage, list],
   );
 
   return (
@@ -185,6 +199,7 @@ function OperacoesInner() {
           <FilterChip key={f.key} active={status === f.key} onClick={() => { setStatus(f.key); setPage(1); }}>{f.label}</FilterChip>
         ))}
       </FilterBar>
+      {tableActionError && <p className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{tableActionError}</p>}
 
       {list.loading && !list.data ? (
         <SkeletonList rows={6} />
@@ -211,7 +226,13 @@ function OperacoesInner() {
       ) : null}
       </>}
 
-      <OperationDetailDrawer operationId={detailId} open={detailId !== null} onClose={() => { setDetailId(null); list.refetch(); }} />
+      <OperationDetailDrawer
+        operationId={detailId}
+        open={detailId !== null}
+        onClose={() => { setDetailId(null); list.refetch(); }}
+        onChanged={list.refetch}
+        onCopied={(operation) => { setDetailId(operation.id); list.refetch(); }}
+      />
       <OperationCreationDrawer open={createOpen} mode="operation" onClose={() => setCreateOpen(false)} onCreated={(op) => { setDetailId(op.id); list.refetch(); }} />
       {receiptOperationId && (
         <ReportWorkflowDrawer
@@ -221,6 +242,27 @@ function OperacoesInner() {
           onRendered={list.refetch}
         />
       )}
+      <ConfirmDialog
+        open={tableAction !== null}
+        title="Cancelar esta operação?"
+        description="A operação deixará a fila do técnico. Ela poderá ser reativada como pendente e atribuída novamente."
+        confirmLabel="Cancelar operação"
+        danger
+        onClose={() => setTableAction(null)}
+        onConfirm={async () => {
+          if (!tableAction) return;
+          const operationId = tableAction.id;
+          setTableAction(null);
+          try {
+            setTableActionError(null);
+            await operationApi.cancelOperation(operationId);
+            list.refetch();
+          } catch (cause) {
+            setTableActionError(cause instanceof Error ? cause.message : "Não foi possível concluir a ação.");
+            throw cause;
+          }
+        }}
+      />
     </div>
   );
 }

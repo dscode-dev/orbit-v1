@@ -1,5 +1,22 @@
 # Security
 
+## Atualização operacional pelo técnico — 2026-09-09
+
+- O Operator continua impedido de alterar cliente, endereço, equipamento principal, tipo, agenda,
+  valor do serviço ou período do lembrete.
+- Repetir no payload um valor administrativo já persistido não é considerado alteração. Isso
+  preserva o atendimento móvel sem liberar mudanças administrativas efetivas.
+- A correção da migration provisória de soft delete aborta se encontrar qualquer valor não nulo,
+  impedindo descarte silencioso de dados durante deploy.
+
+## Integridade dos lembretes
+
+- DTO e constraint PostgreSQL limitam intervalos a inteiros entre 1 e 120 meses.
+- Somente os perfis já autorizados nos controllers de Operations e Maintenance Reminders podem
+  definir períodos; o backend rejeita o campo em tipos não elegíveis e em documentos PMOC.
+- Alterações de período atualizam lembrete e Operation na mesma transação e geram
+  `MAINTENANCE_REMINDER_UPDATED` com ator e campos alterados.
+
 ## Isolamento do Portal do Cliente — 2026-08-21
 
 - `CustomerPortalAccount` não se relaciona a `User` nem recebe RBAC interno.
@@ -2371,3 +2388,18 @@ The catalog is scoped to the installation Organization in every query. Reads req
   continuam resolvidos exclusivamente pelo `DocumentAssetResolver`.
 - O número da execução é carregado pela relação Operation → RvtExecution dentro do DocumentContext;
   nenhum identificador é aceito do cliente para compor o documento.
+# Segurança na gestão de Operations — 2026-09-09
+
+- Edição administrativa, cancelamento e reativação exigem OWNER ou MANAGER no backend. A Platform
+  não expõe exclusão física de Operations.
+- `COMPLETED` permanece imutável e não pode ser cancelada ou excluída.
+- Relações cliente/endereço/equipamento são revalidadas e identidades definidas por PMOC/RVT não
+  podem ser trocadas pela edição genérica.
+- Em atualizações feitas por `OPERATOR`, o backend remove cliente, endereço, equipamento, tipo,
+  agenda, valor e configuração de lembrete do comando antes da persistência. Isso evita alteração
+  administrativa e impede que payloads completos legados bloqueiem a conclusão em campo.
+- Cancelamento usa atualização condicional e transação com Assignment/history/audit; a Assignment
+  recebe `operatorVisible=false`, impedindo acesso posterior pelo técnico.
+- O contrato legado de exclusão mantém verificação concorrente e é recusado diante de vínculos
+  operacionais, documentais ou comerciais; o fluxo de produto utiliza cancelamento preservando o
+  histórico e sem expor chaves de Storage.

@@ -1,5 +1,19 @@
 # ARCHITECTURE — Frontend
 
+## Projeção de lembretes
+
+O frontend envia a preferência de intervalo pela Operation e edita lembretes pelo client oficial.
+Elegibilidade, padrão histórico, cálculo de datas e sincronização pertencem ao backend; PMOC
+continua isolado em sua agenda de execuções.
+
+## Ciclo administrativo da Operation
+
+O mesmo `OperationCreationDrawer` atende criação, edição e cópia. A cópia passa pelo endpoint de
+criação e recebe identidade própria; cancelamento/reativação são comandos explícitos do backend.
+A reativação retorna a Operation para `PENDING`, sem restaurar Assignment anterior. A UI não expõe
+remoção física e apenas controla disponibilidade e confirmação, enquanto imutabilidade, vínculos,
+RBAC, concorrência e transições permanecem sob autoridade do backend.
+
 ## Wizard documental compartilhado
 
 `ReportCenterPage` e `ReportWorkflowDrawer` residem no módulo compartilhado

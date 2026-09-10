@@ -1,5 +1,37 @@
 # Backend State
 
+## Período configurável dos lembretes — 2026-09-09
+
+- Operations de `PREVENTIVA` e `INSTALACAO` podem persistir o intervalo opcional do lembrete;
+  registros sem configuração mantêm o padrão histórico de seis meses.
+- `MaintenanceReminder` continua sendo derivado da Operation. Alterar o período recalcula a data
+  a partir da data-base, sincroniza a configuração de origem e registra auditoria.
+- PMOC permanece fora desse fluxo porque utiliza sua agenda oficial de execuções.
+- Migration aditiva `20260909130000_operation_reminder_interval` adiciona somente uma coluna
+  nullable com limite de integridade entre 1 e 120 meses, sem reescrever dados existentes.
+
+## Gestão do ciclo da Operation — 2026-09-09
+
+- OWNER/MANAGER podem editar Operations enquanto não concluídas; alterações administrativas
+  validam cliente, endereço, equipamento e vínculos com PMOC/RVT.
+- Operations concluídas são imutáveis. O frontend cria uma nova Operation por cópia usando o
+  contrato oficial de criação, sem compartilhar histórico, documentos ou atribuições.
+- Cancelamento gerencial preserva a Operation, muda o status para `CANCELED`, cancela as
+  Assignments ativas e remove sua visibilidade no Operator. A reativação retorna a Operation para
+  `PENDING` e exige reatribuição.
+- A Platform não oferece exclusão de Operations; cancelamento é o fluxo administrativo oficial e
+  preserva histórico. O endpoint físico permanece apenas por retrocompatibilidade e continua
+  bloqueado para registros com vínculos protegidos.
+- O estado final não possui coluna de soft delete: a migration histórica
+  `20260909120000_operation_soft_delete` é preservada porque chegou a ser aplicada, e a migration
+  corretiva `20260909140000_remove_operation_soft_delete` remove coluna/índice somente após
+  confirmar que não existem valores, sem afetar Operations existentes.
+- A autorização compara mudanças administrativas reais. Campos repetidos sem alteração não
+  bloqueiam o Operator ao persistir checklist, evidências, conteúdo técnico ou a conclusão.
+- Para preservar o atendimento mesmo quando clientes antigos reenviam o formulário completo,
+  campos administrativos recebidos de `OPERATOR` são descartados no serviço. O conteúdo de campo
+  e a transição de conclusão continuam processados sem conceder permissão administrativa.
+
 ## Orçamento — descontos por categoria — 2026-08-31
 
 - Budget persiste descontos independentes para serviços e materiais, seus textos documentais e o

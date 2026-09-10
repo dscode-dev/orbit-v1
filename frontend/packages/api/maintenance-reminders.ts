@@ -61,7 +61,7 @@ export function getReminderStats(opts?: { signal?: AbortSignal }): Promise<Maint
 
 export function updateReminder(
   id: string,
-  payload: { dueDate?: string; status?: MaintenanceReminderStatus; notes?: string },
+  payload: { dueDate?: string; intervalMonths?: number; status?: MaintenanceReminderStatus; notes?: string },
 ): Promise<MaintenanceReminder> {
   return api.patch<MaintenanceReminder>(`/maintenance-reminders/${id}`, payload);
 }

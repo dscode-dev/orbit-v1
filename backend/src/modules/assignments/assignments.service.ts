@@ -137,7 +137,10 @@ export class AssignmentsService {
   /** Demandas (ASSIGNED) ainda não autorizadas, agrupadas por técnico. */
   async pendingAuthorization(): Promise<unknown> {
     const pending = await this.prisma.assignment.findMany({
-      where: { status: AssignmentStatus.ASSIGNED, operatorVisible: false },
+      where: {
+        status: AssignmentStatus.ASSIGNED,
+        operatorVisible: false,
+      },
       orderBy: [{ assignedTo: 'asc' }, { operation: { scheduledFor: 'asc' } }],
       select: {
         id: true,
@@ -281,7 +284,7 @@ export class AssignmentsService {
     return this.prisma.$transaction(async (tx) => {
       await this.operationalUserOrThrowTx(tx, dto.assignedTo);
       const current = await this.assignmentOrThrowTx(tx, id);
-      this.assertNotFinal(current.status);
+      this.assertReassignable(current);
       const previousStatus = current.status;
       const now = new Date();
       const transition = await tx.assignment.updateMany({
@@ -854,11 +857,20 @@ export class AssignmentsService {
     }
   }
 
-  private assertNotFinal(status: AssignmentStatus): void {
-    if (status === AssignmentStatus.COMPLETED || status === AssignmentStatus.CANCELED) {
+  private assertReassignable(assignment: {
+    status: AssignmentStatus;
+    operation: { status: OperationStatus };
+  }): void {
+    const reactivatedCancellation =
+      assignment.status === AssignmentStatus.CANCELED &&
+      assignment.operation.status === OperationStatus.DRAFT;
+    if (
+      assignment.status === AssignmentStatus.COMPLETED ||
+      (assignment.status === AssignmentStatus.CANCELED && !reactivatedCancellation)
+    ) {
       throw new ApplicationException(
         ERROR_CODES.ASSIGNMENT_INVALID_TRANSITION,
-        'Final assignments cannot be reassigned',
+        'A atribuição finalizada não pode ser alterada',
         HttpStatus.CONFLICT,
       );
     }
