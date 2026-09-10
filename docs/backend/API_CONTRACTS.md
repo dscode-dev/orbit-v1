@@ -1,17 +1,30 @@
 # API Contracts
 
+## Lembretes de manutenção
+
+- `POST /api/v1/operations` e `PATCH /api/v1/operations/:id` aceitam
+  `maintenanceReminderIntervalMonths?: number` (inteiro entre 1 e 120) somente para Preventiva ou
+  Instalação fora de PMOC. O padrão efetivo é seis meses quando o campo é omitido.
+- `PATCH /api/v1/maintenance-reminders/:id` aceita `intervalMonths?: number`; a alteração recalcula
+  `dueDate` a partir de `baseDate`. O ajuste direto de `dueDate` continua disponível e prevalece
+  quando os dois campos forem enviados.
+
 ## Gestão de Operations
 
 - `PATCH /api/v1/operations/:id` — OWNER/MANAGER podem alterar cliente, endereço, equipamento,
   tipo, serviços, agenda, conteúdo operacional, valor informativo e status. Operações
   `COMPLETED` não aceitam alterações; `CANCELED` deve ser tratada pelas ações dedicadas.
+  Para `OPERATOR`, campos administrativos eventualmente reenviados pelo cliente são ignorados;
+  checklist, evidências, assinaturas, conteúdo técnico e transições operacionais autorizadas
+  continuam sendo processados.
 - `PATCH /api/v1/operations/:id/cancel` — OWNER/MANAGER; cancela a Operation e suas Assignments
   ativas, retirando-a da fila do Operator.
 - `PATCH /api/v1/operations/:id/reactivate` — OWNER/MANAGER; aceita somente `CANCELED`, retorna
-  `DRAFT` e não restaura a atribuição anterior.
+  `PENDING` e não restaura a atribuição anterior.
 - `DELETE /api/v1/operations/:id` — OWNER/MANAGER; remoção física da Operation e Assignments.
   Retorna `{ "deleted": true }`. É bloqueada para concluídas e para registros com vínculos
-  históricos/documentais/operacionais/comerciais.
+  históricos/documentais/operacionais/comerciais. O contrato é preservado para compatibilidade,
+  mas não é exposto pela Platform; o fluxo administrativo oficial utiliza cancelamento.
 
 Copiar não cria contrato paralelo: o frontend lê a Operation concluída e envia seus campos
 editáveis ao `POST /api/v1/operations`; número, histórico, documentos e Assignment são novos.

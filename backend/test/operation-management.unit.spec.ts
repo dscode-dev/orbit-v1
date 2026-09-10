@@ -7,13 +7,20 @@ describe('Operation management', () => {
   const actor = { id: '11111111-1111-4111-8111-111111111111', role: Role.OWNER };
   const context = { requestId: 'operation-management', ip: null, userAgent: null };
 
-  function service(prisma: Record<string, unknown>): OperationsService {
+  function service(
+    prisma: Record<string, unknown>,
+    dependencies: {
+      lifecycle?: Record<string, jest.Mock>;
+      maintenance?: Record<string, jest.Mock>;
+    } = {},
+  ): OperationsService {
+    const reminders = { syncFromOperationTx: jest.fn().mockResolvedValue(undefined) };
     return new OperationsService(
       prisma as never,
       {} as never,
-      {} as never,
-      {} as never,
-      {} as never,
+      (dependencies.lifecycle ?? {}) as never,
+      (dependencies.maintenance ?? {}) as never,
+      reminders as never,
       {} as never,
       { assertOperationAccess: jest.fn().mockResolvedValue(undefined) } as never,
       {} as never,
@@ -54,8 +61,78 @@ describe('Operation management', () => {
     ).rejects.toThrow('Operações concluídas não podem ser editadas');
   });
 
+  it('ignores administrative fields and allows an operator to submit execution data', async () => {
+    const operator = { ...actor, role: Role.OPERATOR };
+    const existing = {
+      id: '22222222-2222-4222-8222-222222222222',
+      customerId: '33333333-3333-4333-8333-333333333333',
+      addressId: null,
+      equipmentId: null,
+      operatorId: operator.id,
+      status: OperationStatus.IN_PROGRESS,
+      startedAt: new Date(),
+      completedAt: null,
+      type: OperationType.PREVENTIVA,
+      requestedDocumentType: 'WORK_ORDER',
+      serviceTypes: [OperationType.PREVENTIVA],
+      serviceValue: null,
+      maintenanceReminderIntervalMonths: null,
+      referenceMonth: null,
+      referenceYear: null,
+      inspectedEquipments: [],
+      maintenanceExecution: null,
+      rvtExecution: null,
+      _count: { photos: 0 },
+    };
+    const tx = {
+      operation: { update: jest.fn().mockResolvedValue({}) },
+      assignment: { findMany: jest.fn().mockResolvedValue([]) },
+      operationDocument: { findMany: jest.fn().mockResolvedValue([]) },
+      auditLog: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      operation: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValueOnce(existing)
+          .mockResolvedValueOnce({ ...existing, signatureData: null, assignments: [] }),
+      },
+      $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<void>) => callback(tx)),
+    };
+
+    await expect(
+      service(prisma, {
+        lifecycle: { publishOperationCompletedTx: jest.fn().mockResolvedValue(undefined) },
+        maintenance: { syncOperationCompletedTx: jest.fn().mockResolvedValue(undefined) },
+      }).update(
+        existing.id,
+        {
+          customerId: '44444444-4444-4444-8444-444444444444',
+          type: OperationType.INSTALACAO,
+          scheduledFor: new Date(Date.now() + 86_400_000).toISOString(),
+          serviceValue: 999,
+          maintenanceReminderIntervalMonths: 12,
+          status: OperationStatus.COMPLETED,
+          checklist: [{ label: 'Inspeção visual', done: true }],
+        },
+        operator as never,
+        context,
+      ),
+    ).resolves.toMatchObject({ id: existing.id });
+    const update = (tx.operation.update.mock.calls as unknown[][])[0]?.[0] as {
+      data: Record<string, unknown>;
+    };
+    expect(update.data).toMatchObject({ status: OperationStatus.COMPLETED });
+    expect(update.data).not.toHaveProperty('customerId');
+    expect(update.data).not.toHaveProperty('type');
+    expect(update.data).not.toHaveProperty('scheduledFor');
+    expect(update.data).not.toHaveProperty('serviceValue');
+    expect(update.data).not.toHaveProperty('maintenanceReminderIntervalMonths');
+  });
+
   it('hard-deletes an eligible operation and its assignments', async () => {
     const tx = {
+      maintenanceReminder: { deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
       assignment: { deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
       operation: {
         findFirst: jest.fn().mockResolvedValue({ id: '22222222-2222-4222-8222-222222222222' }),
@@ -149,7 +226,7 @@ describe('Operation management', () => {
     expect(cancelAudit.data.action).toBe('OPERATION_CANCELED');
   });
 
-  it('reactivates as draft without restoring a canceled assignment', async () => {
+  it('reactivates as pending without restoring a canceled assignment', async () => {
     const tx = {
       operation: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       auditLog: { create: jest.fn().mockResolvedValue({}) },
@@ -165,7 +242,7 @@ describe('Operation management', () => {
         findUnique: jest
           .fn()
           .mockResolvedValueOnce(operation)
-          .mockResolvedValueOnce({ ...operation, status: OperationStatus.DRAFT, signatureData: null, assignments: [] }),
+          .mockResolvedValueOnce({ ...operation, status: OperationStatus.PENDING, signatureData: null, assignments: [] }),
       },
       $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<void>) => callback(tx)),
     };
@@ -174,7 +251,7 @@ describe('Operation management', () => {
 
     expect(tx.operation.updateMany).toHaveBeenCalledWith({
       where: { id: operation.id, status: OperationStatus.CANCELED },
-      data: { status: OperationStatus.DRAFT, startedAt: null, completedAt: null },
+      data: { status: OperationStatus.PENDING, startedAt: null, completedAt: null },
     });
     expect(tx).not.toHaveProperty('assignment');
     const audit = (tx.auditLog.create.mock.calls as unknown[][])[0]?.[0] as {

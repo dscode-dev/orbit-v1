@@ -1,9 +1,15 @@
 # ROUTES — Frontend
 
+## `/agenda`
+
+Na aba Lembretes, Preventivas e Instalações exibem a ação `Alterar período`. O fluxo abre um Drawer
+sem criar nova rota e preserva filtros, paginação e o ajuste manual da data prevista.
+
 ## `/operacoes`
 
-A listagem e o drawer suportam edição de registros abertos, cópia de concluídos, cancelamento,
-reativação e exclusão. Nenhuma nova rota foi criada; todas as ações preservam filtros e paginação.
+A listagem e o drawer suportam edição de registros abertos, cópia de concluídos, cancelamento e
+reativação como pendente. A Platform não expõe exclusão física. Nenhuma nova rota foi criada;
+todas as ações preservam filtros e paginação.
 
 ## Portal do Cliente
 

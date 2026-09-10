@@ -1,5 +1,13 @@
 # Frontend Integration
 
+## Lembretes configuráveis
+
+- Exibir `maintenanceReminderIntervalMonths` somente para Operations de Preventiva/Instalação e
+  omitir o campo nos demais tipos e em PMOC.
+- O seletor usa seis meses como padrão. A Agenda pode alterar o período com
+  `PATCH /maintenance-reminders/:id { intervalMonths }`; a resposta já contém a nova previsão.
+- A alteração manual de `dueDate` permanece um override independente.
+
 ## Portal do Cliente
 
 - Rotas: `/customer/login`, `/customer/change-password` e `/customer`.
@@ -2777,11 +2785,15 @@ administrativa por equipamento e não reutilize IDs locais do formulário.
   compartilhamento e download autenticados na tela padrão de sucesso.
 - Não derive o número da execução a partir de `document.number` ou `operation.number`: no documento
   final essa distinção é resolvida pelo backend (`RVT-*` no título e `001..N` na identificação).
-# Edição, cópia, cancelamento e exclusão de Operations
+# Edição, cópia e cancelamento de Operations
 
 - Use `PATCH /operations/:id` apenas enquanto o status não for `COMPLETED` ou `CANCELED`.
 - Para uma concluída, ofereça “Copiar operação” e crie pelo `POST /operations` sem IDs de
   documentos ou históricos.
-- Cancelar e excluir exigem confirmação visual. Cancelar é reversível por `/reactivate`; excluir
-  é definitivo e pode retornar `409` quando houver vínculos protegidos.
-- Após reativar, apresente a atribuição como cancelada e solicite uma reatribuição explícita.
+- A Platform deve expor somente o cancelamento com confirmação visual. A remoção física não faz
+  parte do fluxo administrativo porque uma Operation pode possuir vínculos históricos e comerciais.
+- Após reativar, apresente o status `PENDING`, mantenha a atribuição anterior cancelada e solicite
+  uma reatribuição explícita.
+- O Operator pode reenviar payloads de execução contendo campos administrativos legados; esses
+  campos são ignorados pelo backend, enquanto checklist, evidências, assinaturas, conteúdo técnico
+  e conclusão são persistidos normalmente.

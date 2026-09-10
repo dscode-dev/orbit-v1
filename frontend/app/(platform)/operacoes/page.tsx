@@ -8,7 +8,7 @@
 import { Suspense, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
-import { Ban, CalendarClock, Check, ClipboardList, Loader2, Plus, ReceiptText, RotateCcw, ShieldCheck, Trash2, Users } from "lucide-react";
+import { Ban, CalendarClock, Check, ClipboardList, Loader2, Plus, ReceiptText, RotateCcw, ShieldCheck, Users } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { DataTable, type Column } from "@platform/components/data-table";
 import { Pagination } from "@platform/components/pagination";
@@ -62,7 +62,7 @@ function OperacoesInner() {
   const [detailId, setDetailId] = useState<string | null>(params.get("operationId"));
   const [receiptOperationId, setReceiptOperationId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
-  const [tableAction, setTableAction] = useState<{ kind: "cancel" | "delete"; operation: OperationSummary } | null>(null);
+  const [tableAction, setTableAction] = useState<OperationSummary | null>(null);
   const [tableActionError, setTableActionError] = useState<string | null>(null);
   const debounced = useDebounce(search, 300);
 
@@ -81,7 +81,6 @@ function OperacoesInner() {
     // "Como se fosse em tempo real": poll silencioso + refresh ao focar a aba.
     { refetchInterval: 10_000, refetchOnFocus: true },
   );
-
   const columns = useMemo<Column<OperationSummary>[]>(
     () => [
       { key: "number", header: "Número", className: "w-[120px]", cell: (o) => <span className="font-mono text-xs">{operationCode(o.number)}</span> },
@@ -103,7 +102,7 @@ function OperacoesInner() {
         ? [{
             key: "actions",
             header: "Ações",
-            className: "w-[170px]",
+            className: "w-[290px]",
             link: false,
             cell: (operation: OperationSummary) => (
               <div className="flex items-center gap-1">
@@ -122,19 +121,14 @@ function OperacoesInner() {
                     } catch (cause) {
                       setTableActionError(cause instanceof Error ? cause.message : "Não foi possível reativar a operação.");
                     }
-                  }} className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border)] hover:bg-[var(--color-muted)]">
-                    <RotateCcw className="h-3.5 w-3.5" />
+                  }} className="inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-[var(--radius-md)] border border-[var(--color-border)] px-2.5 text-xs font-medium hover:bg-[var(--color-muted)]">
+                    <RotateCcw className="h-3.5 w-3.5" /> Reativar
                   </button>
                 ) : operation.status !== "COMPLETED" ? (
-                  <button type="button" title="Cancelar operação" aria-label={`Cancelar ${operationCode(operation.number)}`} onClick={(event) => { event.stopPropagation(); setTableAction({ kind: "cancel", operation }); }} className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border)] hover:bg-[var(--color-muted)]">
-                    <Ban className="h-3.5 w-3.5" />
+                  <button type="button" title="Cancelar operação" aria-label={`Cancelar ${operationCode(operation.number)}`} onClick={(event) => { event.stopPropagation(); setTableAction(operation); }} className="inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-[var(--radius-md)] border border-[var(--color-border)] px-2.5 text-xs font-medium hover:bg-[var(--color-muted)]">
+                    <Ban className="h-3.5 w-3.5" /> Cancelar
                   </button>
                 ) : null}
-                {operation.status !== "COMPLETED" && (
-                  <button type="button" title="Excluir operação" aria-label={`Excluir ${operationCode(operation.number)}`} onClick={(event) => { event.stopPropagation(); setTableAction({ kind: "delete", operation }); }} className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10">
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                )}
               </div>
             ),
           } satisfies Column<OperationSummary>]
@@ -236,7 +230,7 @@ function OperacoesInner() {
         operationId={detailId}
         open={detailId !== null}
         onClose={() => { setDetailId(null); list.refetch(); }}
-        onDeleted={() => list.refetch()}
+        onChanged={list.refetch}
         onCopied={(operation) => { setDetailId(operation.id); list.refetch(); }}
       />
       <OperationCreationDrawer open={createOpen} mode="operation" onClose={() => setCreateOpen(false)} onCreated={(op) => { setDetailId(op.id); list.refetch(); }} />
@@ -250,20 +244,19 @@ function OperacoesInner() {
       )}
       <ConfirmDialog
         open={tableAction !== null}
-        title={tableAction?.kind === "cancel" ? "Cancelar esta operação?" : "Excluir esta operação?"}
-        description={tableAction?.kind === "cancel"
-          ? "A operação deixará a fila do técnico. Ela poderá ser reativada como rascunho e atribuída novamente."
-          : "A operação e suas atribuições serão removidas definitivamente. Esta ação não pode ser desfeita."}
-        confirmLabel={tableAction?.kind === "cancel" ? "Cancelar operação" : "Excluir operação"}
+        title="Cancelar esta operação?"
+        description="A operação deixará a fila do técnico. Ela poderá ser reativada como pendente e atribuída novamente."
+        confirmLabel="Cancelar operação"
         danger
         onClose={() => setTableAction(null)}
         onConfirm={async () => {
           if (!tableAction) return;
+          const operationId = tableAction.id;
+          setTableAction(null);
           try {
             setTableActionError(null);
-            if (tableAction.kind === "cancel") await operationApi.cancelOperation(tableAction.operation.id);
-            else await operationApi.deleteOperation(tableAction.operation.id);
-            await list.refetch();
+            await operationApi.cancelOperation(operationId);
+            list.refetch();
           } catch (cause) {
             setTableActionError(cause instanceof Error ? cause.message : "Não foi possível concluir a ação.");
             throw cause;

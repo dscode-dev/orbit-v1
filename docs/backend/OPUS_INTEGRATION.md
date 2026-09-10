@@ -1,5 +1,12 @@
 # OPUS Frontend Integration
 
+## Agenda — intervalo de lembrete
+
+- Preventiva e Instalação aceitam `maintenanceReminderIntervalMonths`; demais tipos mantêm o
+  controle desabilitado e não enviam o campo.
+- A edição em `/agenda`, aba Lembretes, usa o contrato oficial de `MaintenanceReminder`; não há
+  cálculo persistente ou regra de elegibilidade no frontend.
+
 ## Portal do Cliente e Chamados
 
 - `/customer/login` possui sessão própria; APIs: `/customer/me`, `/customer/operations`,

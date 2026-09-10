@@ -1145,6 +1145,7 @@ export type OperationSummary = {
   status: OperationStatus;
   /** Informação operacional da OS; não compõe Preview/PDF nem o Financial Core. */
   serviceValue?: string | number | null;
+  maintenanceReminderIntervalMonths?: number | null;
   customer: { id: string; name: string; tradeName?: string | null; phone?: string | null; secondaryPhone?: string | null } | null;
   equipment: { id: string; name: string } | null;
   operator: { id: string; name: string } | null;
@@ -1376,6 +1377,7 @@ export type CreateOperationPayload = {
   reportedIssue?: string | null;
   serviceDescription?: string | null;
   serviceValue?: number;
+  maintenanceReminderIntervalMonths?: number | null;
   receiptNumber?: string | null;
   receiptIssuedAt?: string | null;
   receiptAmount?: number | null;

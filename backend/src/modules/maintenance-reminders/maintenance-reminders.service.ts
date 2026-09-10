@@ -3,7 +3,6 @@ import {
   DocumentTemplateType,
   MaintenanceReminderStatus,
   OperationStatus,
-  OperationType,
   PmocExecutionRequestStatus,
   Prisma,
 } from '@prisma/client';
@@ -11,6 +10,10 @@ import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
 import { buildPaginatedResponse } from '../../shared/types/pagination.types';
+import {
+  DEFAULT_MAINTENANCE_REMINDER_INTERVAL_MONTHS,
+  MAINTENANCE_REMINDER_OPERATION_TYPES,
+} from '../../shared/constants/maintenance-reminders.constants';
 import { PrismaService } from '../database/prisma.service';
 import type {
   ListMaintenanceRemindersQueryDto,
@@ -18,9 +21,6 @@ import type {
 } from './dto/maintenance-reminder.dto';
 
 /** Tipos de OS que geram lembrete de manutenção (previsão de próxima execução). */
-const REMINDER_OPERATION_TYPES: OperationType[] = [OperationType.PREVENTIVA, OperationType.INSTALACAO];
-const DEFAULT_INTERVAL_MONTHS = 6;
-
 const REMINDER_INCLUDE = {
   customer: { select: { id: true, name: true, tradeName: true } },
   equipment: { select: { id: true, name: true, tag: true } },
@@ -29,7 +29,13 @@ const REMINDER_INCLUDE = {
 
 function addMonths(base: Date, months: number): Date {
   const next = new Date(base);
-  next.setMonth(next.getMonth() + months);
+  const originalDay = next.getUTCDate();
+  next.setUTCDate(1);
+  next.setUTCMonth(next.getUTCMonth() + months);
+  const lastDayOfTargetMonth = new Date(
+    Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+  next.setUTCDate(Math.min(originalDay, lastDayOfTargetMonth));
   return next;
 }
 
@@ -56,12 +62,13 @@ export class MaintenanceRemindersService {
         createdAt: true,
         customerId: true,
         equipmentId: true,
+        maintenanceReminderIntervalMonths: true,
       },
     });
     if (!operation) return;
 
     const qualifies =
-      REMINDER_OPERATION_TYPES.includes(operation.type) &&
+      MAINTENANCE_REMINDER_OPERATION_TYPES.includes(operation.type) &&
       operation.requestedDocumentType !== DocumentTemplateType.PMOC &&
       operation.status !== OperationStatus.CANCELED;
 
@@ -77,7 +84,10 @@ export class MaintenanceRemindersService {
     }
 
     const base = operation.completedAt ?? operation.scheduledFor ?? operation.createdAt;
-    const intervalMonths = existing?.intervalMonths ?? DEFAULT_INTERVAL_MONTHS;
+    const intervalMonths =
+      operation.maintenanceReminderIntervalMonths ??
+      existing?.intervalMonths ??
+      DEFAULT_MAINTENANCE_REMINDER_INTERVAL_MONTHS;
     const dueDate = existing?.dateOverridden ? existing.dueDate : addMonths(base, intervalMonths);
     const organizationId = await this.organizationIdTx(tx);
 
@@ -97,6 +107,7 @@ export class MaintenanceRemindersService {
         baseDate: base,
         operationType: operation.type,
         equipmentId: operation.equipmentId,
+        intervalMonths,
         ...(existing?.dateOverridden ? {} : { dueDate }),
       },
     });
@@ -158,13 +169,12 @@ export class MaintenanceRemindersService {
   async update(
     id: string,
     dto: UpdateMaintenanceReminderDto,
-    _actor: AuthenticatedUser,
+    actor: AuthenticatedUser,
   ): Promise<unknown> {
-    void _actor;
     const organizationId = await this.organizationId();
     const existing = await this.prisma.maintenanceReminder.findFirst({
       where: { id, organizationId },
-      select: { id: true },
+      select: { id: true, operationId: true, baseDate: true, intervalMonths: true },
     });
     if (!existing) {
       throw new ApplicationException(
@@ -173,14 +183,45 @@ export class MaintenanceRemindersService {
         HttpStatus.NOT_FOUND,
       );
     }
-    return this.prisma.maintenanceReminder.update({
-      where: { id },
-      data: {
-        ...(dto.dueDate ? { dueDate: new Date(dto.dueDate), dateOverridden: true } : {}),
-        ...(dto.status ? { status: dto.status } : {}),
-        ...(dto.notes !== undefined ? { notes: dto.notes || null } : {}),
-      },
-      include: REMINDER_INCLUDE,
+    return this.prisma.$transaction(async (tx) => {
+      const reminder = await tx.maintenanceReminder.update({
+        where: { id },
+        data: {
+          ...(dto.intervalMonths !== undefined
+            ? {
+                intervalMonths: dto.intervalMonths,
+                ...(!dto.dueDate
+                  ? { dueDate: addMonths(existing.baseDate, dto.intervalMonths), dateOverridden: false }
+                  : {}),
+              }
+            : {}),
+          ...(dto.dueDate ? { dueDate: new Date(dto.dueDate), dateOverridden: true } : {}),
+          ...(dto.status ? { status: dto.status } : {}),
+          ...(dto.notes !== undefined ? { notes: dto.notes || null } : {}),
+        },
+        include: REMINDER_INCLUDE,
+      });
+      if (dto.intervalMonths !== undefined && existing.operationId) {
+        await tx.operation.update({
+          where: { id: existing.operationId },
+          data: { maintenanceReminderIntervalMonths: dto.intervalMonths },
+        });
+      }
+      await tx.auditLog.create({
+        data: {
+          action: 'MAINTENANCE_REMINDER_UPDATED',
+          resource: 'MAINTENANCE_REMINDER',
+          actor: actor.id,
+          metadata: {
+            reminderId: id,
+            operationId: existing.operationId,
+            changedFields: Object.keys(dto),
+            previousIntervalMonths: existing.intervalMonths,
+            intervalMonths: dto.intervalMonths ?? existing.intervalMonths,
+          },
+        },
+      });
+      return reminder;
     });
   }
 

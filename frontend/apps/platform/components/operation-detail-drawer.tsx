@@ -8,7 +8,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { Ban, Copy, Pencil, RotateCcw, Trash2 } from "lucide-react";
+import { Ban, Copy, Pencil, RotateCcw } from "lucide-react";
 import { Drawer } from "@erp/ui/drawer";
 import { StatusChip } from "@erp/ui/status-chip";
 import { SkeletonList } from "@erp/ui/skeletons";
@@ -35,14 +35,14 @@ export function OperationDetailDrawer({
   open,
   onClose,
   assignmentActionLabel = "Reatribuir",
-  onDeleted,
+  onChanged,
   onCopied,
 }: {
   operationId: string | null;
   open: boolean;
   onClose: () => void;
   assignmentActionLabel?: string;
-  onDeleted?: () => void;
+  onChanged?: () => void;
   onCopied?: (operation: OperationDetail) => void;
 }) {
   const detail = useQuery<OperationDetail | null>(
@@ -58,7 +58,6 @@ export function OperationDetailDrawer({
   const [editOpen, setEditOpen] = useState(false);
   const [copyOpen, setCopyOpen] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const op = detail.data;
@@ -118,6 +117,7 @@ export function OperationDetailDrawer({
                           setActionError(null);
                           await operationApi.reactivateOperation(op.id);
                           await Promise.all([detail.refetch(), assignmentQuery.refetch()]);
+                          onChanged?.();
                         } catch (cause) {
                           setActionError(cause instanceof Error ? cause.message : "Não foi possível reativar a operação.");
                         }
@@ -134,9 +134,6 @@ export function OperationDetailDrawer({
                         </button>
                       </>
                     )}
-                    <button type="button" onClick={() => { setActionError(null); setConfirmDelete(true); }} className="btn-secondary h-8 px-2.5 text-xs text-[var(--color-danger)]">
-                      <Trash2 className="h-3.5 w-3.5" /> Excluir
-                    </button>
                   </>
                 ) : (
                   <button type="button" onClick={() => { setActionError(null); setCopyOpen(true); }} className="btn-secondary h-8 px-2.5 text-xs">
@@ -226,17 +223,18 @@ export function OperationDetailDrawer({
       <ConfirmDialog
         open={confirmCancel}
         title="Cancelar esta operação?"
-        description="A operação será cancelada e deixará imediatamente a fila do técnico. Depois, você poderá reativá-la como rascunho e fazer uma nova atribuição."
+        description="A operação será cancelada e deixará imediatamente a fila do técnico. Depois, você poderá reativá-la como pendente e fazer uma nova atribuição."
         confirmLabel="Cancelar operação"
         danger
         onClose={() => setConfirmCancel(false)}
         onConfirm={async () => {
           if (!op) return;
+          setConfirmCancel(false);
           try {
             setActionError(null);
             await operationApi.cancelOperation(op.id);
             await Promise.all([detail.refetch(), assignmentQuery.refetch()]);
-            onDeleted?.();
+            onChanged?.();
           } catch (cause) {
             setActionError(cause instanceof Error ? cause.message : "Não foi possível cancelar a operação.");
             throw cause;
@@ -244,26 +242,6 @@ export function OperationDetailDrawer({
         }}
       />
 
-      <ConfirmDialog
-        open={confirmDelete}
-        title="Excluir esta operação?"
-        description="A operação e suas atribuições serão removidas definitivamente. Operações concluídas ou com vínculos históricos, documentais ou comerciais não podem ser excluídas."
-        confirmLabel="Excluir operação"
-        danger
-        onClose={() => setConfirmDelete(false)}
-        onConfirm={async () => {
-          if (!op) return;
-          try {
-            setActionError(null);
-            await operationApi.deleteOperation(op.id);
-            onDeleted?.();
-            onClose();
-          } catch (cause) {
-            setActionError(cause instanceof Error ? cause.message : "Não foi possível excluir a operação.");
-            throw cause;
-          }
-        }}
-      />
     </Drawer>
   );
 }
@@ -299,6 +277,7 @@ function operationInitialValues(
     reportedIssue: operation.reportedIssue,
     serviceDescription: operation.serviceDescription,
     serviceValue: operation.serviceValue == null ? undefined : Number(operation.serviceValue),
+    maintenanceReminderIntervalMonths: operation.maintenanceReminderIntervalMonths,
   };
 }
 
@@ -318,6 +297,7 @@ function editableOperationPayload(
     reportedIssue: payload.reportedIssue,
     serviceDescription: payload.serviceDescription,
     serviceValue: payload.serviceValue ?? null,
+    maintenanceReminderIntervalMonths: payload.maintenanceReminderIntervalMonths,
     inspectedEquipments: payload.inspectedEquipments,
   };
 }

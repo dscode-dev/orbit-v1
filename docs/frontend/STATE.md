@@ -1,13 +1,27 @@
 # STATE — Frontend
 
+## Agenda — lembretes configuráveis — 2026-09-09
+
+- A criação/edição de Preventiva e Instalação oferece período opcional do próximo lembrete, com
+  seis meses selecionados por padrão; o campo fica desabilitado nos demais tipos e em PMOC.
+- O Drawer apresenta imediatamente a data calculada para o novo período e uma única confirmação
+  persiste período e previsão. Toda persistência e todo recálculo continuam no backend.
+
 ## Gestão de operações — 2026-09-09
 
 - O drawer reutiliza o Wizard oficial para editar Operations não concluídas e para copiar uma
   concluída como novo atendimento.
-- Cancelar, reativar e excluir estão disponíveis no drawer e na coluna Ações da tabela para
-  OWNER/MANAGER. Cancelamento e exclusão usam `ConfirmDialog`, nunca `alert`.
-- Canceladas podem ser reativadas como rascunho e exigem reatribuição explícita; concluídas não
-  exibem controles de edição, cancelamento ou exclusão.
+- Cancelar e reativar estão disponíveis no drawer e na coluna Ações da tabela para OWNER/MANAGER.
+  O cancelamento usa `ConfirmDialog`, nunca `alert`; exclusão não é exposta pela Platform.
+- Canceladas podem ser reativadas como pendentes e exigem reatribuição explícita; concluídas não
+  exibem controles de edição ou cancelamento.
+- Após cancelar ou reativar, drawer e listagem sincronizam imediatamente com a API oficial.
+  Ações rápidas exibem texto além dos ícones.
+- A confirmação de cancelamento fecha imediatamente após a ação do usuário, inclusive quando a
+  API falha; a mensagem permanece visível na página para permitir correção e nova tentativa.
+- Os wizards do Operator continuam concluindo OS/RVT com seus dados de campo. Campos
+  administrativos eventualmente presentes em clientes legados são protegidos pelo backend sem
+  bloquear a finalização.
 
 ## Operator — câmera e galeria nas evidências — 2026-09-01
 

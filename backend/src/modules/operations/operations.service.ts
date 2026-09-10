@@ -8,6 +8,7 @@ import {
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
 import { CUSTOMER_SIGNATURE_REQUIRED_DOCUMENT_TYPES, DOCUMENT_ONLY_DOCUMENT_TYPES, OPERATOR_DIRECT_COMPLETION_DOCUMENT_TYPES, SKIP_AUTO_WORK_ORDER_DOCUMENT_TYPES } from '../../shared/constants/document-engine.constants';
 import { PMOC_MIN_PROCEDURE_IMAGES } from '../../shared/constants/pmoc.constants';
+import { MAINTENANCE_REMINDER_OPERATION_TYPES } from '../../shared/constants/maintenance-reminders.constants';
 import {
   MAX_OPERATION_PHOTOS,
   MAX_OPERATION_SIGNATURE_SIZE_BYTES,
@@ -201,6 +202,7 @@ const OPERATION_CORE_EDIT_FIELDS = new Set<keyof UpdateOperationDto>([
   'reportedIssue',
   'serviceDescription',
   'serviceValue',
+  'maintenanceReminderIntervalMonths',
   'inspectedEquipments',
   'auxiliaryOperatorIds',
 ]);
@@ -211,6 +213,7 @@ const OPERATION_MANAGEMENT_EDIT_FIELDS = new Set<keyof UpdateOperationDto>([
   'type',
   'scheduledFor',
   'serviceValue',
+  'maintenanceReminderIntervalMonths',
 ]);
 type InspectedEquipmentSnapshot = {
   equipmentId: string;
@@ -364,6 +367,22 @@ export class OperationsService {
         HttpStatus.FORBIDDEN,
       );
     }
+    if (
+      dto.maintenanceReminderIntervalMonths !== undefined &&
+      actor.role !== Role.OWNER &&
+      actor.role !== Role.MANAGER
+    ) {
+      throw new ApplicationException(
+        ERROR_CODES.FORBIDDEN,
+        'Somente OWNER e MANAGER podem definir o período do lembrete',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+    this.assertReminderIntervalAllowed(
+      dto.type,
+      requestedDocumentType,
+      dto.maintenanceReminderIntervalMonths,
+    );
     await this.validateRelations(dto.customerId, dto.addressId, dto.equipmentId);
     this.validateReferencePeriod(dto.referenceMonth, dto.referenceYear);
     const inspectedEquipments = await this.resolveInspectedEquipments(
@@ -427,6 +446,7 @@ export class OperationsService {
           reportedIssue: dto.reportedIssue ?? null,
           serviceDescription: dto.serviceDescription ?? null,
           serviceValue: dto.serviceValue ?? null,
+          maintenanceReminderIntervalMonths: dto.maintenanceReminderIntervalMonths ?? null,
           receiptNumber: dto.receiptNumber ?? null,
           receiptIssuedAt: dto.receiptIssuedAt ? new Date(dto.receiptIssuedAt) : null,
           receiptAmount: dto.receiptAmount ?? null,
@@ -645,9 +665,13 @@ export class OperationsService {
         addressId: true,
         operatorId: true,
         status: true,
+        scheduledFor: true,
         startedAt: true,
         completedAt: true,
         type: true,
+        requestedDocumentType: true,
+        serviceValue: true,
+        maintenanceReminderIntervalMonths: true,
         serviceTypes: true,
         referenceMonth: true,
         referenceYear: true,
@@ -664,6 +688,9 @@ export class OperationsService {
         'Operation was not found',
         HttpStatus.NOT_FOUND,
       );
+    if (actor.role === Role.OPERATOR) {
+      this.discardOperatorAdministrativeFields(dto);
+    }
     const changedFields = Object.keys(dto) as Array<keyof UpdateOperationDto>;
     const coreEditRequested = changedFields.some((field) => OPERATION_CORE_EDIT_FIELDS.has(field));
     if (existing.status === OperationStatus.COMPLETED && changedFields.length > 0) {
@@ -687,9 +714,29 @@ export class OperationsService {
         HttpStatus.CONFLICT,
       );
     }
-    const managementEditRequested = changedFields.some((field) =>
-      OPERATION_MANAGEMENT_EDIT_FIELDS.has(field),
-    );
+    const managementEditRequested = changedFields.some((field) => {
+      if (!OPERATION_MANAGEMENT_EDIT_FIELDS.has(field)) return false;
+      switch (field) {
+        case 'customerId':
+          return dto.customerId !== existing.customerId;
+        case 'addressId':
+          return (dto.addressId ?? null) !== (existing.addressId ?? null);
+        case 'equipmentId':
+          return (dto.equipmentId ?? null) !== (existing.equipmentId ?? null);
+        case 'type':
+          return dto.type !== existing.type;
+        case 'scheduledFor':
+          return this.dateValue(dto.scheduledFor) !== this.dateValue(existing.scheduledFor);
+        case 'serviceValue':
+          return (dto.serviceValue ?? null) !==
+            (existing.serviceValue == null ? null : Number(existing.serviceValue));
+        case 'maintenanceReminderIntervalMonths':
+          return (dto.maintenanceReminderIntervalMonths ?? null) !==
+            (existing.maintenanceReminderIntervalMonths ?? null);
+        default:
+          return false;
+      }
+    });
     if (managementEditRequested && actor.role !== Role.OWNER && actor.role !== Role.MANAGER) {
       throw new ApplicationException(
         ERROR_CODES.FORBIDDEN,
@@ -721,6 +768,11 @@ export class OperationsService {
     ) {
       await this.validateRelations(targetCustomerId, targetAddressId, targetEquipmentId);
     }
+    this.assertReminderIntervalAllowed(
+      dto.type ?? existing.type,
+      existing.requestedDocumentType,
+      dto.maintenanceReminderIntervalMonths,
+    );
     if (dto.auxiliaryOperatorIds !== undefined && actor.role !== Role.OWNER && actor.role !== Role.MANAGER) {
       throw new ApplicationException(
         ERROR_CODES.FORBIDDEN,
@@ -813,6 +865,12 @@ export class OperationsService {
             ? { serviceDescription: dto.serviceDescription }
             : {}),
           ...(dto.serviceValue !== undefined ? { serviceValue: dto.serviceValue } : {}),
+          ...(dto.maintenanceReminderIntervalMonths !== undefined
+            ? { maintenanceReminderIntervalMonths: dto.maintenanceReminderIntervalMonths }
+            : {}),
+          ...(dto.type !== undefined && !MAINTENANCE_REMINDER_OPERATION_TYPES.includes(dto.type)
+            ? { maintenanceReminderIntervalMonths: null }
+            : {}),
           ...(dto.receiptNumber !== undefined ? { receiptNumber: dto.receiptNumber } : {}),
           ...(dto.receiptIssuedAt !== undefined
             ? { receiptIssuedAt: new Date(dto.receiptIssuedAt) }
@@ -941,6 +999,14 @@ export class OperationsService {
         await this.lifecycle.publishOperationCompletedTx(tx, id, actor.id, context);
         await this.maintenance.syncOperationCompletedTx(tx, id, actor.id, context);
         await this.reminders.syncFromOperationTx(tx, id);
+      } else if (
+        dto.status !== undefined ||
+        dto.type !== undefined ||
+        dto.scheduledFor !== undefined ||
+        dto.completedAt !== undefined ||
+        dto.maintenanceReminderIntervalMonths !== undefined
+      ) {
+        await this.reminders.syncFromOperationTx(tx, id);
       }
     });
     for (const photo of photos) {
@@ -1067,6 +1133,7 @@ export class OperationsService {
       });
       await tx.assignmentHistory.deleteMany({ where: { operationId: id } });
       await tx.assignment.deleteMany({ where: { operationId: id } });
+      await tx.maintenanceReminder.deleteMany({ where: { operationId: id } });
       await tx.operation.delete({ where: { id } });
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     await Promise.all(storageKeys.map(({ storageKey }) => this.storage.delete(storageKey).catch(() => undefined)));
@@ -1131,6 +1198,7 @@ export class OperationsService {
         }),
       });
       await this.markDocumentsChangedTx(tx, id, actor, ['status']);
+      await this.reminders.syncFromOperationTx(tx, id);
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     return this.operationOrThrow(id);
   }
@@ -1153,7 +1221,7 @@ export class OperationsService {
     await this.prisma.$transaction(async (tx) => {
       const updated = await tx.operation.updateMany({
         where: { id, status: OperationStatus.CANCELED },
-        data: { status: OperationStatus.DRAFT, startedAt: null, completedAt: null },
+        data: { status: OperationStatus.PENDING, startedAt: null, completedAt: null },
       });
       if (updated.count !== 1) {
         throw new ApplicationException(ERROR_CODES.OPERATION_INVALID_TRANSITION, 'A operação foi alterada por outra requisição', HttpStatus.CONFLICT);
@@ -1167,6 +1235,7 @@ export class OperationsService {
         }),
       });
       await this.markDocumentsChangedTx(tx, id, actor, ['status']);
+      await this.reminders.syncFromOperationTx(tx, id);
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     return this.operationOrThrow(id);
   }
@@ -1502,6 +1571,36 @@ export class OperationsService {
         'Reference month and year must be provided together',
         HttpStatus.BAD_REQUEST,
       );
+    }
+  }
+
+  private assertReminderIntervalAllowed(
+    type: OperationType,
+    documentType: DocumentTemplateType,
+    intervalMonths?: number | null,
+  ): void {
+    if (intervalMonths == null) return;
+    if (
+      !MAINTENANCE_REMINDER_OPERATION_TYPES.includes(type) ||
+      documentType === DocumentTemplateType.PMOC
+    ) {
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_INVALID_TRANSITION,
+        'O intervalo de lembrete está disponível somente para preventiva ou instalação fora do PMOC',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  private dateValue(value: string | Date | null | undefined): number | null {
+    if (value == null) return null;
+    const timestamp = value instanceof Date ? value.getTime() : new Date(value).getTime();
+    return Number.isNaN(timestamp) ? null : timestamp;
+  }
+
+  private discardOperatorAdministrativeFields(dto: UpdateOperationDto): void {
+    for (const field of OPERATION_MANAGEMENT_EDIT_FIELDS) {
+      delete dto[field];
     }
   }
 

@@ -57,6 +57,7 @@ type OperationDraftSnapshot = {
   reportedIssue: string;
   serviceDescription: string;
   serviceValue: string;
+  maintenanceReminderIntervalMonths: number;
 };
 type PmocOperationDraft = {
   plan: PmocPlan;
@@ -72,6 +73,8 @@ const ATTENDANCE_DOCUMENT_TYPES: DocumentKind[] = [
   "TECHNICAL_OPINION",
   "BUDGET",
 ];
+
+const REMINDER_INTERVAL_OPTIONS = [1, 2, 3, 4, 6, 12, 18, 24] as const;
 
 const MODE_COPY: Record<Mode, { eyebrow: string; title: string; description: string; success: string }> = {
   operation: {
@@ -148,6 +151,7 @@ export function OperationCreationDrawer({
   const [reportedIssue, setReportedIssue] = useState("");
   const [serviceDescription, setServiceDescription] = useState("");
   const [serviceValue, setServiceValue] = useState("");
+  const [maintenanceReminderIntervalMonths, setMaintenanceReminderIntervalMonths] = useState(6);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<OperationDetail | null>(null);
@@ -192,6 +196,7 @@ export function OperationCreationDrawer({
       reportedIssue,
       serviceDescription,
       serviceValue,
+      maintenanceReminderIntervalMonths,
     }),
     [
       step,
@@ -209,6 +214,7 @@ export function OperationCreationDrawer({
       reportedIssue,
       serviceDescription,
       serviceValue,
+      maintenanceReminderIntervalMonths,
     ],
   );
   const draftDirty =
@@ -233,6 +239,7 @@ export function OperationCreationDrawer({
     setReportedIssue(value.reportedIssue);
     setServiceDescription(value.serviceDescription);
     setServiceValue(value.serviceValue ?? "");
+    setMaintenanceReminderIntervalMonths(value.maintenanceReminderIntervalMonths ?? 6);
   }
 
   useEffect(() => {
@@ -268,6 +275,7 @@ export function OperationCreationDrawer({
         ? String(activeInitialValues.serviceValue)
         : "",
     );
+    setMaintenanceReminderIntervalMonths(activeInitialValues?.maintenanceReminderIntervalMonths ?? 6);
     setSaving(false);
     setError(null);
     setCreated(null);
@@ -300,6 +308,8 @@ export function OperationCreationDrawer({
   }, [date, time]);
   const documentTypeLocked = activeInitialValues?.documentType === "PMOC";
   const isPmocOperation = Boolean(pmocDraft || documentTypeLocked);
+  const reminderEligible =
+    (type === "PREVENTIVA" || type === "INSTALACAO") && documentType !== "PMOC";
   // Origem PMOC disponível ao criar uma operação/agendamento (não em contexto já travado em PMOC).
   const canChooseSource = intent === "create" && !documentTypeLocked && !initialValues && (mode === "operation" || mode === "schedule");
 
@@ -352,6 +362,7 @@ export function OperationCreationDrawer({
         reportedIssue: reportedIssue || null,
         serviceDescription: serviceDescription || null,
         ...(serviceValue.trim() ? { serviceValue: Number(serviceValue) } : {}),
+        ...(reminderEligible ? { maintenanceReminderIntervalMonths } : {}),
       };
       let operation: OperationDetail;
       if (pmocDraft) {
@@ -469,6 +480,7 @@ export function OperationCreationDrawer({
                     reportedIssue: "",
                     serviceDescription: "",
                     serviceValue: "",
+                    maintenanceReminderIntervalMonths: 6,
                   });
                   draft.clear();
                   setRecoveredAt(null);
@@ -618,6 +630,25 @@ export function OperationCreationDrawer({
             {step === 2 && (
               <div className="space-y-3">
                 <ServiceTypeSelect value={type} onChange={setType} />
+                <Field label="Lembrete da próxima manutenção">
+                  <select
+                    value={maintenanceReminderIntervalMonths}
+                    onChange={(event) => setMaintenanceReminderIntervalMonths(Number(event.target.value))}
+                    className={inputCls}
+                    disabled={!reminderEligible}
+                  >
+                    {REMINDER_INTERVAL_OPTIONS.map((months) => (
+                      <option key={months} value={months}>
+                        {months === 1 ? "1 mês" : `${months} meses`}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-caption">
+                    {reminderEligible
+                      ? "Opcional. A próxima manutenção será lembrada após o período escolhido; o padrão é 6 meses."
+                      : "Disponível somente para operações de Preventiva ou Instalação."}
+                  </p>
+                </Field>
                 <Field label="Valor do serviço">
                   <div className="relative">
                     <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-[var(--color-muted-foreground)]">

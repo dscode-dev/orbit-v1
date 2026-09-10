@@ -106,6 +106,7 @@ export function updateOperation(
       | 'observations'
       | 'reportedIssue'
       | 'serviceDescription'
+      | 'maintenanceReminderIntervalMonths'
       | 'receiptNumber'
       | 'receiptIssuedAt'
       | 'receiptAmount'

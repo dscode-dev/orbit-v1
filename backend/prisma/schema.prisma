@@ -1107,6 +1107,7 @@ model Operation {
   /// Valor operacional informado pela gestão ao técnico responsável. Não
   /// integra o Financial Core nem o Document Engine.
   serviceValue                    Decimal?                            @map("service_value") @db.Decimal(15, 2)
+  maintenanceReminderIntervalMonths Int?                             @map("maintenance_reminder_interval_months") @db.SmallInt
   receiptNumber                   String?                             @map("receipt_number") @db.VarChar(40)
   receiptIssuedAt                 DateTime?                           @map("receipt_issued_at") @db.Date
   receiptAmount                   Decimal?                            @map("receipt_amount") @db.Decimal(15, 2)
