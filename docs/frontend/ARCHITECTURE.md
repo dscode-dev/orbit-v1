@@ -10,9 +10,10 @@ continua isolado em sua agenda de execuções.
 
 O mesmo `OperationCreationDrawer` atende criação, edição e cópia. A cópia passa pelo endpoint de
 criação e recebe identidade própria; cancelamento/reativação são comandos explícitos do backend.
-A reativação retorna a Operation para `PENDING`, sem restaurar Assignment anterior. A UI não expõe
-remoção física e apenas controla disponibilidade e confirmação, enquanto imutabilidade, vínculos,
-RBAC, concorrência e transições permanecem sob autoridade do backend.
+A reativação retorna a Operation para `PENDING` e o backend restaura, na mesma transação, a
+Assignment principal anterior quando o técnico permanece ativo. A UI não expõe remoção física e
+apenas controla disponibilidade e confirmação, enquanto imutabilidade, vínculos, RBAC,
+concorrência e transições permanecem sob autoridade do backend.
 
 ## Wizard documental compartilhado
 

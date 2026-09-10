@@ -770,7 +770,12 @@ export class AssignmentsService {
       // App do operador: só demandas autorizadas pela gestão. Itens já aceitos/
       // em andamento/concluídos permanecem visíveis (histórico e execução).
       ...(gateVisibility
-        ? { OR: [{ operatorVisible: true }, { status: { not: AssignmentStatus.ASSIGNED } }] }
+        ? {
+            AND: [
+              { status: { notIn: [AssignmentStatus.CANCELED, AssignmentStatus.REJECTED] } },
+              { OR: [{ operatorVisible: true }, { status: { not: AssignmentStatus.ASSIGNED } }] },
+            ],
+          }
         : {}),
     };
   }
@@ -863,7 +868,7 @@ export class AssignmentsService {
   }): void {
     const reactivatedCancellation =
       assignment.status === AssignmentStatus.CANCELED &&
-      assignment.operation.status === OperationStatus.DRAFT;
+      assignment.operation.status === OperationStatus.PENDING;
     if (
       assignment.status === AssignmentStatus.COMPLETED ||
       (assignment.status === AssignmentStatus.CANCELED && !reactivatedCancellation)

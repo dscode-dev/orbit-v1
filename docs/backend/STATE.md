@@ -18,7 +18,11 @@
   contrato oficial de criação, sem compartilhar histórico, documentos ou atribuições.
 - Cancelamento gerencial preserva a Operation, muda o status para `CANCELED`, cancela as
   Assignments ativas e remove sua visibilidade no Operator. A reativação retorna a Operation para
-  `PENDING` e exige reatribuição.
+  `PENDING` e restaura a Assignment principal anterior como `ASSIGNED` e visível quando o técnico
+  continua ativo. A transição é registrada no histórico sem criar Assignment duplicada.
+- A migration idempotente `20260910043000_restore_reactivated_operation_assignments` corrige
+  Operations já reativadas pela versão anterior que ficaram `PENDING` com Assignment principal
+  `CANCELED`; somente técnicos ativos são restaurados.
 - A Platform não oferece exclusão de Operations; cancelamento é o fluxo administrativo oficial e
   preserva histórico. O endpoint físico permanece apenas por retrocompatibilidade e continua
   bloqueado para registros com vínculos protegidos.

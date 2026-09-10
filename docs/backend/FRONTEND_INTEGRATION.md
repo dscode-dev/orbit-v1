@@ -2792,8 +2792,9 @@ administrativa por equipamento e não reutilize IDs locais do formulário.
   documentos ou históricos.
 - A Platform deve expor somente o cancelamento com confirmação visual. A remoção física não faz
   parte do fluxo administrativo porque uma Operation pode possuir vínculos históricos e comerciais.
-- Após reativar, apresente o status `PENDING`, mantenha a atribuição anterior cancelada e solicite
-  uma reatribuição explícita.
+- Após reativar, apresente o status `PENDING`. A Assignment principal anterior é restaurada para
+  `ASSIGNED` quando o técnico permanece ativo e reaparece automaticamente na fila do Operator;
+  quando não houver técnico elegível, permita uma atribuição explícita pela gestão.
 - O Operator pode reenviar payloads de execução contendo campos administrativos legados; esses
   campos são ignorados pelo backend, enquanto checklist, evidências, assinaturas, conteúdo técnico
   e conclusão são persistidos normalmente.

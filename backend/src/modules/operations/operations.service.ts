@@ -1219,6 +1219,17 @@ export class OperationsService {
       throw new ApplicationException(ERROR_CODES.OPERATION_INVALID_TRANSITION, 'Somente operações canceladas podem ser reativadas', HttpStatus.CONFLICT);
     }
     await this.prisma.$transaction(async (tx) => {
+      const assignment = await tx.assignment.findFirst({
+        where: {
+          operationId: id,
+          isPrimary: true,
+          status: AssignmentStatus.CANCELED,
+          assignee: { isActive: true, disabledAt: null },
+        },
+        orderBy: { assignedAt: 'desc' },
+        select: { id: true, assignedTo: true, status: true },
+      });
+      const now = new Date();
       const updated = await tx.operation.updateMany({
         where: { id, status: OperationStatus.CANCELED },
         data: { status: OperationStatus.PENDING, startedAt: null, completedAt: null },
@@ -1226,12 +1237,50 @@ export class OperationsService {
       if (updated.count !== 1) {
         throw new ApplicationException(ERROR_CODES.OPERATION_INVALID_TRANSITION, 'A operação foi alterada por outra requisição', HttpStatus.CONFLICT);
       }
+      if (assignment) {
+        const restored = await tx.assignment.updateMany({
+          where: { id: assignment.id, status: AssignmentStatus.CANCELED },
+          data: {
+            assignedBy: actor.id,
+            assignedAt: now,
+            status: AssignmentStatus.ASSIGNED,
+            operatorVisible: true,
+            authorizedAt: now,
+            authorizedBy: actor.id,
+            acceptedAt: null,
+            startedAt: null,
+            completedAt: null,
+            canceledAt: null,
+            rejectedAt: null,
+            rejectionReason: null,
+          },
+        });
+        if (restored.count !== 1) {
+          throw new ApplicationException(
+            ERROR_CODES.OPERATION_INVALID_TRANSITION,
+            'A atribuição foi alterada por outra requisição',
+            HttpStatus.CONFLICT,
+          );
+        }
+        await tx.assignmentHistory.create({
+          data: {
+            assignmentId: assignment.id,
+            operationId: id,
+            event: AssignmentEventType.ASSIGNED,
+            actorId: actor.id,
+            previousStatus: AssignmentStatus.CANCELED,
+            newStatus: AssignmentStatus.ASSIGNED,
+            notes: 'Atribuição restaurada pela reativação da operação',
+          },
+        });
+      }
       await tx.auditLog.create({
         data: this.audit(OPERATION_AUDIT_ACTIONS.OPERATION_REACTIVATED, OPERATION_RESOURCE, actor, context, {
           operationId: id,
           number: operation.number,
           previousStatus: operation.status,
-          requiresReassignment: true,
+          assignmentRestored: Boolean(assignment),
+          assignedTo: assignment?.assignedTo ?? null,
         }),
       });
       await this.markDocumentsChangedTx(tx, id, actor, ['status']);
