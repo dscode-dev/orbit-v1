@@ -936,7 +936,11 @@ export function ReportWorkflowDrawer({
             : null;
       const receiptDescription =
         [detail.serviceDescription, detail.observations].filter(Boolean).join('\n') || '';
-      setOperation(detail);
+      // Para Recibos, a OS selecionada e somente a origem dos dados. Ela nao
+      // pode ocupar o estado do registro documental editavel, especialmente
+      // porque uma OS concluida e imutavel. O Recibo sera materializado em uma
+      // operacao documental propria ao preparar o preview.
+      setOperation(type === 'RECEIPT' ? null : detail);
       setForm((current) => ({
         ...current,
         workOrderSource: 'EXISTING',
@@ -1294,10 +1298,13 @@ export function ReportWorkflowDrawer({
         if (!form.technicalSignatureId)
           throw new Error('Selecione a assinatura do responsável técnico.');
         if (form.receiptSource === 'OPERATION') {
-          detail = detail ?? (await operationApi.getOperation(form.operationId));
-          if (detail.status !== 'COMPLETED')
+          const sourceOperation = await operationApi.getOperation(form.operationId);
+          if (sourceOperation.status !== 'COMPLETED')
             throw new Error('Somente Ordens de Serviço concluídas podem originar um Recibo.');
         }
+        // Protecao para drawers abertos antes desta separacao semantica: a OS
+        // de origem nunca deve ser atualizada como se fosse o Recibo.
+        if (form.receiptSource === 'OPERATION' && detail?.id === form.operationId) detail = null;
         const content = contentFor(type, form);
         if (detail) detail = await operationApi.updateOperation(detail.id, content);
         else {
@@ -1372,7 +1379,10 @@ export function ReportWorkflowDrawer({
         }
       }
       setOperation(detail);
-      set('operationId', detail.id);
+      // No fluxo de Recibo, operationId identifica exclusivamente a OS de
+      // origem. O registro do Recibo fica em `operation`; substituir esse id
+      // faria previews subsequentes perderem a origem e tentarem editar a OS.
+      if (type !== 'RECEIPT') set('operationId', detail.id);
       let documentDraft = await documentsApi.saveHandoffDraft(detail.id, type);
       if (form.signatureData && form.customerSignerName.trim()) {
         documentDraft = await documentsApi.collectCustomerSignature(documentDraft.id, {
