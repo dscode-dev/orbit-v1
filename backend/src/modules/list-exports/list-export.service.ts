@@ -5,9 +5,12 @@ import {
   EquipmentType,
   OperationDocumentStatus,
   OperationStatus,
-  OperationType,
   Prisma,
 } from '@prisma/client';
+import {
+  SYSTEM_SERVICE_TYPE_LABELS,
+  type OperationType,
+} from '../../shared/constants/service-types.constants';
 import { DOCUMENT_PAGE } from '../../shared/constants/document-engine.constants';
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
@@ -393,7 +396,8 @@ export class ListExportService {
   }
 
   private operationTypeLabel(type: OperationType): string {
-    return { PREVENTIVA: 'Preventiva', CORRETIVA: 'Corretiva', INSTALACAO: 'Instalação', PROJETO: 'Projeto' }[type];
+    // Tipos do sistema têm rótulo conhecido; tipos custom exibem a própria chave.
+    return SYSTEM_SERVICE_TYPE_LABELS[type] ?? type;
   }
 
   private operationStatusLabel(status: OperationStatus): string {

@@ -62,13 +62,6 @@ enum EquipmentAttachmentCategory {
   DOCUMENT
 }
 
-enum OperationType {
-  PREVENTIVA
-  CORRETIVA
-  INSTALACAO
-  PROJETO
-}
-
 enum OperationStatus {
   DRAFT
   PENDING
@@ -937,8 +930,8 @@ model CustomerServiceTicket {
   number         Int                        @unique @default(autoincrement())
   status         CustomerPortalTicketStatus @default(OPEN)
   documentType   DocumentTemplateType       @default(WORK_ORDER) @map("document_type")
-  operationType  OperationType              @default(CORRETIVA) @map("operation_type")
-  serviceTypes   OperationType[]            @default([]) @map("service_types")
+  operationType  String                     @default("CORRETIVA") @map("operation_type")
+  serviceTypes   String[]                   @default([]) @map("service_types")
   equipmentIds   String[]                   @default([]) @map("equipment_ids") @db.Uuid
   title          String                     @db.VarChar(160)
   description    String                     @db.Text
@@ -1093,9 +1086,9 @@ model Operation {
   addressId                       String?                             @map("address_id") @db.Uuid
   equipmentId                     String?                             @map("equipment_id") @db.Uuid
   operatorId                      String                              @map("operator_id") @db.Uuid
-  type                            OperationType
+  type                            String
   requestedDocumentType           DocumentTemplateType                @default(WORK_ORDER) @map("requested_document_type")
-  serviceTypes                    OperationType[]                     @default([]) @map("service_types")
+  serviceTypes                    String[]                            @default([]) @map("service_types")
   status                          OperationStatus                     @default(DRAFT)
   scheduledFor                    DateTime?                           @map("scheduled_for") @db.Timestamptz(3)
   startedAt                       DateTime?                           @map("started_at") @db.Timestamptz(3)
@@ -1186,7 +1179,7 @@ model MaintenanceReminder {
   customerId     String                    @map("customer_id") @db.Uuid
   equipmentId    String?                   @map("equipment_id") @db.Uuid
   operationId    String?                   @unique @map("operation_id") @db.Uuid
-  operationType  OperationType             @map("operation_type")
+  operationType  String                    @map("operation_type")
   baseDate       DateTime                  @map("base_date") @db.Timestamptz(3)
   dueDate        DateTime                  @map("due_date") @db.Timestamptz(3)
   intervalMonths Int                       @default(6) @map("interval_months")
@@ -1468,6 +1461,33 @@ model DocumentNumberSequence {
   @@map("document_number_sequences")
 }
 
+/// Catálogo editável de "Tipo de Serviço" das operações (antes um enum fixo).
+/// `key` é o valor persistido em Operation.type/serviceTypes etc. — imutável e
+/// estável (os 4 tipos originais mantêm as chaves PREVENTIVA/CORRETIVA/
+/// INSTALACAO/PROJETO para não quebrar registros existentes). `isSystem` protege
+/// esses originais (não podem ser removidos nem ter a chave alterada).
+/// `generatesReminder`/`reminderIntervalMonths` controlam o lembrete de
+/// manutenção por tipo (antes hardcoded em Preventiva/Instalação).
+model ServiceType {
+  id                     String    @id @default(uuid()) @db.Uuid
+  organizationId         String    @map("organization_id") @db.Uuid
+  key                    String    @db.VarChar(60)
+  label                  String    @db.VarChar(120)
+  active                 Boolean   @default(true)
+  isSystem               Boolean   @default(false) @map("is_system")
+  sortOrder              Int       @default(0) @map("sort_order")
+  generatesReminder      Boolean   @default(false) @map("generates_reminder")
+  reminderIntervalMonths Int?      @map("reminder_interval_months")
+  deletedAt              DateTime? @map("deleted_at") @db.Timestamptz(3)
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([organizationId, key])
+  @@index([organizationId, active, sortOrder], map: "service_type_lookup_idx")
+  @@index([organizationId, deletedAt], map: "service_type_deleted_idx")
+  @@map("service_types")
+}
+
 model DocumentRevision {
   id            String                 @id @default(uuid()) @db.Uuid
   documentId    String                 @map("document_id") @db.Uuid
@@ -1690,8 +1710,8 @@ model PmocPlan {
   defaultOperatorId               String?                @map("default_operator_id") @db.Uuid
   defaultTechnicianId             String?                @map("default_technician_id") @db.Uuid
   defaultAddressId                String?                @map("default_address_id") @db.Uuid
-  defaultOperationType            OperationType          @default(PREVENTIVA) @map("default_operation_type")
-  serviceTypes                    OperationType[]        @default([]) @map("service_types")
+  defaultOperationType            String                 @default("PREVENTIVA") @map("default_operation_type")
+  serviceTypes                    String[]               @default([]) @map("service_types")
   defaultEstimatedDurationMinutes Int?                   @map("default_estimated_duration_minutes")
   defaultOperationObservations    String?                @map("default_operation_observations") @db.Text
   includeChecklistInOperations    Boolean                @default(true) @map("include_checklist_in_operations")

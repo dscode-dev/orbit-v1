@@ -10,11 +10,9 @@ import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
 import { buildPaginatedResponse } from '../../shared/types/pagination.types';
-import {
-  DEFAULT_MAINTENANCE_REMINDER_INTERVAL_MONTHS,
-  MAINTENANCE_REMINDER_OPERATION_TYPES,
-} from '../../shared/constants/maintenance-reminders.constants';
+import { DEFAULT_MAINTENANCE_REMINDER_INTERVAL_MONTHS } from '../../shared/constants/maintenance-reminders.constants';
 import { PrismaService } from '../database/prisma.service';
+import { ServiceTypesService } from '../service-types/service-types.service';
 import type {
   ListMaintenanceRemindersQueryDto,
   UpdateMaintenanceReminderDto,
@@ -41,7 +39,10 @@ function addMonths(base: Date, months: number): Date {
 
 @Injectable()
 export class MaintenanceRemindersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly serviceTypes: ServiceTypesService,
+  ) {}
 
   /**
    * Cria/atualiza o lembrete derivado de uma OS. Idempotente por `operationId`.
@@ -67,8 +68,11 @@ export class MaintenanceRemindersService {
     });
     if (!operation) return;
 
+    // A elegibilidade agora vem do catálogo: o tipo de serviço da OS precisa ter
+    // "gera lembrete" marcado (antes fixo em Preventiva/Instalação).
+    const reminderConfig = await this.serviceTypes.getReminderConfigByKey(operation.type);
     const qualifies =
-      MAINTENANCE_REMINDER_OPERATION_TYPES.includes(operation.type) &&
+      (reminderConfig?.generatesReminder ?? false) &&
       operation.requestedDocumentType !== DocumentTemplateType.PMOC &&
       operation.status !== OperationStatus.CANCELED;
 
@@ -78,7 +82,7 @@ export class MaintenanceRemindersService {
     });
 
     if (!qualifies) {
-      // Deixou de qualificar (ex.: OS cancelada): remove lembrete auto-gerado.
+      // Deixou de qualificar (ex.: OS cancelada ou tipo sem lembrete): remove o auto-gerado.
       if (existing) await tx.maintenanceReminder.delete({ where: { operationId } });
       return;
     }
@@ -87,6 +91,7 @@ export class MaintenanceRemindersService {
     const intervalMonths =
       operation.maintenanceReminderIntervalMonths ??
       existing?.intervalMonths ??
+      reminderConfig?.reminderIntervalMonths ??
       DEFAULT_MAINTENANCE_REMINDER_INTERVAL_MONTHS;
     const dueDate = existing?.dateOverridden ? existing.dueDate : addMonths(base, intervalMonths);
     const organizationId = await this.organizationIdTx(tx);

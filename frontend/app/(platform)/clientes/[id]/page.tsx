@@ -56,7 +56,8 @@ import {
 } from '@erp/api';
 import { formatCurrencyBRL, formatDate, formatDateTime, maskCep } from '@erp/utils';
 import { DOCUMENT_KIND_LABEL } from '@erp/types';
-import { OPERATION_STATUS, OPERATION_TYPE_LABEL, operationCode } from '@erp/ui/operations/operation-shared';
+import { OPERATION_STATUS, operationCode } from '@erp/ui/operations/operation-shared';
+import { useServiceTypeLabel } from '@erp/ui/operations/use-service-type-label';
 
 type Tab = 'overview' | 'equipment' | 'services' | 'sales';
 const formatMoney = formatCurrencyBRL;
@@ -143,6 +144,7 @@ function Overview({
   onRefresh: () => void;
 }) {
   const { hasRole } = useAuth();
+  const typeLabel = useServiceTypeLabel();
   const canManage = hasRole('OWNER', 'MANAGER');
   const [contactOpen, setContactOpen] = useState(false);
   const [addressDrawer, setAddressDrawer] = useState<{ address: CustomerAddress | null } | null>(null);
@@ -323,7 +325,7 @@ function Overview({
                       </p>
                       <p className="truncate text-caption">
                         {operation.equipment?.name ?? 'Sem equipamento específico'} ·{' '}
-                        {OPERATION_TYPE_LABEL[operation.type]}
+                        {typeLabel(operation.type)}
                       </p>
                     </div>
                     <div className="shrink-0 text-right">
@@ -660,6 +662,7 @@ function EquipmentTab({ customerId }: { customerId: string }) {
 }
 
 function ServicesTab({ customerId }: { customerId: string }) {
+  const typeLabel = useServiceTypeLabel();
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [operationId, setOperationId] = useState<string | null>(null);
@@ -689,7 +692,7 @@ function ServicesTab({ customerId }: { customerId: string }) {
       cell: (item) => (
         <div>
           {DOCUMENT_KIND_LABEL[item.requestedDocumentType]}
-          <p className="text-caption">{OPERATION_TYPE_LABEL[item.type]}</p>
+          <p className="text-caption">{typeLabel(item.type)}</p>
         </div>
       ),
     },

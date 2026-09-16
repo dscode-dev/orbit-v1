@@ -23,7 +23,8 @@ import { OperationCreationDrawer } from "@platform/components/operation-creation
 import { Gate } from "@erp/ui/auth/gate";
 import { ConfirmDialog } from "@erp/ui/confirm-dialog";
 import { useAuth } from "@erp/ui/auth/auth-provider";
-import { OPERATION_STATUS, OPERATION_TYPE_LABEL, operationCode } from "@erp/ui/operations/operation-shared";
+import { OPERATION_STATUS, operationCode } from "@erp/ui/operations/operation-shared";
+import { useServiceTypeLabel } from "@erp/ui/operations/use-service-type-label";
 import { assignmentsApi, operationApi, useQuery, type OperationSummary, type OperationStatus, type PendingDemandGroup } from "@erp/api";
 import { useDebounce, formatDateTime } from "@erp/utils";
 
@@ -65,6 +66,7 @@ function OperacoesInner() {
   const [tableAction, setTableAction] = useState<OperationSummary | null>(null);
   const [tableActionError, setTableActionError] = useState<string | null>(null);
   const debounced = useDebounce(search, 300);
+  const typeLabel = useServiceTypeLabel();
 
   const list = useQuery(
     (signal) =>
@@ -89,7 +91,7 @@ function OperacoesInner() {
         cell: (o) => <div className="min-w-0"><div className="font-medium truncate">{o.customer?.name ?? "—"}</div><div className="text-caption truncate">{o.equipment?.name ?? "Sem equipamento"}</div></div>,
       },
       { key: "operator", header: "Operador", className: "w-[150px]", cell: (o) => <span className="text-sm truncate">{o.operator?.name ?? "—"}</span> },
-      { key: "type", header: "Tipo", className: "w-[140px]", cell: (o) => <span className="text-sm">{OPERATION_TYPE_LABEL[o.type]}</span> },
+      { key: "type", header: "Tipo", className: "w-[140px]", cell: (o) => <span className="text-sm">{typeLabel(o.type)}</span> },
       { key: "createdAt", header: "Criado", className: "w-[125px]", cell: (o) => <span className="font-mono text-xs">{formatDateTime(o.createdAt)}</span> },
       { key: "scheduledFor", header: "Data do agendamento", className: "w-[155px]", cell: (o) => <span className="font-mono text-xs">{o.scheduledFor ? formatDateTime(o.scheduledFor) : "Não agendado"}</span> },
       { key: "status", header: "Status", className: "w-[190px]", cell: (o) => {
@@ -161,7 +163,7 @@ function OperacoesInner() {
                 cliente: o.customer?.name ?? "",
                 equipamento: o.equipment?.name ?? "",
                 operador: o.operator?.name ?? "",
-                tipo: OPERATION_TYPE_LABEL[o.type],
+                tipo: typeLabel(o.type),
                 criadoEm: formatDateTime(o.createdAt),
                 agendadoPara: o.scheduledFor ? formatDateTime(o.scheduledFor) : "Não agendado",
                 status: OPERATION_STATUS[o.status].label,

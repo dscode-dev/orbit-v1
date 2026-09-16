@@ -1,10 +1,10 @@
 import {
   MaintenancePriority,
-  OperationType,
   PmocExecutionRequestStatus,
   PmocGenerationMode,
   PmocPeriodicity,
 } from '@prisma/client';
+import type { OperationType } from '../../../shared/constants/service-types.constants';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -158,14 +158,14 @@ export class CreatePmocPlanDto {
   @IsOptional() @IsUUID('4')
   defaultAddressId?: string;
 
-  @IsOptional() @IsEnum(OperationType)
+  @IsOptional() @IsString()
   defaultOperationType?: OperationType;
 
   @IsOptional()
   @IsArray()
   @ArrayUnique()
   @ArrayMaxSize(4)
-  @IsEnum(OperationType, { each: true })
+  @IsString({ each: true })
   serviceTypes?: OperationType[];
 
   @IsOptional() @Type(() => Number) @IsInt() @Min(15) @Max(10080)
@@ -276,14 +276,14 @@ export class UpdatePmocPlanDto {
   @IsOptional() @IsUUID('4')
   defaultAddressId?: string | null;
 
-  @IsOptional() @IsEnum(OperationType)
+  @IsOptional() @IsString()
   defaultOperationType?: OperationType;
 
   @IsOptional()
   @IsArray()
   @ArrayUnique()
   @ArrayMaxSize(4)
-  @IsEnum(OperationType, { each: true })
+  @IsString({ each: true })
   serviceTypes?: OperationType[];
 
   @IsOptional() @Type(() => Number) @IsInt() @Min(15) @Max(10080)

@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 
-import { OperationStatus, OperationType, Role } from '@prisma/client';
+import { OperationStatus, Role } from '@prisma/client';
+import { OperationType } from '../src/shared/constants/service-types.constants';
 import { OperationsService } from '../src/modules/operations/operations.service';
 
 describe('Operation management', () => {
@@ -24,6 +25,13 @@ describe('Operation management', () => {
       {} as never,
       { assertOperationAccess: jest.fn().mockResolvedValue(undefined) } as never,
       {} as never,
+      {
+        assertValidTypeKeys: async () => undefined,
+        getReminderConfigByKey: async (key: string) => ({
+          generatesReminder: key === 'PREVENTIVA' || key === 'INSTALACAO',
+          reminderIntervalMonths: 6,
+        }),
+      } as never,
     );
   }
 

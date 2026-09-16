@@ -1,4 +1,5 @@
-import { DocumentTemplateType, OperationType, CustomerPortalTicketStatus } from '@prisma/client';
+import { DocumentTemplateType, CustomerPortalTicketStatus } from '@prisma/client';
+import type { OperationType } from '../../../shared/constants/service-types.constants';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -128,14 +129,14 @@ export class CreateCustomerTicketDto {
   documentType?: DocumentTemplateType;
 
   @IsOptional()
-  @IsEnum(OperationType)
+  @IsString()
   operationType?: OperationType;
 
   @IsOptional()
   @IsArray()
   @ArrayUnique()
   @ArrayMaxSize(4)
-  @IsEnum(OperationType, { each: true })
+  @IsString({ each: true })
   serviceTypes?: OperationType[];
 
   @Transform(({ value }) => trim(value))

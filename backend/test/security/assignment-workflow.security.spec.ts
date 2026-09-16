@@ -1,4 +1,5 @@
-import { AssignmentEventType, AssignmentStatus, DocumentTemplateType, OperationType, Role } from '@prisma/client';
+import { AssignmentEventType, AssignmentStatus, DocumentTemplateType, Role } from '@prisma/client';
+import { OperationType } from '../../src/shared/constants/service-types.constants';
 import { ERROR_CODES } from '../../src/shared/constants/error-codes.constants';
 import { createCustomerGraph, createOperation, createOrganization, prisma } from '../integration/helpers';
 import {

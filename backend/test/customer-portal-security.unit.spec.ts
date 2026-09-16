@@ -1,4 +1,5 @@
-import { DocumentTemplateType, OperationType } from '@prisma/client';
+import { DocumentTemplateType } from '@prisma/client';
+import { OperationType } from '../src/shared/constants/service-types.constants';
 import { CustomerPortalService } from '../src/modules/customer-portal/customer-portal.service';
 
 const account = {

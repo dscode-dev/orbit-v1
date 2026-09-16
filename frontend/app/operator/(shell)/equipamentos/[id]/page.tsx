@@ -10,7 +10,8 @@ import { StatusChip } from "@erp/ui/status-chip";
 import { QrFoundation } from "@platform/components/qr-foundation";
 import { AssetTimeline } from "@erp/ui/assets/asset-timeline";
 import { OperationDetailDrawer } from "@platform/components/operation-detail-drawer";
-import { OPERATION_STATUS, OPERATION_TYPE_LABEL, operationCode } from "@erp/ui/operations/operation-shared";
+import { OPERATION_STATUS, operationCode } from "@erp/ui/operations/operation-shared";
+import { useServiceTypeLabel } from "@erp/ui/operations/use-service-type-label";
 import { equipmentsApi, operationApi, useQuery, type EquipmentDetail } from "@erp/api";
 import { useAuth } from "@erp/ui/auth/auth-provider";
 import { formatDate, formatDateTime } from "@erp/utils";
@@ -19,6 +20,7 @@ import { EQUIPMENT_STATUS_LABEL, EQUIPMENT_STATUS_PILL, EQUIPMENT_TYPE_LABEL } f
 export default function OperatorEquipamentoConsult({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { role, can } = useAuth();
+  const typeLabel = useServiceTypeLabel();
   const canStart = role !== "OPERATOR" || can("canReports");
   const [operationId, setOperationId] = useState<string | null>(null);
   const detail = useQuery<EquipmentDetail>((signal) => equipmentsApi.getEquipment(id, { signal }), [id]);
@@ -88,7 +90,7 @@ export default function OperatorEquipamentoConsult({ params }: { params: Promise
                     <li key={op.id}>
                       <button type="button" onClick={() => setOperationId(op.id)} className="flex w-full items-center gap-3 py-2 text-left">
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-medium">{OPERATION_TYPE_LABEL[op.type]}</span>
+                          <span className="block truncate text-sm font-medium">{typeLabel(op.type)}</span>
                           <span className="block text-caption">{operationCode(op.number)} · {op.scheduledFor ? formatDate(op.scheduledFor) : formatDate(op.createdAt)}</span>
                         </span>
                         <StatusChip tone={OPERATION_STATUS[op.status].tone} dot>{OPERATION_STATUS[op.status].label}</StatusChip>

@@ -3,13 +3,13 @@ import {
   CustomerType,
   EquipmentType,
   OperationStatus,
-  OperationType,
   Role,
   OperationMaintenanceType,
   TechnicalCatalogArea,
   TechnicalCatalogType,
   TechnicalCatalogWorkflow,
 } from '@prisma/client';
+import { OperationType } from '../../src/shared/constants/service-types.constants';
 import {
   createActor,
   createBudgetFixture,
@@ -356,6 +356,7 @@ describe('database integrity constraints with real PostgreSQL', () => {
       {} as never,
       access as never,
       {} as never,
+      { assertValidTypeKeys: async () => undefined, getReminderConfigByKey: async () => null } as never,
     );
 
     await service.addFieldEquipments(

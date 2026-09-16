@@ -22,6 +22,7 @@ import {
   equipmentsApi,
   pmocApi,
   operationApi,
+  serviceTypesApi,
   signaturesApi,
   technicalCatalogsApi,
   usersApi,
@@ -200,6 +201,11 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
     [catalogTick],
   );
   const users = useQuery((signal) => usersApi.listUsers({ limit: 100, signal }), []);
+  // Tipos de serviço vêm do catálogo editável; fallback aos 4 do sistema ao carregar.
+  const serviceTypeQuery = useQuery((signal) => serviceTypesApi.list({ activeOnly: true, signal }), []);
+  const serviceTypeOptions = (serviceTypeQuery.data?.items ?? []).length
+    ? (serviceTypeQuery.data?.items ?? []).map((item) => ({ value: item.key, label: item.label }))
+    : SERVICE_TYPES;
   const signatures = useQuery((signal) => signaturesApi.listSignatures({ limit: 100, active: true, signal }), []);
   const documentConfig = useQuery<DocumentConfiguration>(
     (signal) => documentsApi.getConfigurationByType("PMOC", { signal }),
@@ -648,6 +654,7 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
           scopes={scopes.data?.items ?? []}
           loadingScopes={scopes.loading}
           refreshScopes={() => setCatalogTick((value) => value + 1)}
+          serviceTypeOptions={serviceTypeOptions}
         />}
         {((configurationFlow && step === 1) || (!configurationFlow && step === 2)) && <PlanningStep form={form} set={set} projection={projection} forceFirstExecutionNow={forceFirstExecutionNow} configurationOnly={configurationFlow} />}
         {((configurationFlow && step === 2) || (!configurationFlow && step === 3)) && <ExecutionStep
@@ -746,10 +753,11 @@ function IdentificationStep({ form, set, customers, addresses, onCustomer, onNam
   </Section>;
 }
 
-function CoverageStep({ form, set, equipments, scopes, loadingScopes, refreshScopes }: {
+function CoverageStep({ form, set, equipments, scopes, loadingScopes, refreshScopes, serviceTypeOptions }: {
   form: Form; set: FormSetter; equipments: EquipmentSummary[];
   scopes: Array<{ id: string; title: string; description: string | null }>;
   loadingScopes: boolean; refreshScopes: () => void;
+  serviceTypeOptions: Array<{ value: string; label: string }>;
 }) {
   return <Section icon={ClipboardCheck} title="Cobertura" text="Defina ativos, ambientes e serviços incluídos no plano.">
     <MultiSelect label="Equipamentos cobertos *" value={form.equipmentIds} onChange={(value) => set("equipmentIds", value)} placeholder={form.customerId ? "Selecione um ou mais equipamentos" : "Selecione primeiro o cliente"} emptyMessage="Nenhum equipamento ativo disponível para este cliente." options={equipments.map((item) => ({ value: item.id, label: item.name, description: item.tag ?? item.type }))} />
@@ -757,7 +765,7 @@ function CoverageStep({ form, set, equipments, scopes, loadingScopes, refreshSco
       <MultiSelect label="Escopo do plano *" value={form.scopeCatalogIds} onChange={(value) => set("scopeCatalogIds", value)} placeholder={loadingScopes ? "Carregando escopos…" : "Selecione uma ou mais áreas"} emptyMessage="Nenhum escopo encontrado. Cadastre um item no Catálogo Técnico." options={scopes.map((item) => ({ value: item.id, label: item.title, description: item.description ?? undefined }))} />
       <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--color-muted-foreground)]"><span>Use “Outros” quando necessário ou cadastre um escopo reutilizável no Catálogo Técnico.</span><a href="/maintenance-checklists?type=PLAN_SCOPE" target="_blank" rel="noreferrer" className="font-medium text-[var(--color-primary)]">Abrir Catálogo Técnico</a><button type="button" onClick={refreshScopes} className="inline-flex items-center gap-1 font-medium text-[var(--color-primary)]"><RefreshCw className="h-3 w-3" /> Atualizar lista</button></div>
     </div>
-    <MultiSelect label="Tipos de serviço *" value={form.serviceTypes} onChange={(value) => set("serviceTypes", value as OperationType[])} placeholder="Selecione um ou mais tipos" options={SERVICE_TYPES} />
+    <MultiSelect label="Tipos de serviço *" value={form.serviceTypes} onChange={(value) => set("serviceTypes", value as OperationType[])} placeholder="Selecione um ou mais tipos" options={serviceTypeOptions} />
   </Section>;
 }
 

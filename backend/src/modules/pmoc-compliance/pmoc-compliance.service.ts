@@ -6,7 +6,6 @@ import {
   MaintenancePlanType,
   NotificationType,
   OperationStatus,
-  OperationType,
   PmocComplianceStatus,
   PmocExecutionOrigin,
   PmocExecutionRequestStatus,
@@ -26,6 +25,10 @@ import {
   PMOC_RESOURCE,
 } from '../../shared/constants/pmoc.constants';
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
+import {
+  SYSTEM_SERVICE_TYPE_KEYS,
+  type OperationType,
+} from '../../shared/constants/service-types.constants';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
 import { buildPaginatedResponse, type PaginatedResponse } from '../../shared/types/pagination.types';
@@ -443,7 +446,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     const equipmentIds = this.unique([dto.equipmentId, ...(dto.equipmentIds ?? [])]);
     await this.equipmentsForCustomerOrThrow(equipmentIds, dto.customerId);
     const serviceTypes = this.operationTypes(
-      dto.defaultOperationType ?? OperationType.PREVENTIVA,
+      dto.defaultOperationType ?? SYSTEM_SERVICE_TYPE_KEYS.PREVENTIVA,
       dto.serviceTypes,
     );
     const scopes = await this.planScopesOrThrow(dto.scopeCatalogIds, organization.id);
@@ -511,7 +514,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
           defaultOperatorId: configurationOnly ? null : dto.defaultOperatorId ?? null,
           defaultTechnicianId: dto.defaultTechnicianId ?? null,
           defaultAddressId: dto.defaultAddressId ?? null,
-          defaultOperationType: dto.defaultOperationType ?? OperationType.PREVENTIVA,
+          defaultOperationType: dto.defaultOperationType ?? SYSTEM_SERVICE_TYPE_KEYS.PREVENTIVA,
           serviceTypes,
           defaultEstimatedDurationMinutes: configurationOnly
             ? null

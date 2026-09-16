@@ -3,9 +3,9 @@ import {
   MaintenanceChecklistResult,
   OperationMaintenanceType,
   OperationStatus,
-  OperationType,
   PmocChecklistUnit,
 } from '@prisma/client';
+import type { OperationType } from '../../../shared/constants/service-types.constants';
 import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
@@ -43,7 +43,7 @@ export class ListOperationsQueryDto {
   @IsOptional() @IsUUID('4') customerId?: string;
   @IsOptional() @IsUUID('4') equipmentId?: string;
   @IsOptional() @IsUUID('4') operatorId?: string;
-  @IsOptional() @IsEnum(OperationType) type?: OperationType;
+  @IsOptional() @IsString() type?: OperationType;
   @IsOptional() @IsEnum(OperationStatus) status?: OperationStatus;
 }
 
@@ -158,12 +158,12 @@ export class CreateOperationDto {
   @IsUUID('4', { each: true })
   auxiliaryOperatorIds?: string[];
   @IsOptional() @IsEnum(DocumentTemplateType) documentType?: DocumentTemplateType;
-  @IsEnum(OperationType) type!: OperationType;
+  @IsString() type!: OperationType;
   @IsOptional()
   @IsArray()
   @ArrayUnique()
   @ArrayMaxSize(4)
-  @IsEnum(OperationType, { each: true })
+  @IsString({ each: true })
   serviceTypes?: OperationType[];
   @IsOptional() @IsEnum(OperationStatus) status?: OperationStatus;
   @IsOptional() @IsDateString() scheduledFor?: string;
@@ -298,7 +298,7 @@ export class UpdateOperationDto {
   @IsOptional() @IsUUID('4') customerId?: string;
   @IsOptional() @IsUUID('4') addressId?: string | null;
   @IsOptional() @IsUUID('4') equipmentId?: string | null;
-  @IsOptional() @IsEnum(OperationType) type?: OperationType;
+  @IsOptional() @IsString() type?: OperationType;
   @IsOptional() @IsDateString() scheduledFor?: string | null;
   @IsOptional()
   @Type(() => Number)
@@ -322,7 +322,7 @@ export class UpdateOperationDto {
   @IsArray()
   @ArrayUnique()
   @ArrayMaxSize(4)
-  @IsEnum(OperationType, { each: true })
+  @IsString({ each: true })
   serviceTypes?: OperationType[];
   @IsOptional() @IsEnum(OperationStatus) status?: OperationStatus;
   @IsOptional() @IsDateString() startedAt?: string;

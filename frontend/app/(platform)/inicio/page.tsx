@@ -24,7 +24,8 @@ import { EmptyState } from "@erp/ui/empty-state";
 import { StatusChip } from "@erp/ui/status-chip";
 import { Gate } from "@erp/ui/auth/gate";
 import { useAuth } from "@erp/ui/auth/auth-provider";
-import { OPERATION_STATUS, OPERATION_TYPE_LABEL, operationCode } from "@erp/ui/operations/operation-shared";
+import { OPERATION_STATUS, operationCode } from "@erp/ui/operations/operation-shared";
+import { useServiceTypeLabel } from "@erp/ui/operations/use-service-type-label";
 import {
   assetLifecycleApi,
   assignmentsApi,
@@ -411,6 +412,7 @@ function RecentActivity({ loading, error, onRetry, events }: { loading: boolean;
 /* ---------- Timeline operacional ---------- */
 
 function OperationalTimeline({ loading, error, onRetry, assignments, range }: { loading: boolean; error: unknown; onRetry: () => void; assignments: Assignment[]; range: TimelineRange }) {
+  const typeLabel = useServiceTypeLabel();
   const items = useMemo(() => {
     const withSchedule = assignments.filter((a) => Boolean(a.operation.scheduledFor));
     const filtered = withSchedule.filter((a) => (range === "today" ? isToday(a.operation.scheduledFor) : inNextDays(a.operation.scheduledFor, 7)));
@@ -435,7 +437,7 @@ function OperationalTimeline({ loading, error, onRetry, assignments, range }: { 
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium">{op.customer?.name ?? operationCode(op.number)}</span>
-                  <span className="block truncate text-caption">{OPERATION_TYPE_LABEL[op.type]} · {a.assignee.name}</span>
+                  <span className="block truncate text-caption">{typeLabel(op.type)} · {a.assignee.name}</span>
                 </span>
                 <span className="flex shrink-0 flex-col items-end gap-1">
                   <StatusChip tone={OPERATION_STATUS[op.status].tone} dot>{OPERATION_STATUS[op.status].label}</StatusChip>

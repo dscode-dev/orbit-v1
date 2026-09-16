@@ -24,6 +24,7 @@ import { AssetLifecycleModule } from './modules/asset-lifecycle/asset-lifecycle.
 import { MaintenancePlanningModule } from './modules/maintenance-planning/maintenance-planning.module';
 import { MaintenanceRemindersModule } from './modules/maintenance-reminders/maintenance-reminders.module';
 import { MaintenanceChecklistTemplatesModule } from './modules/maintenance-checklist-templates/maintenance-checklist-templates.module';
+import { ServiceTypesModule } from './modules/service-types/service-types.module';
 import { TechnicalCatalogsModule } from './modules/technical-catalogs/technical-catalogs.module';
 import { PmocComplianceModule } from './modules/pmoc-compliance/pmoc-compliance.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
@@ -69,6 +70,7 @@ import { ResponseEnvelopeInterceptor } from './shared/interceptors/response-enve
     MaintenancePlanningModule,
     MaintenanceRemindersModule,
     MaintenanceChecklistTemplatesModule,
+    ServiceTypesModule,
     TechnicalCatalogsModule,
     PmocComplianceModule,
     InventoryModule,

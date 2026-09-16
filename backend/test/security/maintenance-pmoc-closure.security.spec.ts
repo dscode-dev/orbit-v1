@@ -1,4 +1,5 @@
-import { EquipmentStatus, EquipmentType, MaintenanceExecutionStatus, MaintenancePlanType, OperationType, Role, TechnicalCatalogType, TechnicalCatalogWorkflow } from '@prisma/client';
+import { EquipmentStatus, EquipmentType, MaintenanceExecutionStatus, MaintenancePlanType, Role, TechnicalCatalogType, TechnicalCatalogWorkflow } from '@prisma/client';
+import { OperationType } from '../../src/shared/constants/service-types.constants';
 import { ERROR_CODES } from '../../src/shared/constants/error-codes.constants';
 import { createCustomerGraph, createMaintenanceFixture, createOperation, createOrganization, prisma } from '../integration/helpers';
 import {

@@ -4,8 +4,8 @@ import {
   EquipmentType,
   OperationDocumentStatus,
   OperationStatus,
-  OperationType,
 } from '@prisma/client';
+import type { OperationType } from '../../../shared/constants/service-types.constants';
 import { Transform } from 'class-transformer';
 import { IsDateString, IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
@@ -16,7 +16,7 @@ export class OperationsPdfExportQueryDto {
   @IsOptional() @IsUUID('4') customerId?: string;
   @IsOptional() @IsUUID('4') equipmentId?: string;
   @IsOptional() @IsUUID('4') operatorId?: string;
-  @IsOptional() @IsEnum(OperationType) type?: OperationType;
+  @IsOptional() @IsString() type?: OperationType;
   @IsOptional() @IsEnum(OperationStatus) status?: OperationStatus;
 }
 

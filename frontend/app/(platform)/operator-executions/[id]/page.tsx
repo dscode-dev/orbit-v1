@@ -14,10 +14,12 @@ import { DataTable, type Column } from '@platform/components/data-table';
 import { OperationDetailDrawer } from '@platform/components/operation-detail-drawer';
 import { PageHeader } from '@platform/components/page-header';
 import { Pagination } from '@platform/components/pagination';
-import { OPERATION_STATUS, OPERATION_TYPE_LABEL, operationCode } from '@erp/ui/operations/operation-shared';
+import { OPERATION_STATUS, operationCode } from '@erp/ui/operations/operation-shared';
+import { useServiceTypeLabel } from '@erp/ui/operations/use-service-type-label';
 
 export default function OperatorExecutionDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const typeLabel = useServiceTypeLabel();
   const searchParams = useSearchParams();
   const [month, setMonth] = useState(searchParams.get('month') ?? currentMonth());
   const [view, setView] = useState<'HISTORY' | 'AGENDA'>('HISTORY');
@@ -33,7 +35,7 @@ export default function OperatorExecutionDetailPage() {
   const columns = useMemo<Column<OperatorExecutionOperation>[]>(() => [
     { key: 'number', header: 'Operação', cell: (item) => <span className="font-mono text-xs">{operationCode(item.number)}</span> },
     { key: 'customer', header: 'Cliente / equipamento', cell: (item) => <div><strong>{item.customer.tradeName ?? item.customer.name}</strong><span className="block text-caption">{item.equipment?.name ?? 'Sem equipamento principal'}</span></div> },
-    { key: 'type', header: 'Serviço', cell: (item) => OPERATION_TYPE_LABEL[item.type] },
+    { key: 'type', header: 'Serviço', cell: (item) => typeLabel(item.type) },
     { key: 'scheduled', header: 'Agendado', cell: (item) => item.scheduledFor ? formatDateTime(item.scheduledFor) : 'Não agendado' },
     { key: 'completed', header: 'Concluído', cell: (item) => item.completedAt ? formatDateTime(item.completedAt) : '—' },
     { key: 'status', header: 'Status', cell: (item) => <StatusChip tone={OPERATION_STATUS[item.status].tone} dot>{OPERATION_STATUS[item.status].label}</StatusChip> },
