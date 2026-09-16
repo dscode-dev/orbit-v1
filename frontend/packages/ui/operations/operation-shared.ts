@@ -9,12 +9,26 @@ import type {
 } from "@erp/types";
 import type { ChipTone } from "../status-chip";
 
-export const OPERATION_TYPE_LABEL: Record<OperationType, string> = {
+const SYSTEM_OPERATION_TYPE_LABELS: Record<string, string> = {
   PREVENTIVA: "Preventiva",
   CORRETIVA: "Corretiva",
   INSTALACAO: "Instalação",
   PROJETO: "Projeto / Visita",
 };
+
+/**
+ * Rótulo do tipo de serviço. Os 4 tipos do sistema têm rótulo fixo; tipos
+ * customizados (catálogo editável) não estão neste mapa, então o acesso por
+ * chave retorna a própria chave em vez de `undefined`. O rótulo "bonito" de um
+ * tipo custom aparece no select/CRUD (que consultam o catálogo).
+ */
+export const OPERATION_TYPE_LABEL: Record<OperationType, string> = new Proxy(
+  SYSTEM_OPERATION_TYPE_LABELS,
+  {
+    get: (target, prop) =>
+      typeof prop === "string" ? (target[prop] ?? prop) : Reflect.get(target, prop),
+  },
+);
 
 export const OPERATION_STATUS: Record<OperationStatus, { tone: ChipTone; label: string }> = {
   DRAFT: { tone: "neutral", label: "Rascunho" },

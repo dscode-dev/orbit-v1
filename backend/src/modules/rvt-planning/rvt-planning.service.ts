@@ -4,7 +4,6 @@ import {
   MaintenanceExecutionStatus,
   MaintenancePlanType,
   OperationMaintenanceType,
-  OperationType,
   Prisma,
   Role,
   RvtExecutionStatus,
@@ -12,6 +11,7 @@ import {
   TechnicalCatalogType,
   TechnicalCatalogWorkflow,
 } from '@prisma/client';
+import { SYSTEM_SERVICE_TYPE_KEYS } from '../../shared/constants/service-types.constants';
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
@@ -314,7 +314,7 @@ export class RvtPlanningService {
       equipmentId: execution.rvtPlan.equipments[0]?.equipmentId,
       inspectedEquipments: execution.rvtPlan.equipments.map((item) => ({ equipmentId: item.equipmentId })),
       operatorId,
-      type: OperationType.PREVENTIVA,
+      type: SYSTEM_SERVICE_TYPE_KEYS.PREVENTIVA,
       documentType: DocumentTemplateType.TECHNICAL_REPORT,
       status: 'DRAFT',
       scheduledFor: execution.scheduledAt.toISOString(),

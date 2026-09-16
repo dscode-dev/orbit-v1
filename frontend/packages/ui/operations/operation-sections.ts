@@ -38,7 +38,11 @@ function addressLabel(op: OperationDetail): string {
 }
 
 /** Build the full ordered section list for an operation. */
-export function buildOperationSections(op: OperationDetail): OperationSection[] {
+export function buildOperationSections(
+  op: OperationDetail,
+  resolveTypeLabel?: (key: string) => string,
+): OperationSection[] {
+  const typeLabel = resolveTypeLabel ? resolveTypeLabel(op.type) : OPERATION_TYPE_LABEL[op.type];
   return [
     {
       kind: "fields",
@@ -50,7 +54,7 @@ export function buildOperationSections(op: OperationDetail): OperationSection[] 
         { label: "Endereço", value: addressLabel(op) },
         { label: "Equipamento", value: op.equipment?.name ?? "Sem equipamento" },
         { label: "Operador", value: op.operator?.name ?? "—" },
-        { label: "Tipo", value: OPERATION_TYPE_LABEL[op.type] },
+        { label: "Tipo", value: typeLabel },
         { label: "Status", value: OPERATION_STATUS[op.status].label },
         { label: "Início", value: fmtDate(op.startedAt) },
         { label: "Conclusão", value: fmtDate(op.completedAt) },

@@ -35,6 +35,7 @@ export * as financialApi from './financial';
 export * as procurementApi from './procurement';
 export * as maintenanceApi from './maintenance';
 export * as maintenanceChecklistTemplatesApi from './maintenance-checklist-templates';
+export * as serviceTypesApi from './service-types';
 export * as technicalCatalogsApi from './technical-catalogs';
 export * as pmocApi from './pmoc';
 export * as rvtApi from './rvt';
@@ -69,6 +70,7 @@ export type {
 export type { ListPurchaseOrdersParams } from './procurement';
 export type { ListMaintenancePlansParams, ListMaintenanceExecutionsParams } from './maintenance';
 export type { ListMaintenanceChecklistTemplatesParams } from './maintenance-checklist-templates';
+export type { ServiceTypePayload } from './service-types';
 export type { ListTechnicalCatalogsParams, TechnicalCatalogPayload } from './technical-catalogs';
 export type {
   ListPmocParams,

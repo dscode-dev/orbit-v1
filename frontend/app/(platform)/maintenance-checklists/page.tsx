@@ -13,6 +13,7 @@ import {
 import { useEffect, useState } from 'react';
 import { PageHeader } from '@platform/components/page-header';
 import { Pagination } from '@platform/components/pagination';
+import { ServiceTypesPanel } from '@platform/components/service-types-panel';
 import {
   technicalCatalogsApi,
   useQuery,
@@ -49,7 +50,7 @@ const PMOC_UNITS: Array<{ value: PmocChecklistUnit; label: string }> = [
   { value: 'EVAPORATOR', label: 'Unidade Evaporadora' },
   { value: 'CONDENSER', label: 'Unidade Condensadora' },
 ];
-type CatalogTab = TechnicalCatalogType | 'RVT_CHECKLIST' | 'PMOC_CHECKLIST';
+type CatalogTab = TechnicalCatalogType | 'RVT_CHECKLIST' | 'PMOC_CHECKLIST' | 'SERVICE_TYPE';
 
 export default function TechnicalCatalogsPage() {
   const { hasRole } = useAuth();
@@ -92,10 +93,22 @@ export default function TechnicalCatalogsPage() {
   const isEquipmentType = selectedType === 'EQUIPMENT_TYPE';
   const isBudgetMaterial = selectedType === 'BUDGET_MATERIAL_DESCRIPTION';
   const isSimpleCatalog = isEquipmentType || isBudgetMaterial;
-  const effectiveType = isRvtChecklist || isPmocChecklist ? 'CHECKLIST' : selectedType;
+  // 'SERVICE_TYPE' não é um TechnicalCatalogType (tem painel próprio); vira
+  // undefined aqui para não vazar para as APIs/filtros de catálogo técnico.
+  const effectiveType: TechnicalCatalogType | undefined =
+    isRvtChecklist || isPmocChecklist
+      ? 'CHECKLIST'
+      : selectedType && selectedType !== 'SERVICE_TYPE'
+        ? (selectedType as TechnicalCatalogType)
+        : undefined;
   const catalogs = useQuery<Paginated<TechnicalCatalog>>(
     (signal) =>
-      technicalCatalogsApi.list({
+      selectedType === 'SERVICE_TYPE'
+        ? Promise.resolve({
+            items: [],
+            pagination: { page: 1, limit, total: 0, totalPages: 0 },
+          } as unknown as Paginated<TechnicalCatalog>)
+        : technicalCatalogsApi.list({
         page,
         limit,
         search: search || undefined,
@@ -171,7 +184,7 @@ export default function TechnicalCatalogsPage() {
           title="Catálogos Técnicos"
           description="Bibliotecas reutilizáveis para checklists, documentos e fluxos operacionais."
           actions={
-            canEdit && selectedType ? (
+            canEdit && selectedType && selectedType !== 'SERVICE_TYPE' ? (
               <button
                 type="button"
                 onClick={() => setEditor('create')}
@@ -230,7 +243,24 @@ export default function TechnicalCatalogsPage() {
                 ]
               : []),
           ])}
+          <button
+            key="SERVICE_TYPE"
+            type="button"
+            onClick={() => {
+              setSelectedType('SERVICE_TYPE');
+              setPage(1);
+              setMaintenanceType('');
+              setWorkflow('');
+            }}
+            className={`whitespace-nowrap rounded-[var(--radius-md)] px-3 py-2 text-sm ${selectedType === 'SERVICE_TYPE' ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)]' : 'hover:bg-[var(--color-muted)]'}`}
+          >
+            Tipo de Serviço
+          </button>
         </div>
+        {selectedType === 'SERVICE_TYPE' ? (
+          <ServiceTypesPanel canEdit={canEdit} />
+        ) : (
+        <>
         {notice && (
           <div className="rounded-[var(--radius-md)] border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700">
             {notice}
@@ -575,6 +605,8 @@ export default function TechnicalCatalogsPage() {
             }
           }}
         />
+        </>
+        )}
       </div>
     </Gate>
   );

@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 
-import { MaintenanceReminderStatus, OperationStatus, OperationType, Role } from '@prisma/client';
+import { MaintenanceReminderStatus, OperationStatus, Role } from '@prisma/client';
+import { OperationType } from '../src/shared/constants/service-types.constants';
 import { MaintenanceRemindersService } from '../src/modules/maintenance-reminders/maintenance-reminders.service';
 
 describe('Maintenance reminders', () => {
@@ -34,7 +35,7 @@ describe('Maintenance reminders', () => {
       },
     };
 
-    await new MaintenanceRemindersService({} as never).syncFromOperationTx(tx as never, operationId);
+    await new MaintenanceRemindersService({} as never, { getReminderConfigByKey: async (key: string) => ({ generatesReminder: key === 'PREVENTIVA' || key === 'INSTALACAO', reminderIntervalMonths: 6 }) } as never).syncFromOperationTx(tx as never, operationId);
 
     const upsert = (tx.maintenanceReminder.upsert.mock.calls as unknown[][])[0]?.[0] as {
       create: { intervalMonths: number; dueDate: Date };
@@ -64,7 +65,7 @@ describe('Maintenance reminders', () => {
       $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx)),
     };
 
-    await new MaintenanceRemindersService(prisma as never).update(
+    await new MaintenanceRemindersService(prisma as never, { getReminderConfigByKey: async (key: string) => ({ generatesReminder: key === 'PREVENTIVA' || key === 'INSTALACAO', reminderIntervalMonths: 6 }) } as never).update(
       reminderId,
       { intervalMonths: 12 },
       actor as never,
@@ -115,7 +116,7 @@ describe('Maintenance reminders', () => {
       organization: { findFirst: jest.fn().mockResolvedValue({ id: organizationId }) },
     };
 
-    await new MaintenanceRemindersService({} as never).syncFromOperationTx(tx as never, operationId);
+    await new MaintenanceRemindersService({} as never, { getReminderConfigByKey: async (key: string) => ({ generatesReminder: key === 'PREVENTIVA' || key === 'INSTALACAO', reminderIntervalMonths: 6 }) } as never).syncFromOperationTx(tx as never, operationId);
 
     const upsert = (tx.maintenanceReminder.upsert.mock.calls as unknown[][])[0]?.[0] as {
       create: { intervalMonths: number };

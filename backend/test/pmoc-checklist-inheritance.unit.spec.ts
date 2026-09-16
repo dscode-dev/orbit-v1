@@ -1,10 +1,10 @@
 import {
   MaintenanceChecklistResult,
   OperationMaintenanceType,
-  OperationType,
   PmocChecklistUnit,
   Role,
 } from '@prisma/client';
+import { OperationType } from '../src/shared/constants/service-types.constants';
 import { PmocExecutionRequestsService } from '../src/modules/pmoc-compliance/pmoc-execution-requests.service';
 import type { AuthenticatedUser } from '../src/shared/types/authenticated-user.type';
 

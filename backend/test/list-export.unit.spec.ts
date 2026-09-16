@@ -1,4 +1,5 @@
-import { OperationStatus, OperationType } from '@prisma/client';
+import { OperationStatus } from '@prisma/client';
+import { OperationType } from '../src/shared/constants/service-types.constants';
 import { PdfEngineService } from '../src/modules/document-engine/pdf/pdf-engine.service';
 import { ListExportService } from '../src/modules/list-exports/list-export.service';
 

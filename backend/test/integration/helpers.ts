@@ -11,7 +11,6 @@ import {
   MaintenancePlanType,
   MaintenancePriority,
   OperationStatus,
-  OperationType,
   Prisma,
   PrismaClient,
   PurchaseOrderStatus,
@@ -19,6 +18,7 @@ import {
   StockMovementType,
 } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
+import { OperationType } from '../../src/shared/constants/service-types.constants';
 import { DocumentAssetResolver } from '../../src/modules/document-engine/assets/document-asset-resolver.service';
 import { DocumentBuilderService } from '../../src/modules/document-engine/builder/document-builder.service';
 import { DocumentConfigurationService } from '../../src/modules/document-engine/configuration/document-configuration.service';

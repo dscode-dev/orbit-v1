@@ -4,9 +4,9 @@ import {
   CustomerPortalTicketStatus,
   DocumentTemplateType,
   OperationStatus,
-  OperationType,
   Prisma,
 } from '@prisma/client';
+import { SYSTEM_SERVICE_TYPE_KEYS } from '../../shared/constants/service-types.constants';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { AppConfigService } from '../config/app-config.service';
 import { PrismaService } from '../database/prisma.service';
@@ -511,8 +511,8 @@ export class CustomerPortalService {
         addressId: dto.addressId ?? null,
         equipmentIds: dto.equipmentIds ?? [],
         documentType: dto.documentType ?? DocumentTemplateType.WORK_ORDER,
-        operationType: dto.operationType ?? OperationType.CORRETIVA,
-        serviceTypes: dto.serviceTypes ?? [dto.operationType ?? OperationType.CORRETIVA],
+        operationType: dto.operationType ?? SYSTEM_SERVICE_TYPE_KEYS.CORRETIVA,
+        serviceTypes: dto.serviceTypes ?? [dto.operationType ?? SYSTEM_SERVICE_TYPE_KEYS.CORRETIVA],
         title: dto.title,
         description: dto.description,
         priority: dto.priority ?? null,

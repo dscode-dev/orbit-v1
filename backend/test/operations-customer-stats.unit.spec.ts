@@ -30,6 +30,7 @@ describe('Operations customer stats', () => {
       {} as never,
       access as never,
       {} as never,
+      { assertValidTypeKeys: async () => undefined, getReminderConfigByKey: async () => null } as never,
     );
     const customerId = '22222222-2222-4222-8222-222222222222';
 

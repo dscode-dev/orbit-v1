@@ -1,5 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { AssetLifecycleEventType, FinancialEntryOrigin, OperationType, Prisma } from '@prisma/client';
+import { AssetLifecycleEventType, FinancialEntryOrigin, Prisma } from '@prisma/client';
+import type { OperationType } from '../../shared/constants/service-types.constants';
 import {
   ASSET_LIFECYCLE_AUDIT_ACTIONS,
   ASSET_LIFECYCLE_RESOURCE,
@@ -692,13 +693,14 @@ export class LifecyclePublisher {
   }
 
   private lifecycleTypeForOperation(type: OperationType): AssetLifecycleEventType {
-    const mapping: Record<OperationType, AssetLifecycleEventType> = {
+    const mapping: Record<string, AssetLifecycleEventType> = {
       PREVENTIVA: AssetLifecycleEventType.PREVENTIVE,
       CORRETIVA: AssetLifecycleEventType.CORRECTIVE,
       INSTALACAO: AssetLifecycleEventType.INSTALLATION,
       PROJETO: AssetLifecycleEventType.CUSTOM,
     };
-    return mapping[type];
+    // Tipos de serviço customizados (fora dos 4 originais) caem em CUSTOM.
+    return mapping[type] ?? AssetLifecycleEventType.CUSTOM;
   }
 
   private async resolveFinancialEquipmentId(

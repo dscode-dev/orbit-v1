@@ -897,7 +897,26 @@ export type CreateEquipmentPayload = {
 
 /* ============ Operations (central operational domain) ============ */
 
-export type OperationType = 'PREVENTIVA' | 'CORRETIVA' | 'INSTALACAO' | 'PROJETO';
+/**
+ * Chave do tipo de serviço da operação. Antes um conjunto fixo; agora é a chave
+ * de um item do catálogo `ServiceType` (CRUD do owner), então é texto livre. Os
+ * tipos do sistema mantêm as chaves PREVENTIVA/CORRETIVA/INSTALACAO/PROJETO.
+ */
+export type OperationType = string;
+
+/** Item do catálogo editável de "Tipo de Serviço" (aba em Catálogos Técnicos). */
+export type ServiceType = {
+  id: string;
+  key: string;
+  label: string;
+  active: boolean;
+  isSystem: boolean;
+  sortOrder: number;
+  generatesReminder: boolean;
+  reminderIntervalMonths: number | null;
+  createdAt: string;
+  updatedAt: string;
+};
 export type OperationStatus =
   | 'DRAFT'
   | 'PENDING'

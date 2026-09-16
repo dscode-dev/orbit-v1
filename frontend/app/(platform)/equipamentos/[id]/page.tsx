@@ -15,7 +15,8 @@ import { EmptyState } from "@erp/ui/empty-state";
 import { DrawerTabs } from "@erp/ui/drawer-tabs";
 import { AssetTimeline } from "@erp/ui/assets/asset-timeline";
 import { OperationDetailDrawer } from "@platform/components/operation-detail-drawer";
-import { OPERATION_STATUS, OPERATION_TYPE_LABEL, operationCode } from "@erp/ui/operations/operation-shared";
+import { OPERATION_STATUS, operationCode } from "@erp/ui/operations/operation-shared";
+import { useServiceTypeLabel } from "@erp/ui/operations/use-service-type-label";
 import { equipmentsApi, assetLifecycleApi, operationApi, pmocApi, useQuery, type EquipmentDetail, type AssetLifecycleStats } from "@erp/api";
 import { formatDate, formatDateTime } from "@erp/utils";
 import {
@@ -29,6 +30,7 @@ type Tab = (typeof TABS)[number];
 
 export default function EquipamentoDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const typeLabel = useServiceTypeLabel();
   const [tab, setTab] = useState<Tab>("Resumo");
   const [operationId, setOperationId] = useState<string | null>(null);
   const detail = useQuery<EquipmentDetail>((signal) => equipmentsApi.getEquipment(id, { signal }), [id]);
@@ -104,7 +106,7 @@ export default function EquipamentoDetailPage({ params }: { params: Promise<{ id
                             <button type="button" onClick={() => setOperationId(op.id)} className="-mx-2 flex w-full items-center gap-3 rounded-[var(--radius-md)] px-2 py-2.5 text-left hover:bg-[var(--color-muted)]/40">
                               <span className="w-24 shrink-0 font-mono text-xs text-[var(--color-muted-foreground)]">{operationCode(op.number)}</span>
                               <span className="min-w-0 flex-1">
-                                <span className="block truncate text-sm font-medium">{OPERATION_TYPE_LABEL[op.type]}{op.customer ? ` · ${op.customer.name}` : ""}</span>
+                                <span className="block truncate text-sm font-medium">{typeLabel(op.type)}{op.customer ? ` · ${op.customer.name}` : ""}</span>
                                 <span className="block text-caption">{op.scheduledFor ? formatDateTime(op.scheduledFor) : formatDateTime(op.createdAt)}</span>
                               </span>
                               <StatusChip tone={OPERATION_STATUS[op.status].tone} dot>{OPERATION_STATUS[op.status].label}</StatusChip>

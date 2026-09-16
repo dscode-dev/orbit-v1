@@ -1,5 +1,6 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { AssignmentEventType, AssignmentStatus, DocumentHandoffOrigin, DocumentRevisionAction, DocumentTemplateType, EquipmentStatus, EquipmentType, OperationStatus, OperationType, Prisma, Role, TechnicalCatalogType } from '@prisma/client';
+import { AssignmentEventType, AssignmentStatus, DocumentHandoffOrigin, DocumentRevisionAction, DocumentTemplateType, EquipmentStatus, EquipmentType, OperationStatus, Prisma, Role, TechnicalCatalogType } from '@prisma/client';
+import type { OperationType } from '../../shared/constants/service-types.constants';
 import { randomUUID } from 'node:crypto';
 import {
   STORAGE_PROVIDER_TOKEN,
@@ -8,7 +9,7 @@ import {
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
 import { CUSTOMER_SIGNATURE_REQUIRED_DOCUMENT_TYPES, DOCUMENT_ONLY_DOCUMENT_TYPES, OPERATOR_DIRECT_COMPLETION_DOCUMENT_TYPES, SKIP_AUTO_WORK_ORDER_DOCUMENT_TYPES } from '../../shared/constants/document-engine.constants';
 import { PMOC_MIN_PROCEDURE_IMAGES } from '../../shared/constants/pmoc.constants';
-import { MAINTENANCE_REMINDER_OPERATION_TYPES } from '../../shared/constants/maintenance-reminders.constants';
+import { ServiceTypesService } from '../service-types/service-types.service';
 import {
   MAX_OPERATION_PHOTOS,
   MAX_OPERATION_SIGNATURE_SIZE_BYTES,
@@ -239,6 +240,7 @@ export class OperationsService {
     private readonly assignments: AssignmentsService,
     private readonly access: OperationAccessService,
     private readonly financial: FinancialService,
+    private readonly serviceTypes: ServiceTypesService,
   ) {}
 
   async list(query: ListOperationsQueryDto, actor: AuthenticatedUser): Promise<unknown> {
@@ -378,11 +380,12 @@ export class OperationsService {
         HttpStatus.FORBIDDEN,
       );
     }
-    this.assertReminderIntervalAllowed(
+    await this.assertReminderIntervalAllowed(
       dto.type,
       requestedDocumentType,
       dto.maintenanceReminderIntervalMonths,
     );
+    await this.serviceTypes.assertValidTypeKeys([dto.type, ...(dto.serviceTypes ?? [])]);
     await this.validateRelations(dto.customerId, dto.addressId, dto.equipmentId);
     this.validateReferencePeriod(dto.referenceMonth, dto.referenceYear);
     const inspectedEquipments = await this.resolveInspectedEquipments(
@@ -768,11 +771,17 @@ export class OperationsService {
     ) {
       await this.validateRelations(targetCustomerId, targetAddressId, targetEquipmentId);
     }
-    this.assertReminderIntervalAllowed(
+    await this.assertReminderIntervalAllowed(
       dto.type ?? existing.type,
       existing.requestedDocumentType,
       dto.maintenanceReminderIntervalMonths,
     );
+    if (dto.type !== undefined || dto.serviceTypes !== undefined) {
+      await this.serviceTypes.assertValidTypeKeys([
+        ...(dto.type !== undefined ? [dto.type] : []),
+        ...(dto.serviceTypes ?? []),
+      ]);
+    }
     if (dto.auxiliaryOperatorIds !== undefined && actor.role !== Role.OWNER && actor.role !== Role.MANAGER) {
       throw new ApplicationException(
         ERROR_CODES.FORBIDDEN,
@@ -830,6 +839,11 @@ export class OperationsService {
         },
       );
     }
+    // Se o tipo mudou para um que NÃO gera lembrete, zera o intervalo salvo
+    // (antes fixo em Preventiva/Instalação; agora vem do catálogo).
+    const clearsReminderInterval =
+      dto.type !== undefined &&
+      !(await this.serviceTypes.getReminderConfigByKey(dto.type))?.generatesReminder;
     await this.prisma.$transaction(async (tx) => {
       await tx.operation.update({
         where: { id },
@@ -868,9 +882,7 @@ export class OperationsService {
           ...(dto.maintenanceReminderIntervalMonths !== undefined
             ? { maintenanceReminderIntervalMonths: dto.maintenanceReminderIntervalMonths }
             : {}),
-          ...(dto.type !== undefined && !MAINTENANCE_REMINDER_OPERATION_TYPES.includes(dto.type)
-            ? { maintenanceReminderIntervalMonths: null }
-            : {}),
+          ...(clearsReminderInterval ? { maintenanceReminderIntervalMonths: null } : {}),
           ...(dto.receiptNumber !== undefined ? { receiptNumber: dto.receiptNumber } : {}),
           ...(dto.receiptIssuedAt !== undefined
             ? { receiptIssuedAt: new Date(dto.receiptIssuedAt) }
@@ -1623,19 +1635,17 @@ export class OperationsService {
     }
   }
 
-  private assertReminderIntervalAllowed(
+  private async assertReminderIntervalAllowed(
     type: OperationType,
     documentType: DocumentTemplateType,
     intervalMonths?: number | null,
-  ): void {
+  ): Promise<void> {
     if (intervalMonths == null) return;
-    if (
-      !MAINTENANCE_REMINDER_OPERATION_TYPES.includes(type) ||
-      documentType === DocumentTemplateType.PMOC
-    ) {
+    const config = await this.serviceTypes.getReminderConfigByKey(type);
+    if (!config?.generatesReminder || documentType === DocumentTemplateType.PMOC) {
       throw new ApplicationException(
         ERROR_CODES.OPERATION_INVALID_TRANSITION,
-        'O intervalo de lembrete está disponível somente para preventiva ou instalação fora do PMOC',
+        'O intervalo de lembrete está disponível somente para tipos de serviço com lembrete habilitado, fora do PMOC',
         HttpStatus.BAD_REQUEST,
       );
     }

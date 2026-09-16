@@ -54,6 +54,7 @@ import {
   equipmentsApi,
   operationApi,
   pmocApi,
+  serviceTypesApi,
   technicalCatalogsApi,
   useQuery,
   ApiClientError,
@@ -1647,9 +1648,18 @@ function TipoStep({
   selected: ServiceTypeKey | null;
   onSelect: (k: ServiceTypeKey) => void;
 }) {
+  // Opções vêm do catálogo editável; fallback aos tipos do sistema ao carregar.
+  const catalog = useQuery((signal) => serviceTypesApi.list({ activeOnly: true, signal }), []);
+  const options = (catalog.data?.items ?? []).length
+    ? (catalog.data?.items ?? []).map((item) => ({
+        key: item.key,
+        label: item.label,
+        description: SERVICE_TYPES.find((t) => t.key === item.key)?.description ?? '',
+      }))
+    : SERVICE_TYPES;
   return (
     <div className="space-y-2">
-      {SERVICE_TYPES.map((t) => (
+      {options.map((t) => (
         <button
           key={t.key}
           type="button"
@@ -1660,7 +1670,7 @@ function TipoStep({
             <span className="font-medium">{t.label}</span>
             {selected === t.key && <Check className="h-4 w-4 text-[var(--color-primary)]" />}
           </div>
-          <p className="text-caption mt-0.5">{t.description}</p>
+          {t.description && <p className="text-caption mt-0.5">{t.description}</p>}
         </button>
       ))}
     </div>

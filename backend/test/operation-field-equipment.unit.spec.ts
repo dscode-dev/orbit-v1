@@ -66,6 +66,7 @@ describe('Operation field equipment collection', () => {
       {} as never,
       access as never,
       {} as never,
+      { assertValidTypeKeys: async () => undefined, getReminderConfigByKey: async () => null } as never,
     );
 
     await service.addFieldEquipments(

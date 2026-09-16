@@ -13,6 +13,7 @@ import { DOCUMENT_KIND_LABEL } from "@erp/types";
 import { StatusChip } from "../status-chip";
 import { buildOperationSections, type OperationSection } from "./operation-sections";
 import { OPERATION_DOC_STATUS } from "./operation-shared";
+import { useServiceTypeLabel } from "./use-service-type-label";
 
 export function OperationView({
   operation,
@@ -24,7 +25,8 @@ export function OperationView({
   photoSources?: Record<string, string>;
   onOpenDocument?: (documentId: string) => void;
 }) {
-  const sections = buildOperationSections(operation);
+  const typeLabel = useServiceTypeLabel();
+  const sections = buildOperationSections(operation, typeLabel);
   return (
     <div className="space-y-5">
       {sections.map((section) => (

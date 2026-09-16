@@ -5,7 +5,9 @@
  * ficam aqui: vêm de Catálogos Técnicos (type CHECKLIST) por workflow do
  * documento, carregados em tempo real (ver `technicalCatalogsApi.listChecklistItems`).
  */
-export type ServiceTypeKey = "PREVENTIVA" | "CORRETIVA" | "INSTALACAO" | "PROJETO";
+// Antes um conjunto fixo; agora é a chave de um item do catálogo editável de
+// tipos de serviço (pode ser um tipo custom criado pelo owner).
+export type ServiceTypeKey = string;
 
 export type ServiceTypeConfig = {
   key: ServiceTypeKey;
@@ -36,6 +38,8 @@ export const SERVICE_TYPES: ServiceTypeConfig[] = [
   },
 ];
 
-export function serviceTypeLabel(key: ServiceTypeKey): string {
+// Aceita qualquer chave (tipos custom do catálogo) — cai no próprio valor quando
+// não é um dos tipos do sistema conhecidos.
+export function serviceTypeLabel(key: string): string {
   return SERVICE_TYPES.find((t) => t.key === key)?.label ?? key;
 }

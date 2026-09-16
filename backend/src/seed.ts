@@ -12,6 +12,7 @@ import {
 import * as argon2 from 'argon2';
 import { ARGON2_OPTIONS } from './infra/security/argon2.constants';
 import { MIN_PASSWORD_LENGTH } from './shared/constants/users.constants';
+import { SYSTEM_SERVICE_TYPE_SEED } from './shared/constants/service-types.constants';
 
 const prisma = new PrismaClient();
 
@@ -328,6 +329,20 @@ async function ensureDefaultOrganization(): Promise<void> {
       },
     },
     select: { id: true },
+  });
+  // Tipos de serviço do sistema (Preventiva/Corretiva/Instalação/Projeto). A
+  // migração cuida das orgs existentes; aqui cobrimos a criação de uma org nova.
+  await prisma.serviceType.createMany({
+    data: SYSTEM_SERVICE_TYPE_SEED.map((t) => ({
+      organizationId: organization.id,
+      key: t.key,
+      label: t.label,
+      isSystem: true,
+      sortOrder: t.sortOrder,
+      generatesReminder: t.generatesReminder,
+      reminderIntervalMonths: t.reminderIntervalMonths,
+    })),
+    skipDuplicates: true,
   });
   process.stdout.write(
     `${JSON.stringify({ event: 'organization_bootstrap_created', organizationId: organization.id })}\n`,

@@ -15,7 +15,8 @@ import { SkeletonList } from "@erp/ui/skeletons";
 import { ErrorState } from "@erp/ui/states";
 import { AssetTimeline } from "@erp/ui/assets/asset-timeline";
 import { OperationView } from "@erp/ui/operations/operation-view";
-import { OPERATION_STATUS, OPERATION_TYPE_LABEL, operationCode } from "@erp/ui/operations/operation-shared";
+import { OPERATION_STATUS, operationCode } from "@erp/ui/operations/operation-shared";
+import { useServiceTypeLabel } from "@erp/ui/operations/use-service-type-label";
 import { DocumentViewer } from "@erp/ui/documents/document-viewer";
 import { SignaturePad } from "@erp/ui/documents/signature-pad";
 import { CustomerSignaturePreview } from "@erp/ui/documents/customer-signature-preview";
@@ -45,6 +46,7 @@ export function OperationDetailDrawer({
   onChanged?: () => void;
   onCopied?: (operation: OperationDetail) => void;
 }) {
+  const typeLabel = useServiceTypeLabel();
   const detail = useQuery<OperationDetail | null>(
     (signal) => (operationId ? operationApi.getOperation(operationId, { signal }) : Promise.resolve(null)),
     [operationId],
@@ -105,7 +107,7 @@ export function OperationDetailDrawer({
       ) : op ? (
         <div className="space-y-5">
           <div className="flex flex-wrap items-center gap-2">
-            <StatusChip tone="primary">{OPERATION_TYPE_LABEL[op.type]}</StatusChip>
+            <StatusChip tone="primary">{typeLabel(op.type)}</StatusChip>
             <StatusChip tone={activeCancellation ? "danger" : OPERATION_STATUS[op.status].tone} dot>{activeCancellation ? "Cancelado pelo operador" : OPERATION_STATUS[op.status].label}</StatusChip>
             <Gate roles={["OWNER", "MANAGER"]}>
               <span className="ml-auto flex flex-wrap items-center gap-2">

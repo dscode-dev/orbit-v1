@@ -5,6 +5,7 @@ import { MultiSelect } from "@erp/ui/multi-select";
 import {
   customersApi,
   equipmentsApi,
+  serviceTypesApi,
   usersApi,
   useQuery,
   type Customer,
@@ -116,10 +117,23 @@ export function AuxiliaryOperatorSelect({
 }
 
 export function ServiceTypeSelect({ value, onChange }: { value: OperationType; onChange: (value: OperationType) => void }) {
+  // Opções vêm do catálogo editável (aba "Tipo de Serviço" em Catálogos Técnicos);
+  // enquanto carrega, usa os 4 tipos do sistema como fallback.
+  const types = useQuery((signal) => serviceTypesApi.list({ activeOnly: true, signal }), []);
+  const options = useMemo(() => {
+    const items = types.data?.items ?? [];
+    const fromCatalog = items.map((item) => ({ value: item.key, label: item.label }));
+    // Garante que o valor atual (ex.: tipo desativado de uma OS existente) apareça.
+    if (value && !fromCatalog.some((o) => o.value === value)) {
+      const fallbackLabel = SERVICE_TYPES.find((t) => t.value === value)?.label ?? value;
+      return [{ value, label: fallbackLabel }, ...fromCatalog];
+    }
+    return fromCatalog.length ? fromCatalog : SERVICE_TYPES;
+  }, [types.data, value]);
   return (
     <Field label="Tipo de serviço">
       <select value={value} onChange={(event) => onChange(event.target.value as OperationType)} className={inputCls}>
-        {SERVICE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
+        {options.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
       </select>
     </Field>
   );

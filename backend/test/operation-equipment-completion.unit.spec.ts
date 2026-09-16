@@ -16,6 +16,7 @@ describe('Operation equipment profile completion', () => {
       {} as never,
       {} as never,
     {} as never,
+      { assertValidTypeKeys: async () => undefined, getReminderConfigByKey: async () => null } as never,
     );
 
     await (
