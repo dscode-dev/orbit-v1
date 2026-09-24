@@ -90,22 +90,44 @@ function ArtLifespan() {
 }
 
 function ArtAirQuality() {
+  // Leitura da esquerda para a direita: ar sujo entra, o filtro retém a sujeira,
+  // ar limpo sai. As legendas evitam que a cena vire "linhas e bolinhas".
+  const lanes = [58, 90, 122];
   return (
     <svg {...artProps}>
-      {/* filtro retendo partículas; ar limpo do outro lado */}
-      <rect x="86" y="34" width="46" height="112" rx="10" className="lp-art-card" />
-      {Array.from({ length: 6 }).map((_, i) => (
-        <path key={i} d={`M90 ${44 + i * 18} h38`} className="lp-art-filter" />
+      {/* ar sujo entrando */}
+      {lanes.map((y) => (
+        <g key={`in-${y}`} className="lp-art-dirty-flow">
+          <path d={`M26 ${y} H88`} />
+          <path d={`M82 ${y - 5} l6 5 l-6 5`} />
+        </g>
       ))}
       {[
-        [40, 52], [56, 88], [36, 118], [62, 132], [30, 78],
+        [38, 42], [62, 72], [34, 104], [58, 138], [44, 76], [70, 108],
       ].map(([cx, cy], i) => (
-        <circle key={i} cx={cx} cy={cy} r={i % 2 ? 5 : 3.5} className="lp-art-dust" />
+        <circle key={`dust-${cx}-${cy}`} cx={cx} cy={cy} r={i % 2 ? 4.5 : 3} className="lp-art-dust" />
       ))}
-      <g className="lp-art-clean">
-        <path d="M148 60 h54" /><path d="M148 90 h66" /><path d="M148 120 h48" />
-      </g>
-      <path d="M204 34 c-12 10 -18 20 -6 28 10 -6 14 -18 6 -28 z" className="lp-art-leaf" />
+
+      {/* filtro: malha + a sujeira que ficou presa na face de entrada */}
+      <rect x="96" y="28" width="38" height="120" rx="9" className="lp-art-card" />
+      {Array.from({ length: 7 }).map((_, i) => (
+        <path key={i} d={`M101 ${40 + i * 17} h28`} className="lp-art-filter" />
+      ))}
+      {[46, 70, 94, 118, 136].map((cy) => (
+        <circle key={`held-${cy}`} cx="96" cy={cy} r="3.5" className="lp-art-dust" />
+      ))}
+
+      {/* ar limpo saindo */}
+      {lanes.map((y) => (
+        <g key={`out-${y}`} className="lp-art-clean-flow">
+          <path d={`M142 ${y} H204`} />
+          <path d={`M198 ${y - 5} l6 5 l-6 5`} />
+        </g>
+      ))}
+      <path d="M188 20 c-13 10 -19 21 -6 29 11 -6 15 -19 6 -29 z" className="lp-art-leaf" />
+
+      <text x="57" y="168" textAnchor="middle" className="lp-art-text">ar sujo</text>
+      <text x="173" y="168" textAnchor="middle" className="lp-art-text">ar filtrado</text>
     </svg>
   );
 }
@@ -126,19 +148,44 @@ function ArtSafety() {
 }
 
 function ArtSavings() {
+  // Duas barras na MESMA linha de base (é o que fazia o gráfico parecer quebrado),
+  // rótulos abaixo do eixo e a seta mostrando a queda de custo entre elas.
+  const baseline = 144;
+  const bars = [
+    { x: 40, top: 44, label: "corretiva", className: "lp-art-bar-high" },
+    { x: 104, top: 104, label: "preventiva", className: "lp-art-accent" },
+  ];
   return (
     <svg {...artProps}>
-      {/* custo da corretiva x preventiva */}
-      <rect x="38" y="70" width="40" height="76" rx="8" className="lp-art-bar-high" />
-      <rect x="100" y="104" width="40" height="42" rx="8" className="lp-art-accent" />
-      <text x="40" y="60" className="lp-art-text">corretiva</text>
-      <text x="100" y="94" className="lp-art-text">preventiva</text>
-      <path d="M84 62 C112 44 150 46 176 62" className="lp-art-arc" />
-      <path d="M176 62 l-10 -3 m10 3 l-3 10" className="lp-art-arrow" />
-      <g className="lp-art-coins">
-        <ellipse cx="196" cy="126" rx="22" ry="8" className="lp-art-accent-soft" />
-        <ellipse cx="196" cy="114" rx="22" ry="8" className="lp-art-accent-soft" />
-        <ellipse cx="196" cy="102" rx="22" ry="8" className="lp-art-accent" />
+      {bars.map((bar) => (
+        <g key={bar.label}>
+          <rect
+            x={bar.x}
+            y={bar.top}
+            width="44"
+            height={baseline - bar.top}
+            rx="6"
+            className={bar.className}
+          />
+          <text x={bar.x + 22} y={baseline + 18} textAnchor="middle" className="lp-art-text">
+            {bar.label}
+          </text>
+        </g>
+      ))}
+      <path d={`M26 ${baseline} H214`} className="lp-art-axis" />
+
+      {/* queda de custo: do topo da corretiva para o topo da preventiva */}
+      <path d="M88 50 C 96 72, 98 82, 102 98" className="lp-art-arrow" />
+      <path d="M102 100 l-7 -5 m7 5 l2 -8" className="lp-art-arrow" />
+
+      {/* o que sobra no caixa */}
+      <g>
+        <ellipse cx="192" cy="136" rx="20" ry="7" className="lp-art-accent-soft" />
+        <ellipse cx="192" cy="124" rx="20" ry="7" className="lp-art-accent-soft" />
+        <ellipse cx="192" cy="112" rx="20" ry="7" className="lp-art-accent" />
+        <text x="192" y={baseline + 18} textAnchor="middle" className="lp-art-text">
+          economia
+        </text>
       </g>
     </svg>
   );

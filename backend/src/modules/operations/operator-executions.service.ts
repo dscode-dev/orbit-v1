@@ -30,7 +30,19 @@ const OPERATOR_SELECT = {
   isActive: true,
   disabledAt: true,
   avatarAssetId: true,
+  permission: { select: { canReports: true, canSchedules: true } },
 } satisfies Prisma.UserSelect;
+
+type OperatorRecord = Prisma.UserGetPayload<{ select: typeof OPERATOR_SELECT }>;
+
+/**
+ * Técnico auxiliar: operador que só acompanha a demanda (permissão de
+ * agendamentos, sem relatórios). Ele não constrói nem conclui o atendimento
+ * pelo app, então é listado com esse papel em vez do cargo cadastrado.
+ */
+function isAssistantTechnician(operator: OperatorRecord): boolean {
+  return Boolean(operator.permission && !operator.permission.canReports);
+}
 
 @Injectable()
 export class OperatorExecutionsService {
@@ -69,8 +81,9 @@ export class OperatorExecutionsService {
       period: this.periodPayload(period),
       kpis,
       ...buildPaginatedResponse(
-        operators.map((operator) => ({
+        operators.map(({ permission, ...operator }) => ({
           ...operator,
+          isAssistant: isAssistantTechnician({ ...operator, permission }),
           metrics: metrics.get(operator.id) ?? this.emptyMetrics(operator.id),
         })),
         total,
@@ -82,10 +95,10 @@ export class OperatorExecutionsService {
 
   async get(operatorId: string, query: OperatorExecutionPeriodDto): Promise<unknown> {
     const period = await this.period(query);
-    const operator = await this.operatorOrThrow(operatorId);
+    const { permission, ...operator } = await this.operatorOrThrow(operatorId);
     const [metrics] = await this.metricsForOperators([operatorId], period);
     return {
-      operator,
+      operator: { ...operator, isAssistant: isAssistantTechnician({ ...operator, permission }) },
       period: this.periodPayload(period),
       metrics: metrics ?? this.emptyMetrics(operatorId),
     };

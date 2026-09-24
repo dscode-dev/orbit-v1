@@ -71,8 +71,15 @@ const SERVICES = [
     icon: ShieldCheck,
     title: "Manutenção Preventiva",
     image: "/servicos/manutencao-preventiva.webp",
-    text: "Planos periódicos que prolongam a vida útil dos equipamentos, reduzem consumo de energia e garantem conformidade (PMOC).",
+    text: "Planos periódicos que prolongam a vida útil dos equipamentos, reduzem o consumo de energia e evitam paradas inesperadas.",
     cta: "Quero agendar manutenção",
+  },
+  {
+    icon: ClipboardCheck,
+    title: "PMOC",
+    image: "/servicos/pmoc.webp",
+    text: "Plano de Manutenção, Operação e Controle elaborado e executado conforme a legislação, com relatórios que comprovam a conformidade do ambiente.",
+    cta: "Quero meu PMOC",
   },
   {
     icon: Gauge,
@@ -323,9 +330,6 @@ export function LandingPage() {
                 <div className="lp-ac__front">
                   <div className="lp-ac__unit">
                     <img src="/landing/evaporadora.webp" alt="" width={1120} height={370} />
-                    <span className="lp-ac__brand">
-                      <BrandLogo height={86} alt={name} />
-                    </span>
                   </div>
                   <img className="lp-ac__air" src="/landing/fluxo-ar.webp" alt="" width={1120} height={330} />
                   <span className="lp-ac__flake lp-ac__flake--1">
@@ -755,10 +759,6 @@ html { scroll-behavior: smooth; }
 .lp-ac__front { position: absolute; left: 0; bottom: 4%; width: 92%; filter: drop-shadow(0 30px 40px rgba(8, 15, 30, .55)); }
 .lp-ac__unit { position: relative; }
 
-/* Logo aplicada no painel frontal, como a marca do equipamento. */
-.lp-ac__brand { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%); display: flex; align-items: center; justify-content: center; width: 42%; }
-.lp-ac__brand img { max-width: 100%; height: auto !important; filter: drop-shadow(0 2px 8px rgba(15, 23, 42, .22)); }
-
 /* Ar insuflado: peça separada da foto. A máscara evita que o jato termine
    num corte reto na base da imagem. */
 .lp-ac__air { margin-top: -1.5%;
@@ -876,6 +876,10 @@ html { scroll-behavior: smooth; }
 .lp-art-alert { stroke: color-mix(in srgb, var(--color-foreground) 40%, transparent); stroke-width: 3; stroke-linecap: round; }
 .lp-art-alert-dot { fill: color-mix(in srgb, var(--color-foreground) 40%, transparent); }
 .lp-art-bar-high { fill: color-mix(in srgb, var(--color-foreground) 18%, transparent); }
+.lp-art-axis { stroke: color-mix(in srgb, var(--color-foreground) 18%, transparent); stroke-width: 2.5; stroke-linecap: round; fill: none; }
+/* Fluxo de ar: cinza na entrada (sujo), azul na saída (filtrado). */
+.lp-art-dirty-flow path { fill: none; stroke: color-mix(in srgb, var(--color-foreground) 34%, transparent); stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
+.lp-art-clean-flow path { fill: none; stroke: color-mix(in srgb, var(--lp-primary) 65%, transparent); stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
 @media (prefers-reduced-motion: reduce) { .lp-carousel__track { transition: none; } }
 
 /* Sections */

@@ -1390,6 +1390,8 @@ export type OperatorExecutionUser = {
   isActive: boolean;
   disabledAt: string | null;
   avatarAssetId: string | null;
+  /** Operador sem permissão de relatórios: acompanha a demanda como auxiliar. */
+  isAssistant: boolean;
 };
 
 export type OperatorExecutionRow = OperatorExecutionUser & { metrics: OperatorExecutionMetrics };

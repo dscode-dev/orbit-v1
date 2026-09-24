@@ -37,7 +37,11 @@ export default function OperatorExecutionsPage() {
         cell: (item) => (
           <div>
             <strong>{item.name}</strong>
-            <span className="block text-caption">{item.jobTitle ?? `@${item.username}`}</span>
+            {/* O auxiliar acompanha o atendimento, mas não o executa: o papel
+                vale mais que o cargo cadastrado para quem lê esta lista. */}
+            <span className="block text-caption">
+              {item.isAssistant ? 'Auxiliar Técnico' : (item.jobTitle ?? `@${item.username}`)}
+            </span>
           </div>
         ),
       },
