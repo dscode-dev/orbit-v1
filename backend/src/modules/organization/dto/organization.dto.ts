@@ -1,9 +1,11 @@
+import { CommissionPeriod } from '@prisma/client';
 import { Transform } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
   IsEmail,
+  IsEnum,
   IsHexColor,
   IsOptional,
   IsString,
@@ -159,4 +161,9 @@ export class UpdateOrganizationSettingsDto {
   @MaxLength(20)
   @Matches(/^[A-Z0-9_-]+$/)
   documentPrefix?: string;
+
+  /** Janela de apuração das comissões dos técnicos. */
+  @IsOptional()
+  @IsEnum(CommissionPeriod)
+  commissionPeriod?: CommissionPeriod;
 }

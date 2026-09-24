@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Download, Loader2, Plus, RefreshCw, Search, Wallet } from "lucide-react";
+import { Download, Loader2, Percent, Plus, RefreshCw, Search, Wallet } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { DashboardSection } from "@platform/components/dashboard-section";
 import { Pagination } from "@platform/components/pagination";
@@ -25,6 +25,7 @@ import {
 } from "@erp/api";
 import { formatCurrencyBRL, formatDate } from "@erp/utils";
 import { FinancialStatusBadge, FinancialTypeBadge } from "@platform/components/financial-procurement-badges";
+import { CommissionSettingsDrawer } from "@platform/components/commission-settings-drawer";
 
 const entryTypes: Array<FinancialEntryType | ""> = ["", "RECEIVABLE", "PAYABLE"];
 const statuses: Array<FinancialEntryStatus | ""> = ["", "PENDING", "PAID", "OVERDUE", "CANCELED"];
@@ -43,6 +44,7 @@ export default function FinancialPage() {
   const [to, setTo] = useState("");
   const [entryOpen, setEntryOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [commissionOpen, setCommissionOpen] = useState(false);
 
   const stats = useQuery<FinancialStats>((signal) => financialApi.getStats({ signal }), []);
   const entries = useQuery<Paginated<FinancialEntry>>(
@@ -88,6 +90,9 @@ export default function FinancialPage() {
           actions={
             <>
               <button className="btn-secondary" onClick={refetchAll}><RefreshCw className="h-4 w-4" /> Atualizar</button>
+              <Gate roles={["OWNER"]}>
+                <button className="btn-secondary" onClick={() => setCommissionOpen(true)}><Percent className="h-4 w-4" /> Comissões</button>
+              </Gate>
               <button className="btn-secondary" onClick={() => setImportOpen(true)}><Download className="h-4 w-4" /> Importar recibos</button>
               <button className="btn-primary" onClick={() => setEntryOpen(true)}><Plus className="h-4 w-4" /> Novo lançamento</button>
             </>
@@ -159,6 +164,7 @@ export default function FinancialPage() {
 
         <NewEntryDrawer open={entryOpen} onClose={() => setEntryOpen(false)} onSaved={refetchAll} />
         <ImportReceiptsDrawer open={importOpen} onClose={() => setImportOpen(false)} onImported={refetchAll} />
+        <CommissionSettingsDrawer open={commissionOpen} onClose={() => setCommissionOpen(false)} />
       </div>
     </Gate>
   );

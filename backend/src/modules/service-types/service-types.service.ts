@@ -27,6 +27,8 @@ const SERVICE_TYPE_SELECT = {
   sortOrder: true,
   generatesReminder: true,
   reminderIntervalMonths: true,
+  commissionEligible: true,
+  commissionPercent: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.ServiceTypeSelect;
@@ -77,6 +79,8 @@ export class ServiceTypesService {
             sortOrder: (max._max.sortOrder ?? -1) + 1,
             generatesReminder: dto.generatesReminder ?? false,
             reminderIntervalMonths: dto.generatesReminder ? (dto.reminderIntervalMonths ?? null) : null,
+            commissionEligible: dto.commissionEligible ?? true,
+            commissionPercent: dto.commissionPercent ?? 0,
           },
           select: SERVICE_TYPE_SELECT,
         });
@@ -117,6 +121,8 @@ export class ServiceTypesService {
                   : null,
               }
             : {}),
+          ...(dto.commissionEligible !== undefined ? { commissionEligible: dto.commissionEligible } : {}),
+          ...(dto.commissionPercent !== undefined ? { commissionPercent: dto.commissionPercent } : {}),
         },
         select: SERVICE_TYPE_SELECT,
       });

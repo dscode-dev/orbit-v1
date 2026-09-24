@@ -16,6 +16,7 @@ import {
   ArrowRight,
   ClipboardCheck,
   FileSignature,
+  Gauge,
   Mail,
   MapPin,
   Menu,
@@ -42,26 +43,46 @@ const NAV = [
   { href: "#contato", label: "Contato" },
 ];
 
+/**
+ * Serviços exibidos como cards com foto (estilo comercial). As fotos reais ficam
+ * em `public/servicos/*.webp` (otimizadas). Se um arquivo faltar, o card cai num
+ * degradê com o ícone do serviço, sem quebrar o layout.
+ */
 const SERVICES = [
   {
-    icon: ShieldCheck,
-    title: "Manutenção Preventiva",
-    text: "Planos periódicos que prolongam a vida útil dos equipamentos, garantem eficiência energética e conformidade com a Lei 13.589/2018 (PMOC).",
+    icon: Settings2,
+    title: "Projetos",
+    image: "/servicos/projetos.webp",
+    text: "Projetos de climatização sob medida para ambientes residenciais, comerciais e industriais — dimensionados por responsável técnico.",
+    cta: "Solicitar um projeto",
   },
   {
     icon: Wrench,
     title: "Manutenção Corretiva",
-    text: "Diagnóstico e reparo ágil de falhas em sistemas de climatização e refrigeração, com peças e procedimentos rastreáveis.",
+    image: "/servicos/manutencao-corretiva.webp",
+    text: "Diagnóstico e reparo ágil de falhas em ar-condicionado e refrigeração, com peças e procedimentos rastreáveis.",
+    cta: "Preciso de um reparo",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Manutenção Preventiva",
+    image: "/servicos/manutencao-preventiva.webp",
+    text: "Planos periódicos que prolongam a vida útil dos equipamentos, reduzem consumo de energia e garantem conformidade (PMOC).",
+    cta: "Quero agendar manutenção",
+  },
+  {
+    icon: Gauge,
+    title: "Cálculo de Carga Térmica",
+    image: "/servicos/calculo-carga-termica.webp",
+    text: "Levantamento técnico para definir a capacidade (BTUs) ideal do equipamento, evitando gasto excessivo e baixo desempenho.",
+    cta: "Calcular minha carga térmica",
   },
   {
     icon: Wind,
     title: "Instalação",
-    text: "Dimensionamento e instalação de equipamentos de ar-condicionado e refrigeração, executados dentro das normas técnicas.",
-  },
-  {
-    icon: Settings2,
-    title: "Projetos & Consultoria",
-    text: "Projetos de climatização e soluções sob medida para ambientes comerciais, industriais e residenciais.",
+    image: "/servicos/instalacao.webp",
+    text: "Instalação e substituição de equipamentos executadas dentro das normas técnicas, com acabamento profissional.",
+    cta: "Preciso de uma instalação",
   },
 ];
 
@@ -267,20 +288,74 @@ export function LandingPage() {
           </div>
 
           <div className="lp-hero__visual" data-reveal>
-            <div className="lp-hero__card">
-              <BrandLogo height={52} alt={name} />
-              <div className="lp-hero__card-grid">
-                {[
-                  { icon: Wind, label: "Ar-condicionado" },
-                  { icon: Snowflake, label: "Refrigeração" },
-                  { icon: ShieldCheck, label: "Preventiva" },
-                  { icon: FileSignature, label: "Laudos digitais" },
-                ].map(({ icon: Icon, label }) => (
-                  <div key={label} className="lp-chip">
-                    <Icon size={18} />
-                    <span>{label}</span>
-                  </div>
-                ))}
+            {/* Split de ar-condicionado desenhado em SVG, com a logo da empresa
+                aplicada no painel frontal como marca do equipamento. */}
+            <div className="lp-ac" role="img" aria-label={`${name} — ar-condicionado`}>
+              <span className="lp-ac__glow" aria-hidden />
+              <div className="lp-ac__unit">
+                <svg className="lp-ac__svg" viewBox="0 0 560 250" aria-hidden>
+                  <defs>
+                    <linearGradient id="lpAcBody" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#ffffff" />
+                      <stop offset="62%" stopColor="#f4f8fc" />
+                      <stop offset="100%" stopColor="#dfe8f2" />
+                    </linearGradient>
+                    <linearGradient id="lpAcVane" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#e8eef6" />
+                      <stop offset="100%" stopColor="#c3cfdc" />
+                    </linearGradient>
+                    <linearGradient id="lpAcGloss" x1="0" y1="0" x2="1" y2="1">
+                      <stop offset="0%" stopColor="#ffffff" stopOpacity="0.85" />
+                      <stop offset="55%" stopColor="#ffffff" stopOpacity="0.05" />
+                      <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
+                    </linearGradient>
+                    <filter id="lpAcShadow" x="-25%" y="-25%" width="150%" height="170%">
+                      <feDropShadow dx="0" dy="22" stdDeviation="20" floodColor="#0f172a" floodOpacity="0.22" />
+                    </filter>
+                  </defs>
+
+                  {/* corpo principal */}
+                  <g filter="url(#lpAcShadow)">
+                    <rect x="16" y="18" width="528" height="150" rx="30" fill="url(#lpAcBody)" />
+                  </g>
+                  <rect x="16" y="18" width="528" height="150" rx="30" fill="none" stroke="#0f172a" strokeOpacity="0.12" />
+                  {/* brilho diagonal */}
+                  <rect x="16" y="18" width="528" height="150" rx="30" fill="url(#lpAcGloss)" />
+
+                  {/* grelha de entrada de ar (topo) */}
+                  <g fill="#0f172a" opacity="0.07">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <rect key={i} x="54" y={36 + i * 9} width="452" height="3.5" rx="1.75" />
+                    ))}
+                  </g>
+
+                  {/* defletor de saída de ar */}
+                  <path d="M40 168 H520 a14 14 0 0 1 -6 11 L74 196 a16 16 0 0 1 -20 -6 Z" fill="url(#lpAcVane)" />
+                  <path d="M40 168 H520 a14 14 0 0 1 -6 11 L74 196 a16 16 0 0 1 -20 -6 Z" fill="none" stroke="#0f172a" strokeOpacity="0.1" />
+                  <rect x="70" y="176" width="420" height="3" rx="1.5" fill="#0f172a" opacity="0.08" />
+
+                  {/* display lateral */}
+                  <rect x="452" y="126" width="72" height="20" rx="10" fill="#0f172a" opacity="0.06" />
+                  <circle cx="466" cy="136" r="4" fill="#22c55e" />
+                  <rect x="478" y="133" width="34" height="6" rx="3" fill="#0f172a" opacity="0.18" />
+                </svg>
+
+                <div className="lp-ac__brand">
+                  <BrandLogo height={62} alt={name} />
+                </div>
+              </div>
+
+              <div className="lp-ac__flow" aria-hidden>
+                <span />
+                <span />
+                <span />
+                <span />
+                <span />
+              </div>
+
+              <div className="lp-ac__badge">
+                <Snowflake size={16} />
+                <span>Ar-condicionado &amp; Refrigeração</span>
               </div>
             </div>
           </div>
@@ -298,15 +373,53 @@ export function LandingPage() {
               vida dos seus equipamentos.
             </p>
           </header>
-          <div className="lp-grid lp-grid--4">
-            {SERVICES.map(({ icon: Icon, title, text }, i) => (
-              <article key={title} className="lp-card" data-reveal style={{ transitionDelay: `${i * 60}ms` }}>
-                <span className="lp-card__icon">
-                  <Icon size={22} />
-                </span>
-                <h3 className="lp-card__title">{title}</h3>
-                <p className="lp-card__text">{text}</p>
-              </article>
+          <div className="lp-svc-grid">
+            {SERVICES.map(({ icon: Icon, title, text, image, cta }, i) => {
+              const ctaUrl = whatsappUrl
+                ? `https://wa.me/${company?.whatsapp}?text=${encodeURIComponent(`Olá! Tenho interesse em ${title}.`)}`
+                : null;
+              return (
+                <article key={title} className="lp-svc" data-reveal style={{ transitionDelay: `${i * 60}ms` }}>
+                  <div className="lp-svc__media">
+                    <img
+                      src={image}
+                      alt={title}
+                      loading="lazy"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).style.display = "none";
+                      }}
+                    />
+                    <span className="lp-svc__media-fallback" aria-hidden>
+                      <Icon size={40} />
+                    </span>
+                    <span className="lp-svc__tag">
+                      <Icon size={15} /> {title}
+                    </span>
+                  </div>
+                  <div className="lp-svc__body">
+                    <h3 className="lp-svc__title">{title}</h3>
+                    <p className="lp-svc__text">{text}</p>
+                    {ctaUrl && (
+                      <a href={ctaUrl} target="_blank" rel="noopener noreferrer" className="lp-svc__cta">
+                        <MessageCircle size={16} /> {cta}
+                      </a>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+          <div className="lp-benefits" data-reveal>
+            {[
+              { icon: ShieldCheck, label: "Responsável técnico credenciado" },
+              { icon: Gauge, label: "Economia de energia" },
+              { icon: Snowflake, label: "Ambiente mais saudável" },
+              { icon: MessageCircle, label: "Atendimento ágil pelo WhatsApp" },
+            ].map(({ icon: Icon, label }) => (
+              <div key={label} className="lp-benefit">
+                <Icon size={20} />
+                <span>{label}</span>
+              </div>
             ))}
           </div>
         </div>
@@ -567,6 +680,47 @@ html { scroll-behavior: smooth; }
 .lp-chip { display: flex; align-items: center; gap: 10px; padding: 14px; border-radius: 14px; font-size: 14px; font-weight: 500; background: color-mix(in srgb, var(--lp-primary) 8%, transparent); border: 1px solid color-mix(in srgb, var(--lp-primary) 16%, transparent); color: color-mix(in srgb, var(--lp-primary) 72%, var(--color-foreground)); }
 .lp-chip svg { color: var(--lp-primary); }
 
+/* Hero: ilustração de ar-condicionado (split) com a logo como marca */
+.lp-ac { position: relative; width: 100%; max-width: 520px; display: flex; flex-direction: column; align-items: center; padding: 8px 0 0; }
+.lp-ac__glow { position: absolute; inset: -14% -10% auto; height: 340px; background:
+  radial-gradient(360px 220px at 50% 30%, color-mix(in srgb, var(--lp-primary) 26%, transparent), transparent 72%),
+  radial-gradient(240px 180px at 78% 62%, color-mix(in srgb, var(--lp-secondary) 20%, transparent), transparent 70%);
+  pointer-events: none; }
+.lp-ac__unit { position: relative; width: 100%; }
+.lp-ac__svg { display: block; width: 100%; height: auto; overflow: visible; }
+/* Logo aplicada no painel frontal, como a marca do equipamento. */
+.lp-ac__brand { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); display: flex; align-items: center; justify-content: center; max-width: 62%; }
+.lp-ac__brand img { max-width: 100%; height: auto !important; filter: drop-shadow(0 2px 6px rgba(15,23,42,.14)); }
+.lp-ac__flow { position: relative; width: 78%; height: 56px; margin-top: -6px; display: flex; justify-content: space-between; align-items: flex-start; }
+.lp-ac__flow span { width: 4px; border-radius: 4px; background: linear-gradient(180deg, color-mix(in srgb, var(--lp-primary) 70%, transparent), transparent); animation: lp-ac-flow 2.4s ease-in-out infinite; }
+.lp-ac__flow span:nth-child(2) { animation-delay: .3s; }
+.lp-ac__flow span:nth-child(3) { animation-delay: .6s; }
+.lp-ac__flow span:nth-child(4) { animation-delay: .9s; }
+.lp-ac__flow span:nth-child(5) { animation-delay: 1.2s; }
+@keyframes lp-ac-flow { 0%,100% { height: 16px; opacity: .35; } 50% { height: 52px; opacity: .95; } }
+.lp-ac__badge { margin-top: 6px; display: inline-flex; align-items: center; gap: 8px; padding: 9px 18px; border-radius: 999px; font-size: 13px; font-weight: 600; color: var(--lp-primary); background: color-mix(in srgb, var(--lp-primary) 10%, transparent); border: 1px solid color-mix(in srgb, var(--lp-primary) 22%, transparent); }
+@media (prefers-reduced-motion: reduce) { .lp-ac__flow span { animation: none; height: 30px; } }
+
+/* Serviços: cards com foto + CTA (estilo comercial) */
+.lp-svc-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.lp-svc { display: flex; flex-direction: column; overflow: hidden; border-radius: 18px; background: var(--color-background); border: 1px solid color-mix(in srgb, var(--color-foreground) 10%, transparent); transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
+.lp-svc:hover { transform: translateY(-4px); box-shadow: 0 20px 44px color-mix(in srgb, var(--color-foreground) 12%, transparent); border-color: color-mix(in srgb, var(--lp-primary) 40%, transparent); }
+.lp-svc__media { position: relative; aspect-ratio: 4 / 3; display: flex; align-items: center; justify-content: center; overflow: hidden; background: linear-gradient(135deg, color-mix(in srgb, var(--lp-primary) 20%, transparent), color-mix(in srgb, var(--lp-secondary) 12%, transparent)); }
+/* As fotos de campo costumam ser verticais: o recorte prioriza o centro/topo. */
+.lp-svc__media img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 35%; transition: transform .4s ease; }
+.lp-svc:hover .lp-svc__media img { transform: scale(1.04); }
+.lp-svc__media::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 45%, rgba(15,23,42,.45)); }
+.lp-svc__media-fallback { color: color-mix(in srgb, var(--lp-primary) 65%, var(--color-foreground)); opacity: .55; }
+.lp-svc__tag { position: absolute; left: 12px; bottom: 12px; z-index: 1; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 700; color: #fff; background: color-mix(in srgb, var(--lp-primary) 92%, #000 8%); box-shadow: 0 6px 16px color-mix(in srgb, var(--lp-primary) 40%, transparent); }
+.lp-svc__body { display: flex; flex: 1; flex-direction: column; padding: 20px; }
+.lp-svc__title { margin: 0; font-size: 1.12rem; font-weight: 700; }
+.lp-svc__text { margin: 8px 0 16px; font-size: .93rem; line-height: 1.55; color: color-mix(in srgb, var(--color-foreground) 70%, transparent); }
+.lp-svc__cta { margin-top: auto; display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 42px; border-radius: 12px; font-size: 14px; font-weight: 600; text-decoration: none; color: #fff; background: var(--lp-primary); transition: transform .15s ease, box-shadow .2s ease; }
+.lp-svc__cta:hover { transform: translateY(-1px); box-shadow: 0 10px 24px color-mix(in srgb, var(--lp-primary) 42%, transparent); }
+.lp-benefits { margin-top: 34px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.lp-benefit { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-radius: 14px; font-size: .92rem; font-weight: 500; background: color-mix(in srgb, var(--lp-primary) 7%, transparent); border: 1px solid color-mix(in srgb, var(--lp-primary) 15%, transparent); }
+.lp-benefit svg { color: var(--lp-primary); flex: none; }
+
 /* Sections */
 .lp-section { padding: 80px 0; }
 .lp-section--muted { background: color-mix(in srgb, var(--color-foreground) 3.5%, transparent); }
@@ -639,9 +793,12 @@ html { scroll-behavior: smooth; }
   .lp-about { grid-template-columns: 1fr; gap: 32px; }
   .lp-grid--4 { grid-template-columns: repeat(2, 1fr); }
   .lp-grid--contact { grid-template-columns: repeat(2, 1fr); }
+  .lp-svc-grid { grid-template-columns: repeat(2, 1fr); }
+  .lp-benefits { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 720px) {
   .lp-nav, .lp-hide-sm { display: none; }
+  .lp-svc-grid { grid-template-columns: 1fr; }
   .lp-menu-btn { display: inline-flex; }
   .lp-mobile-menu { display: flex; }
   .lp-grid--3 { grid-template-columns: 1fr; }
@@ -650,6 +807,7 @@ html { scroll-behavior: smooth; }
 }
 @media (max-width: 480px) {
   .lp-grid--4, .lp-grid--contact { grid-template-columns: 1fr; }
+  .lp-benefits { grid-template-columns: 1fr; }
   .lp-about__stats { grid-template-columns: 1fr; }
   .lp-footer__inner { flex-direction: column; align-items: flex-start; }
   .lp-footer__meta { text-align: left; }

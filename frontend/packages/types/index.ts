@@ -422,6 +422,9 @@ export type PublicCompanyProfile = {
   secondaryColor: string;
 };
 
+/** Janela de apuração das comissões dos técnicos. */
+export type CommissionPeriod = 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
+
 export type OrganizationSettings = {
   id: string;
   organizationId: string;
@@ -429,8 +432,42 @@ export type OrganizationSettings = {
   timezone: string;
   currency: string;
   documentPrefix: string;
+  commissionPeriod: CommissionPeriod;
   createdAt: string;
   updatedAt: string;
+};
+
+/** Uma operação concluída que gera (ou gerou) comissão para o técnico. */
+export type CommissionItem = {
+  operationId: string;
+  number: number;
+  completedAt: string | null;
+  typeKey: string;
+  typeLabel: string;
+  serviceValue: number;
+  percent: number;
+  commission: number;
+  paid: boolean;
+  paymentId: string | null;
+};
+
+export type CommissionDetail = {
+  period: CommissionPeriod;
+  range: { from: string; to: string };
+  summary: { pendingAmount: number; pendingCount: number; paidAmount: number; paidCount: number };
+  items: CommissionItem[];
+};
+
+/** Fechamento pago — histórico para auditoria. */
+export type CommissionPaymentRecord = {
+  id: string;
+  periodStart: string;
+  periodEnd: string;
+  amount: number;
+  operationCount: number;
+  notes: string | null;
+  paidAt: string;
+  paidBy: { id: string; name: string } | null;
 };
 
 export type DocumentTemplate = {
@@ -560,6 +597,7 @@ export type UpdateOrganizationSettingsPayload = Partial<{
   timezone: string;
   currency: string;
   documentPrefix: string;
+  commissionPeriod: CommissionPeriod;
 }>;
 
 export type CreateDocumentTemplatePayload = {
@@ -914,6 +952,8 @@ export type ServiceType = {
   sortOrder: number;
   generatesReminder: boolean;
   reminderIntervalMonths: number | null;
+  commissionEligible: boolean;
+  commissionPercent: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -1309,6 +1349,8 @@ export type OperatorExecutionMetrics = {
   completionRate: number;
   averageDurationMinutes: number | null;
   lastCompletedAt: string | null;
+  /** Comissão do período (Σ valor do serviço × % do tipo elegível). */
+  commission: number;
 };
 
 export type OperatorExecutionKpis = {

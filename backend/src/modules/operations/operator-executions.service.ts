@@ -244,6 +244,7 @@ export class OperatorExecutionsService {
     const lastMap = new Map(
       lastCompleted.map((item) => [item.assignedTo, item._max?.completedAt ?? null]),
     );
+    const commissionMap = await this.commissionForOperators(operatorIds, period);
     return operatorIds.map((operatorId) => {
       const completedCount = maps[1].get(operatorId) ?? 0;
       const pendingCount = maps[2].get(operatorId) ?? 0;
@@ -262,6 +263,7 @@ export class OperatorExecutionsService {
         averageDurationMinutes:
           values.length === 0 ? null : Math.round(values.reduce((sum, value) => sum + value, 0) / values.length),
         lastCompletedAt: lastMap.get(operatorId) ?? null,
+        commission: commissionMap.get(operatorId) ?? 0,
       };
     });
   }
@@ -438,7 +440,56 @@ export class OperatorExecutionsService {
       completionRate: 0,
       averageDurationMinutes: null,
       lastCompletedAt: null,
+      commission: 0,
     };
+  }
+
+  /**
+   * Comissão PENDENTE por operador no período: soma, das operações CONCLUÍDAS
+   * cujo técnico primário é o operador, de `valor do serviço × (% do tipo)`,
+   * quando o tipo é elegível. Operações já incluídas num fechamento
+   * (`commissionPaymentId`) ficam de fora — o que já foi pago não é recalculado.
+   */
+  private async commissionForOperators(
+    operatorIds: string[],
+    period: Period,
+  ): Promise<Map<string, number>> {
+    const result = new Map<string, number>();
+    if (operatorIds.length === 0) return result;
+    const [types, operations] = await Promise.all([
+      this.prisma.serviceType.findMany({
+        select: { key: true, commissionEligible: true, commissionPercent: true },
+      }),
+      this.prisma.operation.findMany({
+        where: {
+          operatorId: { in: operatorIds },
+          status: 'COMPLETED',
+          completedAt: { gte: period.start, lt: period.end },
+          serviceValue: { not: null },
+          // Só o que ainda não foi fechado/pago.
+          commissionPaymentId: null,
+        },
+        select: { operatorId: true, serviceValue: true, type: true },
+      }),
+    ]);
+    const config = new Map(
+      types.map((type) => [
+        type.key,
+        { eligible: type.commissionEligible, percent: Number(type.commissionPercent) },
+      ]),
+    );
+    for (const operation of operations) {
+      const cfg = config.get(operation.type);
+      if (!cfg || !cfg.eligible || cfg.percent <= 0) continue;
+      const value = Number(operation.serviceValue ?? 0);
+      if (value <= 0) continue;
+      const current = result.get(operation.operatorId) ?? 0;
+      result.set(operation.operatorId, current + value * (cfg.percent / 100));
+    }
+    for (const [operatorId, value] of result) {
+      result.set(operatorId, Math.round(value * 100) / 100);
+    }
+    return result;
   }
 }
 
@@ -453,4 +504,6 @@ type OperatorMetric = {
   completionRate: number;
   averageDurationMinutes: number | null;
   lastCompletedAt: Date | null;
+  /** Comissão do período: Σ (valor do serviço × % do tipo elegível) das operações concluídas. */
+  commission: number;
 };

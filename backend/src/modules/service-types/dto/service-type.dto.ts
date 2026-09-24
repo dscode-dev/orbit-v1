@@ -4,6 +4,7 @@ import {
   IsArray,
   IsBoolean,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -40,6 +41,11 @@ export class CreateServiceTypeDto {
   @Min(MIN_MAINTENANCE_REMINDER_INTERVAL_MONTHS)
   @Max(MAX_MAINTENANCE_REMINDER_INTERVAL_MONTHS)
   reminderIntervalMonths?: number;
+
+  @IsOptional() @IsBoolean() commissionEligible?: boolean;
+
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(100)
+  commissionPercent?: number;
 }
 
 export class UpdateServiceTypeDto {
@@ -56,6 +62,11 @@ export class UpdateServiceTypeDto {
   @Min(MIN_MAINTENANCE_REMINDER_INTERVAL_MONTHS)
   @Max(MAX_MAINTENANCE_REMINDER_INTERVAL_MONTHS)
   reminderIntervalMonths?: number | null;
+
+  @IsOptional() @IsBoolean() commissionEligible?: boolean;
+
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(100)
+  commissionPercent?: number;
 }
 
 export class ReorderServiceTypesDto {
