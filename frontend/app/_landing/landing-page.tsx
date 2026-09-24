@@ -437,10 +437,11 @@ export function LandingPage() {
 
           <div className="lp-results__content" data-reveal>
             <span className="lp-eyebrow">Resultados</span>
-            <h2 className="lp-section__title">Excelência e agilidade em cada atendimento</h2>
+            <h2 className="lp-section__title">O resultado se mede em equipamento funcionando</h2>
             <p className="lp-section__sub">
-              Especialistas em criar a temperatura ideal para o conforto e a performance de cada
-              ambiente — com equipe técnica qualificada e documentação que comprova o serviço.
+              Equipe própria, prazo combinado e serviço que não precisa voltar. Cada ambiente recebe
+              a solução que o seu uso exige — e cada entrega vem com a documentação que comprova
+              como o trabalho foi feito.
             </p>
 
             <div className="lp-metrics">
@@ -784,10 +785,12 @@ html { scroll-behavior: smooth; }
 .lp-svc:hover { transform: translateY(-4px); box-shadow: 0 20px 44px color-mix(in srgb, var(--color-foreground) 12%, transparent); border-color: color-mix(in srgb, var(--lp-primary) 40%, transparent); }
 .lp-svc__media { position: relative; aspect-ratio: 4 / 3; display: flex; align-items: center; justify-content: center; overflow: hidden; background: linear-gradient(135deg, color-mix(in srgb, var(--lp-primary) 20%, transparent), color-mix(in srgb, var(--lp-secondary) 12%, transparent)); }
 /* As fotos de campo costumam ser verticais: o recorte prioriza o centro/topo. */
-.lp-svc__media img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 35%; transition: transform .4s ease; }
+.lp-svc__media img { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; object-fit: cover; object-position: center 35%; transition: transform .4s ease; }
 .lp-svc:hover .lp-svc__media img { transform: scale(1.04); }
-.lp-svc__media::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 45%, rgba(15,23,42,.45)); }
-.lp-svc__media-fallback { color: color-mix(in srgb, var(--lp-primary) 65%, var(--color-foreground)); opacity: .55; }
+.lp-svc__media::after { content: ""; position: absolute; inset: 0; z-index: 2; background: linear-gradient(180deg, transparent 45%, rgba(15,23,42,.45)); }
+/* Ícone só aparece quando a foto não carrega: fica na camada de baixo, senão o
+   opacity cria contexto de empilhamento e ele pinta por cima da imagem. */
+.lp-svc__media-fallback { position: absolute; inset: 0; z-index: 0; display: flex; align-items: center; justify-content: center; color: color-mix(in srgb, var(--lp-primary) 65%, var(--color-foreground)); opacity: .55; }
 .lp-svc__tag { position: absolute; left: 12px; bottom: 12px; z-index: 1; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 700; color: #fff; background: color-mix(in srgb, var(--lp-primary) 92%, #000 8%); box-shadow: 0 6px 16px color-mix(in srgb, var(--lp-primary) 40%, transparent); }
 .lp-svc__body { display: flex; flex: 1; flex-direction: column; padding: 20px; }
 .lp-svc__title { margin: 0; font-size: 1.12rem; font-weight: 700; }
@@ -826,13 +829,17 @@ html { scroll-behavior: smooth; }
 .lp-guarantee p { margin: 0; }
 
 /* Carrossel de benefícios da preventiva */
-.lp-carousel { position: relative; border-radius: 22px; border: 1px solid color-mix(in srgb, var(--color-foreground) 10%, transparent); background: var(--color-background); box-shadow: 0 18px 44px color-mix(in srgb, var(--color-foreground) 8%, transparent); outline: none; }
+/* Azul bem suave em degradê: o bloco todo branco pesava na página. */
+.lp-carousel { position: relative; border-radius: 22px; border: 1px solid color-mix(in srgb, var(--lp-primary) 16%, transparent); background:
+  linear-gradient(155deg, color-mix(in srgb, var(--lp-primary) 12%, var(--color-background)), var(--color-background) 58%),
+  radial-gradient(120% 90% at 100% 0%, color-mix(in srgb, var(--lp-secondary) 12%, transparent), transparent 60%);
+  box-shadow: 0 18px 44px color-mix(in srgb, var(--lp-primary) 12%, transparent); outline: none; }
 .lp-carousel:focus-visible { border-color: var(--lp-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--lp-primary) 25%, transparent); }
 .lp-carousel__viewport { overflow: hidden; border-radius: 22px; }
 .lp-carousel__track { display: flex; transition: transform .55s cubic-bezier(.2,.7,.2,1); }
-.lp-slide { flex: 0 0 100%; display: grid; grid-template-columns: 0.95fr 1.05fr; align-items: center; gap: 36px; padding: 40px 56px; }
-.lp-slide__art { display: flex; align-items: center; justify-content: center; padding: 18px; border-radius: 18px; background: linear-gradient(140deg, color-mix(in srgb, var(--lp-primary) 12%, transparent), color-mix(in srgb, var(--lp-secondary) 8%, transparent)); }
-.lp-slide__svg { width: 100%; max-width: 300px; height: auto; }
+.lp-slide { flex: 0 0 100%; display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 48px; padding: 56px 64px; min-height: 420px; }
+.lp-slide__art { display: flex; align-items: center; justify-content: center; padding: 30px; border-radius: 20px; background: linear-gradient(140deg, color-mix(in srgb, var(--lp-primary) 16%, transparent), color-mix(in srgb, var(--lp-secondary) 10%, transparent)); }
+.lp-slide__svg { width: 100%; max-width: 380px; height: auto; }
 .lp-slide__step { display: inline-block; font-size: .82rem; font-weight: 800; letter-spacing: .06em; color: var(--lp-primary); }
 .lp-slide__step i { font-style: normal; opacity: .55; }
 .lp-slide__title { margin: 10px 0 0; font-size: clamp(1.25rem, 2.3vw, 1.7rem); font-weight: 800; letter-spacing: -0.02em; }
@@ -874,6 +881,10 @@ html { scroll-behavior: smooth; }
 /* Sections */
 .lp-section { padding: 80px 0; }
 .lp-section--muted { background: color-mix(in srgb, var(--color-foreground) 3.5%, transparent); }
+/* Faixa fria: degradê azul suave para a seção não ficar toda branca. */
+.lp-section--cool { background:
+  linear-gradient(180deg, color-mix(in srgb, var(--lp-primary) 9%, transparent), transparent 62%),
+  radial-gradient(70% 50% at 82% 8%, color-mix(in srgb, var(--lp-secondary) 10%, transparent), transparent 70%); }
 .lp-section__head { max-width: 640px; margin: 0 auto 44px; text-align: center; }
 .lp-eyebrow { display: inline-block; font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--lp-primary); }
 .lp-section__title { margin: 12px 0 0; font-size: clamp(1.6rem, 3vw, 2.2rem); font-weight: 800; letter-spacing: -0.02em; }
@@ -947,9 +958,9 @@ html { scroll-behavior: smooth; }
   .lp-benefits { grid-template-columns: repeat(2, 1fr); }
   .lp-results { grid-template-columns: 1fr; gap: 40px; }
   .lp-collage { max-width: 520px; margin: 0 auto; }
-  .lp-slide { grid-template-columns: 1fr; gap: 24px; padding: 32px 28px; text-align: center; }
+  .lp-slide { grid-template-columns: 1fr; gap: 28px; padding: 40px 32px; min-height: 0; text-align: center; }
   .lp-slide__art { order: -1; }
-  .lp-slide__svg { max-width: 260px; }
+  .lp-slide__svg { max-width: 300px; }
   .lp-carousel__nav--prev { left: 8px; }
   .lp-carousel__nav--next { right: 8px; }
 }

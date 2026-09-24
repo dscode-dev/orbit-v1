@@ -46,6 +46,10 @@ export class CreateServiceTypeDto {
 
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(100)
   commissionPercent?: number;
+
+  /** Percentual do técnico auxiliar; pode diferir do executor primário. */
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(100)
+  commissionPercentAssistant?: number;
 }
 
 export class UpdateServiceTypeDto {
@@ -67,6 +71,10 @@ export class UpdateServiceTypeDto {
 
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(100)
   commissionPercent?: number;
+
+  /** Percentual do técnico auxiliar; pode diferir do executor primário. */
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(100)
+  commissionPercentAssistant?: number;
 }
 
 export class ReorderServiceTypesDto {

@@ -437,6 +437,9 @@ export type OrganizationSettings = {
   updatedAt: string;
 };
 
+/** Como o técnico participou da operação: executor ou auxiliar. */
+export type CommissionRole = 'PRIMARY' | 'ASSISTANT';
+
 /** Uma operação concluída que gera (ou gerou) comissão para o técnico. */
 export type CommissionItem = {
   operationId: string;
@@ -445,6 +448,8 @@ export type CommissionItem = {
   typeKey: string;
   typeLabel: string;
   serviceValue: number;
+  /** Auxiliar usa o percentual próprio do tipo, diferente do executor. */
+  role: CommissionRole;
   percent: number;
   commission: number;
   paid: boolean;
@@ -963,6 +968,8 @@ export type ServiceType = {
   reminderIntervalMonths: number | null;
   commissionEligible: boolean;
   commissionPercent: number;
+  /** Percentual pago ao técnico auxiliar; pode diferir do executor. */
+  commissionPercentAssistant: number;
   createdAt: string;
   updatedAt: string;
 };

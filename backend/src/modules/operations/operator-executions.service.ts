@@ -445,10 +445,11 @@ export class OperatorExecutionsService {
   }
 
   /**
-   * Comissão PENDENTE por operador no período: soma, das operações CONCLUÍDAS
-   * cujo técnico primário é o operador, de `valor do serviço × (% do tipo)`,
-   * quando o tipo é elegível. Operações já incluídas num fechamento
-   * (`commissionPaymentId`) ficam de fora — o que já foi pago não é recalculado.
+   * Comissão PENDENTE por técnico no período: soma, das operações CONCLUÍDAS em
+   * que ele participou, de `valor do serviço × (% do tipo)`, quando o tipo é
+   * elegível. Conta tanto quem executou (primário, `%` do técnico) quanto quem
+   * entrou como auxiliar (assignment não primário, `%` do auxiliar). O que já
+   * tem lançamento de comissão fica de fora — pago não se recalcula.
    */
   private async commissionForOperators(
     operatorIds: string[],
@@ -458,33 +459,76 @@ export class OperatorExecutionsService {
     if (operatorIds.length === 0) return result;
     const [types, operations] = await Promise.all([
       this.prisma.serviceType.findMany({
-        select: { key: true, commissionEligible: true, commissionPercent: true },
+        select: {
+          key: true,
+          commissionEligible: true,
+          commissionPercent: true,
+          commissionPercentAssistant: true,
+        },
       }),
       this.prisma.operation.findMany({
         where: {
-          operatorId: { in: operatorIds },
+          OR: [
+            { operatorId: { in: operatorIds } },
+            {
+              assignments: {
+                some: {
+                  assignedTo: { in: operatorIds },
+                  isPrimary: false,
+                  status: { notIn: [AssignmentStatus.REJECTED, AssignmentStatus.CANCELED] },
+                },
+              },
+            },
+          ],
           status: 'COMPLETED',
           completedAt: { gte: period.start, lt: period.end },
           serviceValue: { not: null },
-          // Só o que ainda não foi fechado/pago.
-          commissionPaymentId: null,
         },
-        select: { operatorId: true, serviceValue: true, type: true },
+        select: {
+          operatorId: true,
+          serviceValue: true,
+          type: true,
+          assignments: {
+            where: {
+              assignedTo: { in: operatorIds },
+              isPrimary: false,
+              status: { notIn: [AssignmentStatus.REJECTED, AssignmentStatus.CANCELED] },
+            },
+            select: { assignedTo: true },
+          },
+          // Quem já recebeu por esta operação não entra de novo no pendente.
+          commissionEntries: { select: { userId: true } },
+        },
       }),
     ]);
     const config = new Map(
       types.map((type) => [
         type.key,
-        { eligible: type.commissionEligible, percent: Number(type.commissionPercent) },
+        {
+          eligible: type.commissionEligible,
+          percent: Number(type.commissionPercent),
+          assistantPercent: Number(type.commissionPercentAssistant),
+        },
       ]),
     );
+    const targets = new Set(operatorIds);
     for (const operation of operations) {
       const cfg = config.get(operation.type);
-      if (!cfg || !cfg.eligible || cfg.percent <= 0) continue;
+      if (!cfg || !cfg.eligible) continue;
       const value = Number(operation.serviceValue ?? 0);
       if (value <= 0) continue;
-      const current = result.get(operation.operatorId) ?? 0;
-      result.set(operation.operatorId, current + value * (cfg.percent / 100));
+      const paidUsers = new Set(operation.commissionEntries.map((entry) => entry.userId));
+      const beneficiaries: Array<{ userId: string; percent: number }> = [
+        { userId: operation.operatorId, percent: cfg.percent },
+        ...operation.assignments.map((assignment) => ({
+          userId: assignment.assignedTo,
+          percent: cfg.assistantPercent,
+        })),
+      ];
+      for (const { userId, percent } of beneficiaries) {
+        if (!targets.has(userId) || paidUsers.has(userId) || percent <= 0) continue;
+        result.set(userId, (result.get(userId) ?? 0) + value * (percent / 100));
+      }
     }
     for (const [operatorId, value] of result) {
       result.set(operatorId, Math.round(value * 100) / 100);

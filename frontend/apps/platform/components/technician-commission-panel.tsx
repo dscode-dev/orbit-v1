@@ -306,6 +306,7 @@ export function TechnicianCommissionPanel({ operatorId }: { operatorId: string }
                 <th className="py-2 text-left font-medium">Atendimento</th>
                 <th className="py-2 text-left font-medium">Concluído</th>
                 <th className="py-2 text-left font-medium">Serviço</th>
+                <th className="py-2 text-left font-medium">Função</th>
                 <th className="py-2 text-right font-medium">Valor</th>
                 <th className="py-2 text-right font-medium">%</th>
                 <th className="py-2 text-right font-medium">Comissão</th>
@@ -334,6 +335,11 @@ export function TechnicianCommissionPanel({ operatorId }: { operatorId: string }
                   <td className="py-2 font-mono text-xs">{operationLabel(item)}</td>
                   <td className="py-2">{item.completedAt ? formatDate(item.completedAt) : "—"}</td>
                   <td className="py-2">{item.typeLabel}</td>
+                  <td className="py-2">
+                    <StatusChip tone={item.role === "ASSISTANT" ? "info" : "neutral"}>
+                      {item.role === "ASSISTANT" ? "Auxiliar" : "Técnico"}
+                    </StatusChip>
+                  </td>
                   <td className="py-2 text-right tabular-nums">{formatCurrencyBRL(item.serviceValue)}</td>
                   <td className="py-2 text-right tabular-nums">{item.percent}%</td>
                   <td

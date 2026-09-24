@@ -204,7 +204,7 @@ export function PreventiveBenefitsSection() {
   };
 
   return (
-    <section id="preventiva" className="lp-section">
+    <section id="preventiva" className="lp-section lp-section--cool">
       <div className="lp-container">
         <header className="lp-section__head" data-reveal>
           <span className="lp-eyebrow">Manutenção preventiva</span>

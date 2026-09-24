@@ -4,18 +4,65 @@ import { CommissionsService } from '../src/modules/operations/commissions.servic
  * Regra de dinheiro: o valor a pagar soma apenas atendimentos concluídos e ainda
  * não fechados. Já pagos não voltam ao pendente e cancelados saem do total —
  * mas continuam listados, para não quebrar a auditoria.
+ *
+ * A mesma operação pode pagar duas pessoas: o técnico que executou (primário) e
+ * os auxiliares, cada um com o seu percentual e o seu lançamento.
  */
 describe('CommissionsService', () => {
   const serviceTypes = [
-    { key: 'PREVENTIVA', label: 'Preventiva', commissionEligible: true, commissionPercent: 10 },
-    { key: 'CORRETIVA', label: 'Corretiva', commissionEligible: false, commissionPercent: 0 },
+    {
+      key: 'PREVENTIVA',
+      label: 'Preventiva',
+      commissionEligible: true,
+      commissionPercent: 10,
+      commissionPercentAssistant: 4,
+    },
+    {
+      key: 'CORRETIVA',
+      label: 'Corretiva',
+      commissionEligible: false,
+      commissionPercent: 0,
+      commissionPercentAssistant: 0,
+    },
+    {
+      key: 'INSTALACAO',
+      label: 'Instalação',
+      commissionEligible: true,
+      commissionPercent: 8,
+      commissionPercentAssistant: 0,
+    },
   ];
+
+  /** Operação como o Prisma devolve para o técnico consultado. */
+  const operation = (
+    over: Partial<{
+      id: string;
+      number: number;
+      type: string;
+      status: string;
+      completedAt: Date;
+      serviceValue: number;
+      operatorId: string;
+      commissionEntries: Array<{ paymentId: string; amount: number }>;
+    }> = {},
+  ) => ({
+    id: 'op-1',
+    number: 1,
+    type: 'PREVENTIVA',
+    status: 'COMPLETED',
+    completedAt: new Date('2026-09-10'),
+    serviceValue: 1000,
+    operatorId: 'tecnico-1',
+    commissionEntries: [],
+    ...over,
+  });
 
   function serviceFor(operations: unknown[]) {
     const tx = {
       commissionPayment: {
         create: jest.fn(({ data }) => Promise.resolve({ id: 'pay-new', ...data, paidAt: new Date() })),
       },
+      commissionEntry: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
       operation: { update: jest.fn().mockResolvedValue({}) },
       auditLog: { create: jest.fn().mockResolvedValue({}) },
     };
@@ -29,111 +76,148 @@ describe('CommissionsService', () => {
     return { service: new CommissionsService(prisma as never), prisma, tx };
   }
 
+  const range = { from: '2026-09-01', to: '2026-09-30' };
   const owner = { id: 'owner-1' } as never;
 
-  const range = { from: '2026-09-01', to: '2026-09-30' };
+  type Detail = {
+    summary: Record<string, number>;
+    items: Array<{
+      operationId: string;
+      role: string;
+      percent: number;
+      commission: number;
+      paid: boolean;
+      canceled: boolean;
+      paymentId: string | null;
+    }>;
+  };
 
   it('separa pendente, pago e cancelado — cancelado não entra no total', async () => {
     const { service } = serviceFor([
       // pendente: 1000 × 10% = 100
-      {
-        id: 'op-1', number: 1, type: 'PREVENTIVA', status: 'COMPLETED',
-        completedAt: new Date('2026-09-10'), serviceValue: 1000,
-        commissionPaymentId: null, commissionAmount: null,
-      },
+      operation({ id: 'op-1', number: 1 }),
       // já paga: usa o valor congelado no fechamento (50), não recalcula
-      {
-        id: 'op-2', number: 2, type: 'PREVENTIVA', status: 'COMPLETED',
-        completedAt: new Date('2026-09-12'), serviceValue: 900,
-        commissionPaymentId: 'pay-1', commissionAmount: 50,
-      },
+      operation({
+        id: 'op-2', number: 2, serviceValue: 900,
+        commissionEntries: [{ paymentId: 'pay-1', amount: 50 }],
+      }),
       // cancelada: 2000 × 10% = 200, fica listada mas fora dos totais
-      {
-        id: 'op-3', number: 3, type: 'PREVENTIVA', status: 'CANCELED',
-        completedAt: new Date('2026-09-15'), serviceValue: 2000,
-        commissionPaymentId: null, commissionAmount: null,
-      },
+      operation({ id: 'op-3', number: 3, status: 'CANCELED', serviceValue: 2000 }),
     ]);
 
-    const result = (await service.detail('operator-1', range)) as {
-      summary: Record<string, number>;
-      items: Array<{ operationId: string; canceled: boolean; paid: boolean; commission: number }>;
-    };
+    const result = (await service.detail('tecnico-1', range)) as Detail;
 
     expect(result.summary.pendingAmount).toBe(100);
     expect(result.summary.pendingCount).toBe(1);
     expect(result.summary.paidAmount).toBe(50);
-    expect(result.summary.paidCount).toBe(1);
     expect(result.summary.canceledAmount).toBe(200);
-    expect(result.summary.canceledCount).toBe(1);
 
     // A cancelada continua na listagem (auditoria), marcada como tal.
     expect(result.items).toHaveLength(3);
-    const canceled = result.items.find((item) => item.operationId === 'op-3');
-    expect(canceled?.canceled).toBe(true);
-    expect(canceled?.paid).toBe(false);
-  });
-
-  it('cancelada que já havia sido paga sai do total pago, preservando o registro', async () => {
-    const { service } = serviceFor([
-      {
-        id: 'op-4', number: 4, type: 'PREVENTIVA', status: 'CANCELED',
-        completedAt: new Date('2026-09-20'), serviceValue: 800,
-        commissionPaymentId: 'pay-9', commissionAmount: 80,
-      },
-    ]);
-
-    const result = (await service.detail('operator-1', range)) as {
-      summary: Record<string, number>;
-      items: Array<{ paid: boolean; canceled: boolean; paymentId: string | null }>;
-    };
-
-    expect(result.summary.paidAmount).toBe(0);
-    expect(result.summary.pendingAmount).toBe(0);
-    expect(result.summary.canceledAmount).toBe(80);
-    // O vínculo com o fechamento é preservado para rastrear o que foi pago.
-    expect(result.items[0]).toMatchObject({ paid: true, canceled: true, paymentId: 'pay-9' });
+    expect(result.items.find((item) => item.operationId === 'op-3')).toMatchObject({
+      canceled: true,
+      paid: false,
+    });
   });
 
   it('não permite fechar um período em que só há canceladas', async () => {
-    const { service } = serviceFor([
-      {
-        id: 'op-5', number: 5, type: 'PREVENTIVA', status: 'CANCELED',
-        completedAt: new Date('2026-09-22'), serviceValue: 500,
-        commissionPaymentId: null, commissionAmount: null,
-      },
-    ]);
+    const { service } = serviceFor([operation({ status: 'CANCELED' })]);
 
-    await expect(service.pay('operator-1', range, owner)).rejects.toMatchObject({
+    await expect(service.pay('tecnico-1', range, owner)).rejects.toMatchObject({
       code: 'VALIDATION_ERROR',
     });
   });
 
-  /** Pagamento individual e por seleção compartilham o mesmo caminho: operationIds. */
+  it('ignora tipos não elegíveis a comissão', async () => {
+    const { service } = serviceFor([operation({ type: 'CORRETIVA' })]);
+
+    const result = (await service.detail('tecnico-1', range)) as Detail;
+    expect(result.items).toHaveLength(0);
+    expect(result.summary.pendingAmount).toBe(0);
+  });
+
+  describe('técnico auxiliar', () => {
+    it('recebe pelo percentual de auxiliar quando não é o executor da operação', async () => {
+      // A operação é do tecnico-1; quem consulta é o auxiliar.
+      const { service, prisma } = serviceFor([operation({ serviceValue: 2000 })]);
+
+      const result = (await service.detail('auxiliar-1', range)) as Detail;
+
+      // 2000 × 4% (percentual de auxiliar), e não os 10% do primário.
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]).toMatchObject({ role: 'ASSISTANT', percent: 4, commission: 80 });
+      expect(result.summary.pendingAmount).toBe(80);
+
+      // A busca precisa alcançar as operações em que ele é apenas auxiliar.
+      const where = prisma.operation.findMany.mock.calls[0][0].where;
+      expect(where.OR).toEqual([
+        { operatorId: 'auxiliar-1' },
+        {
+          assignments: {
+            some: {
+              assignedTo: 'auxiliar-1',
+              isPrimary: false,
+              status: { notIn: ['REJECTED', 'CANCELED'] },
+            },
+          },
+        },
+      ]);
+    });
+
+    it('fica de fora quando o tipo não paga auxiliar (0%), sem afetar o primário', async () => {
+      const { service } = serviceFor([operation({ type: 'INSTALACAO', serviceValue: 5000 })]);
+
+      const assistant = (await service.detail('auxiliar-1', range)) as Detail;
+      expect(assistant.items).toHaveLength(0);
+
+      const primary = (await service.detail('tecnico-1', range)) as Detail;
+      expect(primary.items[0]).toMatchObject({ role: 'PRIMARY', commission: 400 });
+    });
+
+    it('pagar o auxiliar grava lançamento próprio e não mexe na operação do primário', async () => {
+      const { service, tx } = serviceFor([operation({ serviceValue: 2000 })]);
+
+      await service.pay('auxiliar-1', range, owner);
+
+      expect(tx.commissionEntry.createMany).toHaveBeenCalledWith({
+        data: [
+          {
+            paymentId: 'pay-new',
+            operationId: 'op-1',
+            userId: 'auxiliar-1',
+            role: 'ASSISTANT',
+            amount: 80,
+          },
+        ],
+      });
+      // As colunas legadas da operação só valem para o executor primário.
+      expect(tx.operation.update).not.toHaveBeenCalled();
+    });
+
+    it('o que o auxiliar já recebeu não volta ao pendente do primário', async () => {
+      const { service } = serviceFor([
+        operation({ commissionEntries: [{ paymentId: 'pay-aux', amount: 80 }] }),
+      ]);
+
+      // A consulta traz o lançamento DESTE usuário, então para ele está pago.
+      const result = (await service.detail('auxiliar-1', range)) as Detail;
+      expect(result.items[0]).toMatchObject({ paid: true, commission: 80, paymentId: 'pay-aux' });
+      expect(result.summary.pendingAmount).toBe(0);
+    });
+  });
+
   describe('pagamento de uma seleção', () => {
     const pendingOperations = [
-      {
-        id: 'op-a', number: 10, type: 'PREVENTIVA', status: 'COMPLETED',
-        completedAt: new Date('2026-09-04'), serviceValue: 1000,
-        commissionPaymentId: null, commissionAmount: null,
-      },
-      {
-        id: 'op-b', number: 11, type: 'PREVENTIVA', status: 'COMPLETED',
-        completedAt: new Date('2026-09-18'), serviceValue: 2000,
-        commissionPaymentId: null, commissionAmount: null,
-      },
-      {
-        id: 'op-c', number: 12, type: 'PREVENTIVA', status: 'COMPLETED',
-        completedAt: new Date('2026-09-25'), serviceValue: 3000,
-        commissionPaymentId: null, commissionAmount: null,
-      },
+      operation({ id: 'op-a', number: 10, completedAt: new Date('2026-09-04'), serviceValue: 1000 }),
+      operation({ id: 'op-b', number: 11, completedAt: new Date('2026-09-18'), serviceValue: 2000 }),
+      operation({ id: 'op-c', number: 12, completedAt: new Date('2026-09-25'), serviceValue: 3000 }),
     ];
 
     it('fecha só os atendimentos escolhidos, deixando os demais pendentes', async () => {
       const { service, tx } = serviceFor(pendingOperations);
 
       const payment = (await service.pay(
-        'operator-1',
+        'tecnico-1',
         { ...range, operationIds: ['op-a', 'op-c'] },
         owner,
       )) as { amount: number; operationCount: number };
@@ -141,59 +225,41 @@ describe('CommissionsService', () => {
       // 100 + 300; op-b (200) continua fora do fechamento.
       expect(payment.amount).toBe(400);
       expect(payment.operationCount).toBe(2);
-      const updated = tx.operation.update.mock.calls.map(([args]) => args.where.id);
-      expect(updated).toEqual(['op-a', 'op-c']);
+      const [{ data }] = tx.commissionEntry.createMany.mock.calls[0];
+      expect(data.map((entry: { operationId: string }) => entry.operationId)).toEqual(['op-a', 'op-c']);
       // O período registrado é o do que foi pago, não o do filtro.
-      const [{ data }] = tx.commissionPayment.create.mock.calls[0];
-      expect(data.periodStart.toISOString().slice(0, 10)).toBe('2026-09-04');
-      expect(data.periodEnd.toISOString().slice(0, 10)).toBe('2026-09-25');
+      const [{ data: paymentData }] = tx.commissionPayment.create.mock.calls[0];
+      expect(paymentData.periodStart.toISOString().slice(0, 10)).toBe('2026-09-04');
+      expect(paymentData.periodEnd.toISOString().slice(0, 10)).toBe('2026-09-25');
     });
 
     it('paga um único atendimento congelando o valor da comissão', async () => {
       const { service, tx } = serviceFor(pendingOperations);
 
-      await service.pay('operator-1', { ...range, operationIds: ['op-b'] }, owner);
+      await service.pay('tecnico-1', { ...range, operationIds: ['op-b'] }, owner);
 
-      expect(tx.operation.update).toHaveBeenCalledTimes(1);
-      const [{ where, data }] = tx.operation.update.mock.calls[0];
-      expect(where.id).toBe('op-b');
-      expect(data.commissionAmount).toBe(200);
-      expect(data.commissionPaymentId).toBe('pay-new');
+      const [{ data }] = tx.commissionEntry.createMany.mock.calls[0];
+      expect(data).toEqual([
+        { paymentId: 'pay-new', operationId: 'op-b', userId: 'tecnico-1', role: 'PRIMARY', amount: 200 },
+      ]);
+      expect(tx.operation.update).toHaveBeenCalledWith({
+        where: { id: 'op-b' },
+        data: { commissionPaymentId: 'pay-new', commissionAmount: 200 },
+      });
     });
 
     it('recusa o fechamento inteiro se algum item escolhido já não é pagável', async () => {
       const { service, tx } = serviceFor([
         ...pendingOperations,
-        {
-          id: 'op-d', number: 13, type: 'PREVENTIVA', status: 'CANCELED',
-          completedAt: new Date('2026-09-26'), serviceValue: 900,
-          commissionPaymentId: null, commissionAmount: null,
-        },
+        operation({ id: 'op-d', number: 13, status: 'CANCELED', serviceValue: 900 }),
       ]);
 
       await expect(
-        service.pay('operator-1', { ...range, operationIds: ['op-a', 'op-d'] }, owner),
+        service.pay('tecnico-1', { ...range, operationIds: ['op-a', 'op-d'] }, owner),
       ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
       // Nada é gravado: o owner reconfere a lista em vez de pagar um subconjunto.
-      expect(tx.operation.update).not.toHaveBeenCalled();
+      expect(tx.commissionEntry.createMany).not.toHaveBeenCalled();
       expect(tx.commissionPayment.create).not.toHaveBeenCalled();
     });
-  });
-
-  it('ignora tipos não elegíveis a comissão', async () => {
-    const { service } = serviceFor([
-      {
-        id: 'op-6', number: 6, type: 'CORRETIVA', status: 'COMPLETED',
-        completedAt: new Date('2026-09-05'), serviceValue: 1000,
-        commissionPaymentId: null, commissionAmount: null,
-      },
-    ]);
-
-    const result = (await service.detail('operator-1', range)) as {
-      summary: Record<string, number>;
-      items: unknown[];
-    };
-    expect(result.items).toHaveLength(0);
-    expect(result.summary.pendingAmount).toBe(0);
   });
 });

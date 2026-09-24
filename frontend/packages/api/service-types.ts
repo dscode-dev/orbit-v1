@@ -9,6 +9,7 @@ export type ServiceTypePayload = {
   reminderIntervalMonths?: number | null;
   commissionEligible?: boolean;
   commissionPercent?: number;
+  commissionPercentAssistant?: number;
 };
 
 export function list(params?: {

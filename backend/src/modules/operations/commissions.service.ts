@@ -1,5 +1,11 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { CommissionPeriod, OperationStatus, Prisma } from '@prisma/client';
+import {
+  AssignmentStatus,
+  CommissionPeriod,
+  CommissionRole,
+  OperationStatus,
+  Prisma,
+} from '@prisma/client';
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
@@ -14,6 +20,8 @@ interface CommissionItem {
   typeKey: string;
   typeLabel: string;
   serviceValue: number;
+  /** Como o técnico participou: executor primário ou auxiliar. */
+  role: CommissionRole;
   percent: number;
   commission: number;
   paid: boolean;
@@ -21,6 +29,9 @@ interface CommissionItem {
   canceled: boolean;
   paymentId: string | null;
 }
+
+/** Assignments que não valem comissão para o auxiliar. */
+const DISCARDED_ASSIGNMENTS = [AssignmentStatus.REJECTED, AssignmentStatus.CANCELED];
 
 @Injectable()
 export class CommissionsService {
@@ -111,8 +122,22 @@ export class CommissionsService {
         },
         select: { id: true, amount: true, operationCount: true, paidAt: true },
       });
-      // Congela o valor por operação: o % do tipo pode mudar depois.
+      // Um lançamento por pessoa/operação, com o valor congelado (o % do tipo
+      // pode mudar depois). É o que permite pagar primário e auxiliar pela
+      // mesma operação sem um sobrescrever o outro.
+      await tx.commissionEntry.createMany({
+        data: selection.map((item) => ({
+          paymentId: payment.id,
+          operationId: item.operationId,
+          userId: operatorId,
+          role: item.role,
+          amount: item.commission,
+        })),
+      });
+      // Colunas legadas (um beneficiário por operação): seguem preenchidas para
+      // o primário, para não perder o histórico de quem já lia dali.
       for (const item of selection) {
+        if (item.role !== CommissionRole.PRIMARY) continue;
         await tx.operation.update({
           where: { id: item.operationId },
           data: { commissionPaymentId: payment.id, commissionAmount: item.commission },
@@ -202,14 +227,30 @@ export class CommissionsService {
     return CommissionsService.defaultRange(period);
   }
 
+  /**
+   * Operações que rendem comissão ao técnico: as que ele executou (primário) e
+   * as em que entrou como auxiliar — auxiliar recebe a mesma demanda por um
+   * assignment não primário, e antes ficava de fora do cálculo.
+   */
   private async items(
-    operatorId: string,
+    userId: string,
     from: Date,
     to: Date,
     serviceType?: string,
   ): Promise<CommissionItem[]> {
     const where: Prisma.OperationWhereInput = {
-      operatorId,
+      OR: [
+        { operatorId: userId },
+        {
+          assignments: {
+            some: {
+              assignedTo: userId,
+              isPrimary: false,
+              status: { notIn: DISCARDED_ASSIGNMENTS },
+            },
+          },
+        },
+      ],
       // Canceladas entram para ficarem visíveis como estorno — a aprovação do
       // cancelamento preenche `completedAt`, então elas caem no mesmo intervalo.
       status: { in: [OperationStatus.COMPLETED, OperationStatus.CANCELED] },
@@ -219,7 +260,13 @@ export class CommissionsService {
     };
     const [types, operations] = await Promise.all([
       this.prisma.serviceType.findMany({
-        select: { key: true, label: true, commissionEligible: true, commissionPercent: true },
+        select: {
+          key: true,
+          label: true,
+          commissionEligible: true,
+          commissionPercent: true,
+          commissionPercentAssistant: true,
+        },
       }),
       this.prisma.operation.findMany({
         where,
@@ -232,8 +279,14 @@ export class CommissionsService {
           status: true,
           completedAt: true,
           serviceValue: true,
-          commissionPaymentId: true,
-          commissionAmount: true,
+          operatorId: true,
+          // O que ESTE técnico já recebeu por esta operação (o primário e o
+          // auxiliar têm lançamentos próprios).
+          commissionEntries: {
+            where: { userId },
+            select: { paymentId: true, amount: true },
+            take: 1,
+          },
         },
       }),
     ]);
@@ -241,15 +294,18 @@ export class CommissionsService {
     const items: CommissionItem[] = [];
     for (const operation of operations) {
       const cfg = config.get(operation.type);
+      const role =
+        operation.operatorId === userId ? CommissionRole.PRIMARY : CommissionRole.ASSISTANT;
       const eligible = cfg?.commissionEligible ?? false;
-      const percent = Number(cfg?.commissionPercent ?? 0);
+      const percent = Number(
+        (role === CommissionRole.PRIMARY ? cfg?.commissionPercent : cfg?.commissionPercentAssistant) ??
+          0,
+      );
       const serviceValue = Number(operation.serviceValue ?? 0);
+      const entry = operation.commissionEntries[0] ?? null;
       // Já pagas entram no histórico mesmo que o tipo tenha mudado de regra.
-      const alreadyPaid = Boolean(operation.commissionPaymentId);
-      if (!alreadyPaid && (!eligible || percent <= 0 || serviceValue <= 0)) continue;
-      const commission = alreadyPaid
-        ? Number(operation.commissionAmount ?? 0)
-        : round(serviceValue * (percent / 100));
+      if (!entry && (!eligible || percent <= 0 || serviceValue <= 0)) continue;
+      const commission = entry ? Number(entry.amount) : round(serviceValue * (percent / 100));
       items.push({
         operationId: operation.id,
         number: operation.number,
@@ -257,11 +313,12 @@ export class CommissionsService {
         typeKey: operation.type,
         typeLabel: cfg?.label ?? operation.type,
         serviceValue,
+        role,
         percent,
         commission,
-        paid: alreadyPaid,
+        paid: Boolean(entry),
         canceled: operation.status === OperationStatus.CANCELED,
-        paymentId: operation.commissionPaymentId,
+        paymentId: entry?.paymentId ?? null,
       });
     }
     return items;
