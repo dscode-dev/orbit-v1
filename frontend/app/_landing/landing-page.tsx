@@ -14,6 +14,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
+  Award,
+  Building2,
   ClipboardCheck,
   FileSignature,
   Gauge,
@@ -32,12 +34,14 @@ import {
 } from "lucide-react";
 import { BrandLogo } from "@erp/ui/brand";
 import { organizationApi, type PublicCompanyProfile } from "@erp/api";
+import { PreventiveBenefitsSection } from "./preventive-carousel";
 
 const WHATSAPP_MESSAGE =
   "Olá! Vim pelo site e gostaria de saber mais sobre os serviços de climatização e refrigeração.";
 
 const NAV = [
   { href: "#servicos", label: "Serviços" },
+  { href: "#resultados", label: "Resultados" },
   { href: "#relatorios", label: "Documentação" },
   { href: "#empresa", label: "A empresa" },
   { href: "#contato", label: "Contato" },
@@ -84,6 +88,17 @@ const SERVICES = [
     text: "Instalação e substituição de equipamentos executadas dentro das normas técnicas, com acabamento profissional.",
     cta: "Preciso de uma instalação",
   },
+];
+
+/**
+ * Números de vitrine da seção "Resultados". São de marketing (não vêm do banco):
+ * ajuste aqui conforme os dados reais da empresa.
+ */
+const COMPANY_METRICS = [
+  { icon: Wind, value: "+2.500", label: "Equipamentos instalados" },
+  { icon: Wrench, value: "+4.000", label: "Atendimentos concluídos" },
+  { icon: Building2, value: "+180", label: "Empresas atendidas" },
+  { icon: Award, value: "+5 anos", label: "De mercado" },
 ];
 
 const REPORTS = [
@@ -288,69 +303,41 @@ export function LandingPage() {
           </div>
 
           <div className="lp-hero__visual" data-reveal>
-            {/* Split de ar-condicionado desenhado em SVG, com a logo da empresa
-                aplicada no painel frontal como marca do equipamento. */}
-            <div className="lp-ac" role="img" aria-label={`${name} — ar-condicionado`}>
+            {/* Split real recortado da foto do equipamento: condensadora ao
+                fundo e evaporadora à frente, com a logo aplicada no painel
+                como marca. O jato de ar é peça separada, para respirar. */}
+            <div
+              className="lp-ac"
+              role="img"
+              aria-label={`${name} — sistema split: evaporadora e condensadora`}
+            >
               <span className="lp-ac__glow" aria-hidden />
-              <div className="lp-ac__unit">
-                <svg className="lp-ac__svg" viewBox="0 0 560 250" aria-hidden>
-                  <defs>
-                    <linearGradient id="lpAcBody" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#ffffff" />
-                      <stop offset="62%" stopColor="#f4f8fc" />
-                      <stop offset="100%" stopColor="#dfe8f2" />
-                    </linearGradient>
-                    <linearGradient id="lpAcVane" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#e8eef6" />
-                      <stop offset="100%" stopColor="#c3cfdc" />
-                    </linearGradient>
-                    <linearGradient id="lpAcGloss" x1="0" y1="0" x2="1" y2="1">
-                      <stop offset="0%" stopColor="#ffffff" stopOpacity="0.85" />
-                      <stop offset="55%" stopColor="#ffffff" stopOpacity="0.05" />
-                      <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
-                    </linearGradient>
-                    <filter id="lpAcShadow" x="-25%" y="-25%" width="150%" height="170%">
-                      <feDropShadow dx="0" dy="22" stdDeviation="20" floodColor="#0f172a" floodOpacity="0.22" />
-                    </filter>
-                  </defs>
 
-                  {/* corpo principal */}
-                  <g filter="url(#lpAcShadow)">
-                    <rect x="16" y="18" width="528" height="150" rx="30" fill="url(#lpAcBody)" />
-                  </g>
-                  <rect x="16" y="18" width="528" height="150" rx="30" fill="none" stroke="#0f172a" strokeOpacity="0.12" />
-                  {/* brilho diagonal */}
-                  <rect x="16" y="18" width="528" height="150" rx="30" fill="url(#lpAcGloss)" />
-
-                  {/* grelha de entrada de ar (topo) */}
-                  <g fill="#0f172a" opacity="0.07">
-                    {Array.from({ length: 4 }).map((_, i) => (
-                      <rect key={i} x="54" y={36 + i * 9} width="452" height="3.5" rx="1.75" />
-                    ))}
-                  </g>
-
-                  {/* defletor de saída de ar */}
-                  <path d="M40 168 H520 a14 14 0 0 1 -6 11 L74 196 a16 16 0 0 1 -20 -6 Z" fill="url(#lpAcVane)" />
-                  <path d="M40 168 H520 a14 14 0 0 1 -6 11 L74 196 a16 16 0 0 1 -20 -6 Z" fill="none" stroke="#0f172a" strokeOpacity="0.1" />
-                  <rect x="70" y="176" width="420" height="3" rx="1.5" fill="#0f172a" opacity="0.08" />
-
-                  {/* display lateral */}
-                  <rect x="452" y="126" width="72" height="20" rx="10" fill="#0f172a" opacity="0.06" />
-                  <circle cx="466" cy="136" r="4" fill="#22c55e" />
-                  <rect x="478" y="133" width="34" height="6" rx="3" fill="#0f172a" opacity="0.18" />
-                </svg>
-
-                <div className="lp-ac__brand">
-                  <BrandLogo height={62} alt={name} />
+              <div className="lp-ac__scene" aria-hidden>
+                {/* Condensadora ao fundo: menor e levemente recuada. */}
+                <div className="lp-ac__back">
+                  <img src="/landing/condensadora.webp" alt="" width={968} height={658} />
                 </div>
-              </div>
 
-              <div className="lp-ac__flow" aria-hidden>
-                <span />
-                <span />
-                <span />
-                <span />
-                <span />
+                {/* Evaporadora à frente, com a marca e o ar insuflado. */}
+                <div className="lp-ac__front">
+                  <div className="lp-ac__unit">
+                    <img src="/landing/evaporadora.webp" alt="" width={1120} height={370} />
+                    <span className="lp-ac__brand">
+                      <BrandLogo height={86} alt={name} />
+                    </span>
+                  </div>
+                  <img className="lp-ac__air" src="/landing/fluxo-ar.webp" alt="" width={1120} height={330} />
+                  <span className="lp-ac__flake lp-ac__flake--1">
+                    <Snowflake size={18} />
+                  </span>
+                  <span className="lp-ac__flake lp-ac__flake--2">
+                    <Snowflake size={13} />
+                  </span>
+                  <span className="lp-ac__flake lp-ac__flake--3">
+                    <Snowflake size={15} />
+                  </span>
+                </div>
               </div>
 
               <div className="lp-ac__badge">
@@ -424,6 +411,74 @@ export function LandingPage() {
           </div>
         </div>
       </section>
+
+      {/* ---------- Resultados (prova social / números) ---------- */}
+      <section id="resultados" className="lp-section lp-section--muted">
+        <div className="lp-container lp-results">
+          {/* Colagem: instalação em destaque, preventiva e carga térmica ao fundo. */}
+          <div className="lp-collage" data-reveal>
+            <figure className="lp-collage__item lp-collage__item--back-left">
+              <img src="/servicos/manutencao-preventiva.webp" alt="Manutenção preventiva em campo" loading="lazy" />
+            </figure>
+            <figure className="lp-collage__item lp-collage__item--back-right">
+              <img src="/servicos/calculo-carga-termica.webp" alt="Cálculo de carga térmica" loading="lazy" />
+            </figure>
+            <figure className="lp-collage__item lp-collage__item--front">
+              <img src="/servicos/instalacao.webp" alt="Instalação de ar-condicionado" loading="lazy" />
+            </figure>
+            <div className="lp-collage__seal" aria-label="Garantia e qualidade">
+              <ShieldCheck size={22} />
+              <div>
+                <strong>Garantia</strong>
+                <span>e Qualidade</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="lp-results__content" data-reveal>
+            <span className="lp-eyebrow">Resultados</span>
+            <h2 className="lp-section__title">Excelência e agilidade em cada atendimento</h2>
+            <p className="lp-section__sub">
+              Especialistas em criar a temperatura ideal para o conforto e a performance de cada
+              ambiente — com equipe técnica qualificada e documentação que comprova o serviço.
+            </p>
+
+            <div className="lp-metrics">
+              {COMPANY_METRICS.map(({ icon: Icon, value, label }) => (
+                <div key={label} className="lp-metric">
+                  <span className="lp-metric__icon">
+                    <Icon size={18} />
+                  </span>
+                  <strong className="lp-metric__value">{value}</strong>
+                  <span className="lp-metric__label">{label}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="lp-guarantee">
+              <ShieldCheck size={20} />
+              <p>
+                <strong>Garantia e Qualidade.</strong> Todo serviço é executado dentro das normas
+                técnicas e acompanhado de relatório assinado por responsável técnico credenciado.
+              </p>
+            </div>
+
+            {whatsappUrl && (
+              <a
+                href={whatsappUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="lp-btn lp-btn--primary lp-btn--lg"
+              >
+                <MessageCircle size={18} /> Solicitar orçamento
+              </a>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* ---------- Benefícios da manutenção preventiva (carrossel) ---------- */}
+      <PreventiveBenefitsSection />
 
       {/* ---------- Documentação / Relatórios ---------- */}
       <section id="relatorios" className="lp-section lp-section--muted">
@@ -680,26 +735,48 @@ html { scroll-behavior: smooth; }
 .lp-chip { display: flex; align-items: center; gap: 10px; padding: 14px; border-radius: 14px; font-size: 14px; font-weight: 500; background: color-mix(in srgb, var(--lp-primary) 8%, transparent); border: 1px solid color-mix(in srgb, var(--lp-primary) 16%, transparent); color: color-mix(in srgb, var(--lp-primary) 72%, var(--color-foreground)); }
 .lp-chip svg { color: var(--lp-primary); }
 
-/* Hero: ilustração de ar-condicionado (split) com a logo como marca */
-.lp-ac { position: relative; width: 100%; max-width: 520px; display: flex; flex-direction: column; align-items: center; padding: 8px 0 0; }
-.lp-ac__glow { position: absolute; inset: -14% -10% auto; height: 340px; background:
-  radial-gradient(360px 220px at 50% 30%, color-mix(in srgb, var(--lp-primary) 26%, transparent), transparent 72%),
-  radial-gradient(240px 180px at 78% 62%, color-mix(in srgb, var(--lp-secondary) 20%, transparent), transparent 70%);
+/* Hero: sistema split real (recorte da foto) com a logo como marca.
+   A condensadora fica atrás e recuada; a evaporadora, à frente e maior. */
+.lp-ac { position: relative; width: 100%; max-width: 560px; display: flex; flex-direction: column; align-items: center; }
+/* Sem altura fixa: o brilho acompanha a cena e desvanece antes das bordas,
+   senão o retângulo do gradiente fica visível no tema escuro. */
+.lp-ac__glow { position: absolute; inset: -14% -14% -6%; background:
+  radial-gradient(42% 32% at 40% 24%, color-mix(in srgb, var(--lp-primary) 26%, transparent), transparent 68%),
+  radial-gradient(34% 28% at 78% 74%, color-mix(in srgb, var(--lp-secondary) 20%, transparent), transparent 66%);
   pointer-events: none; }
-.lp-ac__unit { position: relative; width: 100%; }
-.lp-ac__svg { display: block; width: 100%; height: auto; overflow: visible; }
+.lp-ac__scene { position: relative; width: 100%; aspect-ratio: 1 / .86; }
+.lp-ac img { display: block; width: 100%; height: auto; }
+
+/* Fundo: condensadora recuada. A profundidade vem do tamanho, do brilho e da
+   sombra — nada de rotação 3D: numa foto frontal ela entorta o equipamento. */
+.lp-ac__back { position: absolute; top: 0; right: 0; width: 50%; filter: brightness(.94) saturate(.96) drop-shadow(0 22px 30px rgba(8, 15, 30, .5)); }
+/* Frente: evaporadora em destaque, sobrepondo o canto da condensadora. */
+.lp-ac__front { position: absolute; left: 0; bottom: 4%; width: 92%; filter: drop-shadow(0 30px 40px rgba(8, 15, 30, .55)); }
+.lp-ac__unit { position: relative; }
+
 /* Logo aplicada no painel frontal, como a marca do equipamento. */
-.lp-ac__brand { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); display: flex; align-items: center; justify-content: center; max-width: 62%; }
-.lp-ac__brand img { max-width: 100%; height: auto !important; filter: drop-shadow(0 2px 6px rgba(15,23,42,.14)); }
-.lp-ac__flow { position: relative; width: 78%; height: 56px; margin-top: -6px; display: flex; justify-content: space-between; align-items: flex-start; }
-.lp-ac__flow span { width: 4px; border-radius: 4px; background: linear-gradient(180deg, color-mix(in srgb, var(--lp-primary) 70%, transparent), transparent); animation: lp-ac-flow 2.4s ease-in-out infinite; }
-.lp-ac__flow span:nth-child(2) { animation-delay: .3s; }
-.lp-ac__flow span:nth-child(3) { animation-delay: .6s; }
-.lp-ac__flow span:nth-child(4) { animation-delay: .9s; }
-.lp-ac__flow span:nth-child(5) { animation-delay: 1.2s; }
-@keyframes lp-ac-flow { 0%,100% { height: 16px; opacity: .35; } 50% { height: 52px; opacity: .95; } }
-.lp-ac__badge { margin-top: 6px; display: inline-flex; align-items: center; gap: 8px; padding: 9px 18px; border-radius: 999px; font-size: 13px; font-weight: 600; color: var(--lp-primary); background: color-mix(in srgb, var(--lp-primary) 10%, transparent); border: 1px solid color-mix(in srgb, var(--lp-primary) 22%, transparent); }
-@media (prefers-reduced-motion: reduce) { .lp-ac__flow span { animation: none; height: 30px; } }
+.lp-ac__brand { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%); display: flex; align-items: center; justify-content: center; width: 42%; }
+.lp-ac__brand img { max-width: 100%; height: auto !important; filter: drop-shadow(0 2px 8px rgba(15, 23, 42, .22)); }
+
+/* Ar insuflado: peça separada da foto. A máscara evita que o jato termine
+   num corte reto na base da imagem. */
+.lp-ac__air { margin-top: -1.5%;
+  -webkit-mask-image: linear-gradient(to bottom, #000 58%, transparent 98%);
+  mask-image: linear-gradient(to bottom, #000 58%, transparent 98%); }
+.lp-ac__flake { position: absolute; color: color-mix(in srgb, var(--lp-primary) 74%, transparent); animation: lp-ac-flake 6s ease-in-out infinite; }
+.lp-ac__flake--1 { left: 18%; top: 72%; animation-delay: -.6s; }
+.lp-ac__flake--2 { left: 48%; top: 84%; animation-delay: -2.6s; }
+.lp-ac__flake--3 { left: 74%; top: 76%; animation-delay: -4.2s; }
+@keyframes lp-ac-flake {
+  0% { opacity: 0; transform: translateY(-14px) rotate(0deg); }
+  30% { opacity: .85; }
+  100% { opacity: 0; transform: translateY(46px) rotate(150deg); }
+}
+
+.lp-ac__badge { margin-top: 4px; display: inline-flex; align-items: center; gap: 8px; padding: 9px 18px; border-radius: 999px; font-size: 13px; font-weight: 600; color: var(--lp-primary); background: color-mix(in srgb, var(--lp-primary) 10%, transparent); border: 1px solid color-mix(in srgb, var(--lp-primary) 22%, transparent); }
+@media (prefers-reduced-motion: reduce) {
+  .lp-ac__flake { animation: none; opacity: .6; }
+}
 
 /* Serviços: cards com foto + CTA (estilo comercial) */
 .lp-svc-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
@@ -720,6 +797,79 @@ html { scroll-behavior: smooth; }
 .lp-benefits { margin-top: 34px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
 .lp-benefit { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-radius: 14px; font-size: .92rem; font-weight: 500; background: color-mix(in srgb, var(--lp-primary) 7%, transparent); border: 1px solid color-mix(in srgb, var(--lp-primary) 15%, transparent); }
 .lp-benefit svg { color: var(--lp-primary); flex: none; }
+
+/* Resultados: colagem "embaralhada" + números de vitrine */
+.lp-results { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center; }
+.lp-collage { position: relative; aspect-ratio: 1 / 0.92; min-height: 380px; }
+.lp-collage__item { position: absolute; margin: 0; overflow: hidden; border-radius: 20px; border: 5px solid var(--color-background); box-shadow: 0 20px 44px color-mix(in srgb, var(--color-foreground) 18%, transparent); transition: transform .35s cubic-bezier(.2,.7,.2,1); }
+.lp-collage__item img { display: block; width: 100%; height: 100%; object-fit: cover; }
+/* Fundo à esquerda e à direita, levemente rotacionadas; destaque ao centro. */
+.lp-collage__item--back-left { width: 50%; aspect-ratio: 3 / 4; left: 0; top: 4%; transform: rotate(-7deg); z-index: 1; }
+.lp-collage__item--back-right { width: 44%; aspect-ratio: 3 / 4; right: 0; top: 0; transform: rotate(6deg); z-index: 1; }
+.lp-collage__item--front { width: 62%; aspect-ratio: 4 / 5; left: 50%; bottom: 0; transform: translateX(-50%) rotate(-1.5deg); z-index: 2; border-width: 6px; box-shadow: 0 30px 64px color-mix(in srgb, var(--lp-primary) 32%, transparent); }
+.lp-collage:hover .lp-collage__item--back-left { transform: rotate(-10deg) translateY(-6px); }
+.lp-collage:hover .lp-collage__item--back-right { transform: rotate(9deg) translateY(-6px); }
+.lp-collage:hover .lp-collage__item--front { transform: translateX(-50%) rotate(0deg) translateY(-8px); }
+.lp-collage__seal { position: absolute; right: 2%; bottom: 12%; z-index: 3; display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-radius: 16px; background: var(--lp-primary); color: #fff; box-shadow: 0 16px 34px color-mix(in srgb, var(--lp-primary) 48%, transparent); }
+.lp-collage__seal div { display: flex; flex-direction: column; line-height: 1.15; }
+.lp-collage__seal strong { font-size: .95rem; }
+.lp-collage__seal span { font-size: .78rem; opacity: .9; }
+.lp-results__content .lp-section__title { margin-top: 12px; }
+.lp-results__content .lp-section__sub { max-width: 46ch; }
+.lp-metrics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin: 28px 0 22px; }
+.lp-metric { padding: 18px; border-radius: 16px; background: var(--color-background); border: 1px solid color-mix(in srgb, var(--color-foreground) 9%, transparent); }
+.lp-metric__icon { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 10px; color: var(--lp-primary); background: color-mix(in srgb, var(--lp-primary) 12%, transparent); }
+.lp-metric__value { display: block; margin-top: 10px; font-size: clamp(1.5rem, 2.6vw, 2rem); font-weight: 800; letter-spacing: -0.02em; color: var(--lp-primary); }
+.lp-metric__label { display: block; margin-top: 2px; font-size: .88rem; color: color-mix(in srgb, var(--color-foreground) 66%, transparent); }
+.lp-guarantee { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 22px; padding: 16px 18px; border-radius: 14px; font-size: .93rem; line-height: 1.5; background: color-mix(in srgb, var(--lp-primary) 8%, transparent); border: 1px solid color-mix(in srgb, var(--lp-primary) 20%, transparent); }
+.lp-guarantee svg { color: var(--lp-primary); flex: none; margin-top: 2px; }
+.lp-guarantee p { margin: 0; }
+
+/* Carrossel de benefícios da preventiva */
+.lp-carousel { position: relative; border-radius: 22px; border: 1px solid color-mix(in srgb, var(--color-foreground) 10%, transparent); background: var(--color-background); box-shadow: 0 18px 44px color-mix(in srgb, var(--color-foreground) 8%, transparent); outline: none; }
+.lp-carousel:focus-visible { border-color: var(--lp-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--lp-primary) 25%, transparent); }
+.lp-carousel__viewport { overflow: hidden; border-radius: 22px; }
+.lp-carousel__track { display: flex; transition: transform .55s cubic-bezier(.2,.7,.2,1); }
+.lp-slide { flex: 0 0 100%; display: grid; grid-template-columns: 0.95fr 1.05fr; align-items: center; gap: 36px; padding: 40px 56px; }
+.lp-slide__art { display: flex; align-items: center; justify-content: center; padding: 18px; border-radius: 18px; background: linear-gradient(140deg, color-mix(in srgb, var(--lp-primary) 12%, transparent), color-mix(in srgb, var(--lp-secondary) 8%, transparent)); }
+.lp-slide__svg { width: 100%; max-width: 300px; height: auto; }
+.lp-slide__step { display: inline-block; font-size: .82rem; font-weight: 800; letter-spacing: .06em; color: var(--lp-primary); }
+.lp-slide__step i { font-style: normal; opacity: .55; }
+.lp-slide__title { margin: 10px 0 0; font-size: clamp(1.25rem, 2.3vw, 1.7rem); font-weight: 800; letter-spacing: -0.02em; }
+.lp-slide__text { margin: 12px 0 0; font-size: 1rem; line-height: 1.65; color: color-mix(in srgb, var(--color-foreground) 72%, transparent); }
+.lp-carousel__nav { position: absolute; top: 50%; transform: translateY(-50%); display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 50%; cursor: pointer; color: var(--lp-primary); background: var(--color-background); border: 1px solid color-mix(in srgb, var(--color-foreground) 12%, transparent); box-shadow: 0 8px 20px color-mix(in srgb, var(--color-foreground) 12%, transparent); transition: background .2s, color .2s, transform .2s; }
+.lp-carousel__nav:hover { background: var(--lp-primary); color: #fff; transform: translateY(-50%) scale(1.06); }
+.lp-carousel__nav--prev { left: -21px; }
+.lp-carousel__nav--next { right: -21px; }
+.lp-carousel__dots { display: flex; justify-content: center; gap: 8px; margin-top: 22px; }
+.lp-dot { width: 9px; height: 9px; padding: 0; border: none; border-radius: 999px; cursor: pointer; background: color-mix(in srgb, var(--color-foreground) 22%, transparent); transition: width .25s ease, background .25s ease; }
+.lp-dot--active { width: 30px; background: var(--lp-primary); }
+
+/* Traços das ilustrações (compartilhados pelos SVGs dos slides) */
+.lp-slide__svg { color: var(--lp-primary); }
+.lp-art-body, .lp-art-card { fill: color-mix(in srgb, var(--color-background) 92%, var(--lp-primary) 8%); stroke: color-mix(in srgb, var(--color-foreground) 16%, transparent); stroke-width: 2; }
+.lp-art-vane { fill: color-mix(in srgb, var(--lp-primary) 22%, transparent); }
+.lp-art-line { fill: color-mix(in srgb, var(--color-foreground) 16%, transparent); }
+.lp-art-accent { fill: var(--lp-primary); }
+.lp-art-accent-soft { fill: color-mix(in srgb, var(--lp-primary) 26%, transparent); }
+.lp-art-hole { fill: var(--color-background); stroke: color-mix(in srgb, var(--color-foreground) 16%, transparent); stroke-width: 2; }
+.lp-art-check { fill: none; stroke: var(--lp-primary); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.lp-art-check-lg { fill: none; stroke: var(--lp-primary); stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; }
+.lp-art-flow path, .lp-art-clean path { stroke: color-mix(in srgb, var(--lp-primary) 55%, transparent); stroke-width: 4; stroke-linecap: round; fill: none; }
+.lp-art-arc { fill: none; stroke: var(--lp-primary); stroke-width: 6; stroke-linecap: round; }
+.lp-art-arc-track { fill: none; stroke: color-mix(in srgb, var(--color-foreground) 12%, transparent); stroke-width: 6; stroke-linecap: round; }
+.lp-art-needle { stroke: var(--lp-primary); stroke-width: 5; stroke-linecap: round; }
+.lp-art-arrow { fill: none; stroke: var(--lp-primary); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+.lp-art-text { fill: color-mix(in srgb, var(--color-foreground) 55%, transparent); font-size: 11px; font-weight: 600; }
+.lp-art-filter { stroke: color-mix(in srgb, var(--lp-primary) 45%, transparent); stroke-width: 3; stroke-linecap: round; }
+.lp-art-dust { fill: color-mix(in srgb, var(--color-foreground) 26%, transparent); }
+.lp-art-leaf { fill: color-mix(in srgb, var(--lp-primary) 40%, transparent); }
+.lp-art-shield-edge { fill: none; stroke: var(--lp-primary); stroke-width: 3; }
+.lp-art-muted-icon { fill: color-mix(in srgb, var(--color-foreground) 22%, transparent); }
+.lp-art-alert { stroke: color-mix(in srgb, var(--color-foreground) 40%, transparent); stroke-width: 3; stroke-linecap: round; }
+.lp-art-alert-dot { fill: color-mix(in srgb, var(--color-foreground) 40%, transparent); }
+.lp-art-bar-high { fill: color-mix(in srgb, var(--color-foreground) 18%, transparent); }
+@media (prefers-reduced-motion: reduce) { .lp-carousel__track { transition: none; } }
 
 /* Sections */
 .lp-section { padding: 80px 0; }
@@ -784,7 +934,7 @@ html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) { .lp-fab, .lp-fab::after { animation: none; } }
 
 /* Anchor offset */
-#servicos, #relatorios, #empresa, #contato, #inicio { scroll-margin-top: 84px; }
+#servicos, #resultados, #preventiva, #relatorios, #empresa, #contato, #inicio { scroll-margin-top: 84px; }
 
 /* Responsive */
 @media (max-width: 940px) {
@@ -795,6 +945,13 @@ html { scroll-behavior: smooth; }
   .lp-grid--contact { grid-template-columns: repeat(2, 1fr); }
   .lp-svc-grid { grid-template-columns: repeat(2, 1fr); }
   .lp-benefits { grid-template-columns: repeat(2, 1fr); }
+  .lp-results { grid-template-columns: 1fr; gap: 40px; }
+  .lp-collage { max-width: 520px; margin: 0 auto; }
+  .lp-slide { grid-template-columns: 1fr; gap: 24px; padding: 32px 28px; text-align: center; }
+  .lp-slide__art { order: -1; }
+  .lp-slide__svg { max-width: 260px; }
+  .lp-carousel__nav--prev { left: 8px; }
+  .lp-carousel__nav--next { right: 8px; }
 }
 @media (max-width: 720px) {
   .lp-nav, .lp-hide-sm { display: none; }
@@ -808,6 +965,9 @@ html { scroll-behavior: smooth; }
 @media (max-width: 480px) {
   .lp-grid--4, .lp-grid--contact { grid-template-columns: 1fr; }
   .lp-benefits { grid-template-columns: 1fr; }
+  .lp-metrics { grid-template-columns: 1fr; }
+  .lp-collage { min-height: 320px; }
+  .lp-collage__seal { right: 0; bottom: 6%; padding: 10px 13px; }
   .lp-about__stats { grid-template-columns: 1fr; }
   .lp-footer__inner { flex-direction: column; align-items: flex-start; }
   .lp-footer__meta { text-align: left; }

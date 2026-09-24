@@ -448,13 +448,22 @@ export type CommissionItem = {
   percent: number;
   commission: number;
   paid: boolean;
+  /** Operação cancelada: fica listada para auditoria, mas não soma nos totais. */
+  canceled: boolean;
   paymentId: string | null;
 };
 
 export type CommissionDetail = {
   period: CommissionPeriod;
   range: { from: string; to: string };
-  summary: { pendingAmount: number; pendingCount: number; paidAmount: number; paidCount: number };
+  summary: {
+    pendingAmount: number;
+    pendingCount: number;
+    paidAmount: number;
+    paidCount: number;
+    canceledAmount: number;
+    canceledCount: number;
+  };
   items: CommissionItem[];
 };
 

@@ -17,6 +17,8 @@ interface CommissionItem {
   percent: number;
   commission: number;
   paid: boolean;
+  /** Operação cancelada: permanece listada para auditoria, mas não soma. */
+  canceled: boolean;
   paymentId: string | null;
 }
 
@@ -52,8 +54,10 @@ export class CommissionsService {
     const period = await this.period();
     const { from, to } = this.resolveRange(period, query);
     const items = await this.items(operatorId, from, to, query.serviceType);
-    const pending = items.filter((item) => !item.paid);
-    const paid = items.filter((item) => item.paid);
+    // Canceladas continuam na lista (auditoria), mas ficam fora dos totais.
+    const canceled = items.filter((item) => item.canceled);
+    const pending = items.filter((item) => !item.paid && !item.canceled);
+    const paid = items.filter((item) => item.paid && !item.canceled);
     return {
       period,
       range: { from: from.toISOString(), to: to.toISOString() },
@@ -62,21 +66,27 @@ export class CommissionsService {
         pendingCount: pending.length,
         paidAmount: round(paid.reduce((sum, item) => sum + item.commission, 0)),
         paidCount: paid.length,
+        canceledAmount: round(canceled.reduce((sum, item) => sum + item.commission, 0)),
+        canceledCount: canceled.length,
       },
       items,
     };
   }
 
   /**
-   * Fecha a comissão do período: grava o pagamento (auditoria) e vincula as
-   * operações pendentes, que passam a não contar mais no valor a pagar.
+   * Fecha a comissão: grava o pagamento (auditoria) e vincula as operações,
+   * que passam a não contar mais no valor a pagar. Sem `operationIds`, fecha
+   * todos os pendentes do período/filtro; com eles, apenas os escolhidos
+   * (pagamento individual ou de uma seleção).
    */
   async pay(operatorId: string, dto: PayCommissionDto, actor: AuthenticatedUser): Promise<unknown> {
     const period = await this.period();
     const { from, to } = this.resolveRange(period, dto);
     const items = await this.items(operatorId, from, to, dto.serviceType);
-    const pending = items.filter((item) => !item.paid);
-    if (pending.length === 0) {
+    // Canceladas nunca entram num fechamento.
+    const payable = items.filter((item) => !item.paid && !item.canceled);
+    const selection = this.selectPayable(payable, dto.operationIds);
+    if (selection.length === 0) {
       throw new ApplicationException(
         ERROR_CODES.VALIDATION_ERROR,
         'Não há comissão pendente neste período para registrar como paga',
@@ -84,23 +94,25 @@ export class CommissionsService {
       );
     }
     const organizationId = await this.organizationId();
-    const amount = round(pending.reduce((sum, item) => sum + item.commission, 0));
+    const amount = round(selection.reduce((sum, item) => sum + item.commission, 0));
+    // Numa seleção o registro guarda o intervalo real do que foi pago, não o do filtro.
+    const bounds = dto.operationIds?.length ? boundsOf(selection) : null;
     return this.prisma.$transaction(async (tx) => {
       const payment = await tx.commissionPayment.create({
         data: {
           organizationId,
           operatorId,
-          periodStart: startOfDay(from),
-          periodEnd: startOfDay(to),
+          periodStart: startOfDay(bounds?.from ?? from),
+          periodEnd: startOfDay(bounds?.to ?? to),
           amount,
-          operationCount: pending.length,
+          operationCount: selection.length,
           notes: dto.notes?.trim() || null,
           paidById: actor.id,
         },
         select: { id: true, amount: true, operationCount: true, paidAt: true },
       });
       // Congela o valor por operação: o % do tipo pode mudar depois.
-      for (const item of pending) {
+      for (const item of selection) {
         await tx.operation.update({
           where: { id: item.operationId },
           data: { commissionPaymentId: payment.id, commissionAmount: item.commission },
@@ -115,7 +127,9 @@ export class CommissionsService {
             operatorId,
             paymentId: payment.id,
             amount,
-            operationCount: pending.length,
+            operationCount: selection.length,
+            operationIds: selection.map((item) => item.operationId),
+            partial: Boolean(dto.operationIds?.length),
             from: from.toISOString(),
             to: to.toISOString(),
           },
@@ -147,6 +161,26 @@ export class CommissionsService {
 
   /* ---------- internos ---------- */
 
+  /**
+   * Restringe o fechamento aos atendimentos escolhidos. Recusa a operação
+   * inteira se algum id não estiver mais pagável (já pago, cancelado ou fora
+   * do filtro) — é dinheiro: melhor o owner reconferir a lista do que pagar
+   * em silêncio um subconjunto diferente do que ele marcou.
+   */
+  private selectPayable(payable: CommissionItem[], operationIds?: string[]): CommissionItem[] {
+    if (!operationIds?.length) return payable;
+    const wanted = new Set(operationIds);
+    const selection = payable.filter((item) => wanted.has(item.operationId));
+    if (selection.length !== wanted.size) {
+      throw new ApplicationException(
+        ERROR_CODES.VALIDATION_ERROR,
+        'Alguns atendimentos selecionados não estão mais disponíveis para pagamento (já pagos ou cancelados). Atualize a lista e tente novamente.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return selection;
+  }
+
   private resolveRange(
     period: CommissionPeriod,
     query: { from?: string; to?: string },
@@ -176,7 +210,9 @@ export class CommissionsService {
   ): Promise<CommissionItem[]> {
     const where: Prisma.OperationWhereInput = {
       operatorId,
-      status: OperationStatus.COMPLETED,
+      // Canceladas entram para ficarem visíveis como estorno — a aprovação do
+      // cancelamento preenche `completedAt`, então elas caem no mesmo intervalo.
+      status: { in: [OperationStatus.COMPLETED, OperationStatus.CANCELED] },
       completedAt: { gte: from, lte: to },
       serviceValue: { not: null },
       ...(serviceType ? { type: serviceType } : {}),
@@ -193,6 +229,7 @@ export class CommissionsService {
           id: true,
           number: true,
           type: true,
+          status: true,
           completedAt: true,
           serviceValue: true,
           commissionPaymentId: true,
@@ -223,6 +260,7 @@ export class CommissionsService {
         percent,
         commission,
         paid: alreadyPaid,
+        canceled: operation.status === OperationStatus.CANCELED,
         paymentId: operation.commissionPaymentId,
       });
     }
@@ -247,6 +285,16 @@ export class CommissionsService {
 
 function round(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+/** Menor e maior conclusão da seleção, para o período registrado no histórico. */
+function boundsOf(items: CommissionItem[]): { from: Date; to: Date } | null {
+  const dates = items
+    .map((item) => item.completedAt)
+    .filter((date): date is Date => date instanceof Date);
+  if (dates.length === 0) return null;
+  const times = dates.map((date) => date.getTime());
+  return { from: new Date(Math.min(...times)), to: new Date(Math.max(...times)) };
 }
 
 function startOfDay(value: Date): Date {

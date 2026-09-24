@@ -71,7 +71,14 @@ export function commissionPayments(
 /** Registra o pagamento da comissão pendente do período (OWNER). */
 export function payCommission(
   operatorId: string,
-  payload: { from?: string; to?: string; serviceType?: string; notes?: string },
+  /** Sem `operationIds`, fecha todos os pendentes do período/filtro. */
+  payload: {
+    from?: string;
+    to?: string;
+    serviceType?: string;
+    notes?: string;
+    operationIds?: string[];
+  },
 ): Promise<{ id: string; amount: number; operationCount: number; paidAt: string }> {
   return api.post(`/operator-executions/${operatorId}/commission/pay`, payload);
 }

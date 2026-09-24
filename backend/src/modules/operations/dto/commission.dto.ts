@@ -1,5 +1,14 @@
 import { Transform } from 'class-transformer';
-import { IsDateString, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  ArrayMaxSize,
+  ArrayUnique,
+  IsArray,
+  IsDateString,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+} from 'class-validator';
 
 const trim = (value: unknown): unknown => (typeof value === 'string' ? value.trim() : value);
 
@@ -16,4 +25,14 @@ export class PayCommissionDto {
   @IsOptional() @IsDateString() to?: string;
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(60) serviceType?: string;
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(500) notes?: string;
+  /**
+   * Fecha apenas estes atendimentos (pagamento individual ou de uma seleção).
+   * Ausente = fecha todos os pendentes do período/filtro.
+   */
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @ArrayMaxSize(500)
+  @IsUUID('4', { each: true })
+  operationIds?: string[];
 }
