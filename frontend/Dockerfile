@@ -10,9 +10,16 @@ FROM node:22-alpine AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# NEXT_PUBLIC_* are inlined at build time.
+# NEXT_PUBLIC_* are inlined at build time. O .dockerignore exclui o .env de
+# propósito, então TODA variável pública precisa entrar como build arg aqui e
+# ser repassada pelo docker-compose — senão chega vazia no bundle do navegador.
 ARG NEXT_PUBLIC_API_BASE_URL
 ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
+# Google Ads (landing page): sem o id, o banner de cookies e a tag não montam.
+ARG NEXT_PUBLIC_GOOGLE_ADS_ID
+ENV NEXT_PUBLIC_GOOGLE_ADS_ID=$NEXT_PUBLIC_GOOGLE_ADS_ID
+ARG NEXT_PUBLIC_GOOGLE_ADS_WHATSAPP_LABEL
+ENV NEXT_PUBLIC_GOOGLE_ADS_WHATSAPP_LABEL=$NEXT_PUBLIC_GOOGLE_ADS_WHATSAPP_LABEL
 RUN npm run build
 
 FROM node:22-alpine AS runtime
