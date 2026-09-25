@@ -7,7 +7,7 @@ import { EmptyState } from '@erp/ui/empty-state';
 import { FilterBar } from '@erp/ui/filter-bar';
 import { SkeletonList } from '@erp/ui/skeletons';
 import { ErrorState } from '@erp/ui/states';
-import { useDebounce } from '@erp/utils';
+import { useDebounce, formatCurrencyBRL } from '@erp/utils';
 import { DataTable, type Column } from '@platform/components/data-table';
 import { PageHeader } from '@platform/components/page-header';
 import { Pagination } from '@platform/components/pagination';
@@ -37,7 +37,11 @@ export default function OperatorExecutionsPage() {
         cell: (item) => (
           <div>
             <strong>{item.name}</strong>
-            <span className="block text-caption">{item.jobTitle ?? `@${item.username}`}</span>
+            {/* O auxiliar acompanha o atendimento, mas não o executa: o papel
+                vale mais que o cargo cadastrado para quem lê esta lista. */}
+            <span className="block text-caption">
+              {item.isAssistant ? 'Auxiliar Técnico' : (item.jobTitle ?? `@${item.username}`)}
+            </span>
           </div>
         ),
       },
@@ -47,6 +51,7 @@ export default function OperatorExecutionsPage() {
       { key: 'progress', header: 'Em execução', cell: (item) => <MetricValue value={item.metrics.inProgress} /> },
       { key: 'overdue', header: 'Atrasados', cell: (item) => <MetricValue value={item.metrics.overdue} tone="danger" /> },
       { key: 'rate', header: 'Conclusão', cell: (item) => <span className="font-semibold tabular-nums">{formatPercent(item.metrics.completionRate)}</span> },
+      { key: 'commission', header: 'Comissão', cell: (item) => <span className="text-sm font-semibold tabular-nums text-[var(--color-primary)]">{formatCurrencyBRL(item.metrics.commission)}</span> },
       { key: 'duration', header: 'Tempo médio', cell: (item) => <span className="text-sm tabular-nums">{formatDuration(item.metrics.averageDurationMinutes)}</span> },
       { key: 'status', header: 'Usuário', cell: (item) => <span className={item.isActive ? 'text-[var(--color-success)]' : 'text-[var(--color-muted-foreground)]'}>{item.isActive ? 'Ativo' : 'Inativo'}</span> },
     ],

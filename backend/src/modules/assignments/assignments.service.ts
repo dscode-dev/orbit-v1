@@ -723,6 +723,15 @@ export class AssignmentsService {
             data: { status: 'IN_PROGRESS', startedAt: now },
           });
         }
+        // O executor primário arrasta a equipe: os auxiliares atenderam a mesma
+        // demanda, mas não concluem pelo app (view-only sem canReports).
+        if (current.isPrimary) {
+          const crewStatus =
+            config.operationStatus === 'IN_PROGRESS'
+              ? AssignmentStatus.STARTED
+              : AssignmentStatus.COMPLETED;
+          await this.syncCrewAssignmentsTx(tx, assignment.operationId, crewStatus, actor.id, now);
+        }
       }
       await this.historyTx(tx, assignment, config.event, actor.id, current.status, config.notes);
       await this.auditTx(tx, config.action, actor.id, context, {
@@ -790,6 +799,55 @@ export class AssignmentsService {
       );
     }
     return assignment;
+  }
+
+  /**
+   * Espelha o andamento do executor primário nos técnicos auxiliares da mesma
+   * operação. Sem isso o assignment do auxiliar ficava parado em ASSIGNED — ele
+   * não tem como concluir pelo app — e o atendimento nunca aparecia como
+   * concluído nas métricas de Técnicos de Campo. Quem recusou ou teve a
+   * atribuição cancelada fica de fora.
+   */
+  private async syncCrewAssignmentsTx(
+    tx: Prisma.TransactionClient,
+    operationId: string,
+    status: AssignmentStatus,
+    actorId: string,
+    now: Date,
+  ): Promise<void> {
+    const crew = await tx.assignment.findMany({
+      where: {
+        operationId,
+        isPrimary: false,
+        status: { notIn: [AssignmentStatus.REJECTED, AssignmentStatus.CANCELED, status] },
+      },
+      select: { id: true, status: true },
+    });
+    const event =
+      status === AssignmentStatus.STARTED
+        ? AssignmentEventType.STARTED
+        : AssignmentEventType.COMPLETED;
+    for (const member of crew) {
+      await tx.assignment.update({
+        where: { id: member.id },
+        data: {
+          status,
+          ...(status === AssignmentStatus.STARTED ? { acceptedAt: now, startedAt: now } : {}),
+          ...(status === AssignmentStatus.COMPLETED ? { completedAt: now } : {}),
+        },
+      });
+      await tx.assignmentHistory.create({
+        data: {
+          assignmentId: member.id,
+          operationId,
+          event,
+          actorId,
+          previousStatus: member.status,
+          newStatus: status,
+          notes: 'Acompanhou o atendimento como técnico auxiliar',
+        },
+      });
+    }
   }
 
   private async assignmentOrThrowTx(

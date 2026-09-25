@@ -422,6 +422,12 @@ export type PublicCompanyProfile = {
   secondaryColor: string;
 };
 
+/** Janela de apuração das comissões dos técnicos. */
+export type CommissionPeriod = 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
+
+/** Base de cálculo da comissão: valor fixo por atendimento ou % do serviço. */
+export type CommissionMode = 'FIXED' | 'PERCENT';
+
 export type OrganizationSettings = {
   id: string;
   organizationId: string;
@@ -429,8 +435,59 @@ export type OrganizationSettings = {
   timezone: string;
   currency: string;
   documentPrefix: string;
+  commissionPeriod: CommissionPeriod;
+  commissionMode: CommissionMode;
   createdAt: string;
   updatedAt: string;
+};
+
+/** Como o técnico participou da operação: executor ou auxiliar. */
+export type CommissionRole = 'PRIMARY' | 'ASSISTANT';
+
+/** Uma operação concluída que gera (ou gerou) comissão para o técnico. */
+export type CommissionItem = {
+  operationId: string;
+  number: number;
+  completedAt: string | null;
+  typeKey: string;
+  typeLabel: string;
+  serviceValue: number;
+  /** Auxiliar usa o percentual próprio do tipo, diferente do executor. */
+  role: CommissionRole;
+  percent: number;
+  commission: number;
+  paid: boolean;
+  /** Operação cancelada: fica listada para auditoria, mas não soma nos totais. */
+  canceled: boolean;
+  paymentId: string | null;
+};
+
+export type CommissionDetail = {
+  period: CommissionPeriod;
+  /** Base usada no cálculo dos itens deste período. */
+  mode: CommissionMode;
+  range: { from: string; to: string };
+  summary: {
+    pendingAmount: number;
+    pendingCount: number;
+    paidAmount: number;
+    paidCount: number;
+    canceledAmount: number;
+    canceledCount: number;
+  };
+  items: CommissionItem[];
+};
+
+/** Fechamento pago — histórico para auditoria. */
+export type CommissionPaymentRecord = {
+  id: string;
+  periodStart: string;
+  periodEnd: string;
+  amount: number;
+  operationCount: number;
+  notes: string | null;
+  paidAt: string;
+  paidBy: { id: string; name: string } | null;
 };
 
 export type DocumentTemplate = {
@@ -560,6 +617,8 @@ export type UpdateOrganizationSettingsPayload = Partial<{
   timezone: string;
   currency: string;
   documentPrefix: string;
+  commissionPeriod: CommissionPeriod;
+  commissionMode: CommissionMode;
 }>;
 
 export type CreateDocumentTemplatePayload = {
@@ -914,6 +973,13 @@ export type ServiceType = {
   sortOrder: number;
   generatesReminder: boolean;
   reminderIntervalMonths: number | null;
+  commissionEligible: boolean;
+  commissionPercent: number;
+  /** Percentual pago ao técnico auxiliar; pode diferir do executor. */
+  commissionPercentAssistant: number;
+  /** Valores fixos por atendimento (R$), usados quando o modo é FIXED. */
+  commissionFixed: number;
+  commissionFixedAssistant: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -1309,6 +1375,8 @@ export type OperatorExecutionMetrics = {
   completionRate: number;
   averageDurationMinutes: number | null;
   lastCompletedAt: string | null;
+  /** Comissão do período (Σ valor do serviço × % do tipo elegível). */
+  commission: number;
 };
 
 export type OperatorExecutionKpis = {
@@ -1332,6 +1400,8 @@ export type OperatorExecutionUser = {
   isActive: boolean;
   disabledAt: string | null;
   avatarAssetId: string | null;
+  /** Operador sem permissão de relatórios: acompanha a demanda como auxiliar. */
+  isAssistant: boolean;
 };
 
 export type OperatorExecutionRow = OperatorExecutionUser & { metrics: OperatorExecutionMetrics };

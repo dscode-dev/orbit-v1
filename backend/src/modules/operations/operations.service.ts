@@ -1965,12 +1965,24 @@ export class OperationsService {
           : operationStatus === OperationStatus.CANCELED
             ? AssignmentStatus.CANCELED
             : AssignmentStatus.ASSIGNED;
+    // O andamento da operação vale para a equipe toda: o auxiliar executa junto
+    // do responsável, e é o status do assignment dele que alimenta as métricas
+    // em Técnicos de Campo (antes só o primário era atualizado, então o auxiliar
+    // nunca contabilizava a conclusão). Quem recusou ou teve a atribuição
+    // cancelada fica de fora; a reativação (ASSIGNED) segue só no primário.
+    const crew: Prisma.AssignmentWhereInput =
+      targetStatus === AssignmentStatus.CANCELED
+        ? {}
+        : targetStatus === AssignmentStatus.ASSIGNED
+          ? { isPrimary: true }
+          : {
+              OR: [
+                { isPrimary: true },
+                { status: { notIn: [AssignmentStatus.REJECTED, AssignmentStatus.CANCELED] } },
+              ],
+            };
     const assignments = await tx.assignment.findMany({
-      where: {
-        operationId,
-        ...(targetStatus === AssignmentStatus.CANCELED ? {} : { isPrimary: true }),
-        status: { not: targetStatus },
-      },
+      where: { operationId, ...crew, status: { not: targetStatus } },
       select: { id: true, status: true },
     });
     const now = new Date();

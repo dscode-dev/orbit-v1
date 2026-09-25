@@ -83,6 +83,8 @@ const SETTINGS_SELECT = {
   timezone: true,
   currency: true,
   documentPrefix: true,
+  commissionPeriod: true,
+  commissionMode: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.OrganizationSettingsSelect;

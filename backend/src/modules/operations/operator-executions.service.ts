@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { AssignmentStatus, Prisma, Role } from '@prisma/client';
+import { AssignmentStatus, CommissionMode, Prisma, Role } from '@prisma/client';
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
 import { buildPaginatedResponse } from '../../shared/types/pagination.types';
@@ -30,7 +30,19 @@ const OPERATOR_SELECT = {
   isActive: true,
   disabledAt: true,
   avatarAssetId: true,
+  permission: { select: { canReports: true, canSchedules: true } },
 } satisfies Prisma.UserSelect;
+
+type OperatorRecord = Prisma.UserGetPayload<{ select: typeof OPERATOR_SELECT }>;
+
+/**
+ * Técnico auxiliar: operador que só acompanha a demanda (permissão de
+ * agendamentos, sem relatórios). Ele não constrói nem conclui o atendimento
+ * pelo app, então é listado com esse papel em vez do cargo cadastrado.
+ */
+function isAssistantTechnician(operator: OperatorRecord): boolean {
+  return Boolean(operator.permission && !operator.permission.canReports);
+}
 
 @Injectable()
 export class OperatorExecutionsService {
@@ -69,8 +81,9 @@ export class OperatorExecutionsService {
       period: this.periodPayload(period),
       kpis,
       ...buildPaginatedResponse(
-        operators.map((operator) => ({
+        operators.map(({ permission, ...operator }) => ({
           ...operator,
+          isAssistant: isAssistantTechnician({ ...operator, permission }),
           metrics: metrics.get(operator.id) ?? this.emptyMetrics(operator.id),
         })),
         total,
@@ -82,10 +95,10 @@ export class OperatorExecutionsService {
 
   async get(operatorId: string, query: OperatorExecutionPeriodDto): Promise<unknown> {
     const period = await this.period(query);
-    const operator = await this.operatorOrThrow(operatorId);
+    const { permission, ...operator } = await this.operatorOrThrow(operatorId);
     const [metrics] = await this.metricsForOperators([operatorId], period);
     return {
-      operator,
+      operator: { ...operator, isAssistant: isAssistantTechnician({ ...operator, permission }) },
       period: this.periodPayload(period),
       metrics: metrics ?? this.emptyMetrics(operatorId),
     };
@@ -244,6 +257,7 @@ export class OperatorExecutionsService {
     const lastMap = new Map(
       lastCompleted.map((item) => [item.assignedTo, item._max?.completedAt ?? null]),
     );
+    const commissionMap = await this.commissionForOperators(operatorIds, period);
     return operatorIds.map((operatorId) => {
       const completedCount = maps[1].get(operatorId) ?? 0;
       const pendingCount = maps[2].get(operatorId) ?? 0;
@@ -262,6 +276,7 @@ export class OperatorExecutionsService {
         averageDurationMinutes:
           values.length === 0 ? null : Math.round(values.reduce((sum, value) => sum + value, 0) / values.length),
         lastCompletedAt: lastMap.get(operatorId) ?? null,
+        commission: commissionMap.get(operatorId) ?? 0,
       };
     });
   }
@@ -438,7 +453,111 @@ export class OperatorExecutionsService {
       completionRate: 0,
       averageDurationMinutes: null,
       lastCompletedAt: null,
+      commission: 0,
     };
+  }
+
+  /**
+   * Comissão PENDENTE por técnico no período: soma, das operações CONCLUÍDAS em
+   * que ele participou, de `valor do serviço × (% do tipo)`, quando o tipo é
+   * elegível. Conta tanto quem executou (primário, `%` do técnico) quanto quem
+   * entrou como auxiliar (assignment não primário, `%` do auxiliar). O que já
+   * tem lançamento de comissão fica de fora — pago não se recalcula.
+   */
+  private async commissionForOperators(
+    operatorIds: string[],
+    period: Period,
+  ): Promise<Map<string, number>> {
+    const result = new Map<string, number>();
+    if (operatorIds.length === 0) return result;
+    const settings = await this.prisma.organizationSettings.findFirst({
+      select: { commissionMode: true },
+    });
+    const mode = settings?.commissionMode ?? CommissionMode.FIXED;
+    const [types, operations] = await Promise.all([
+      this.prisma.serviceType.findMany({
+        select: {
+          key: true,
+          commissionEligible: true,
+          commissionPercent: true,
+          commissionPercentAssistant: true,
+          commissionFixed: true,
+          commissionFixedAssistant: true,
+        },
+      }),
+      this.prisma.operation.findMany({
+        where: {
+          OR: [
+            { operatorId: { in: operatorIds } },
+            {
+              assignments: {
+                some: {
+                  assignedTo: { in: operatorIds },
+                  isPrimary: false,
+                  status: { notIn: [AssignmentStatus.REJECTED, AssignmentStatus.CANCELED] },
+                },
+              },
+            },
+          ],
+          status: 'COMPLETED',
+          completedAt: { gte: period.start, lt: period.end },
+          // No modo fixo o valor cobrado não entra na conta, então atendimentos
+          // sem valor informado também rendem comissão.
+          ...(mode === CommissionMode.PERCENT ? { serviceValue: { not: null } } : {}),
+        },
+        select: {
+          operatorId: true,
+          serviceValue: true,
+          type: true,
+          assignments: {
+            where: {
+              assignedTo: { in: operatorIds },
+              isPrimary: false,
+              status: { notIn: [AssignmentStatus.REJECTED, AssignmentStatus.CANCELED] },
+            },
+            select: { assignedTo: true },
+          },
+          // Quem já recebeu por esta operação não entra de novo no pendente.
+          commissionEntries: { select: { userId: true } },
+        },
+      }),
+    ]);
+    const fixedMode = mode === CommissionMode.FIXED;
+    const config = new Map(
+      types.map((type) => [
+        type.key,
+        {
+          eligible: type.commissionEligible,
+          // Cada função tem a sua taxa, na base que o owner configurou.
+          primary: Number(fixedMode ? type.commissionFixed : type.commissionPercent),
+          assistant: Number(fixedMode ? type.commissionFixedAssistant : type.commissionPercentAssistant),
+        },
+      ]),
+    );
+    const targets = new Set(operatorIds);
+    for (const operation of operations) {
+      const cfg = config.get(operation.type);
+      if (!cfg || !cfg.eligible) continue;
+      const value = Number(operation.serviceValue ?? 0);
+      if (!fixedMode && value <= 0) continue;
+      const paidUsers = new Set(operation.commissionEntries.map((entry) => entry.userId));
+      const beneficiaries: Array<{ userId: string; rate: number }> = [
+        { userId: operation.operatorId, rate: cfg.primary },
+        ...operation.assignments.map((assignment) => ({
+          userId: assignment.assignedTo,
+          rate: cfg.assistant,
+        })),
+      ];
+      for (const { userId, rate } of beneficiaries) {
+        if (!targets.has(userId) || paidUsers.has(userId) || rate <= 0) continue;
+        const commission = fixedMode ? rate : value * (rate / 100);
+        result.set(userId, (result.get(userId) ?? 0) + commission);
+      }
+    }
+    for (const [operatorId, value] of result) {
+      result.set(operatorId, Math.round(value * 100) / 100);
+    }
+    return result;
   }
 }
 
@@ -453,4 +572,6 @@ type OperatorMetric = {
   completionRate: number;
   averageDurationMinutes: number | null;
   lastCompletedAt: Date | null;
+  /** Comissão do período: Σ (valor do serviço × % do tipo elegível) das operações concluídas. */
+  commission: number;
 };

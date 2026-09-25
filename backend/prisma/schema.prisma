@@ -565,6 +565,9 @@ model User {
   pmocPlannedTechnicianFor        PmocExecutionRequest[]  @relation("PmocPlannedTechnician")
   pmocExecutionRequests           PmocExecutionRequest[]  @relation("PmocExecutionRequestActor")
   pmocHistoryEvents               PmocHistory[]           @relation("PmocHistoryActor")
+  commissionPayments              CommissionPayment[]     @relation("CommissionOperator")
+  commissionPaymentsRegistered    CommissionPayment[]     @relation("CommissionPaidBy")
+  commissionEntries               CommissionEntry[]       @relation("CommissionEntryUser")
   documentsCollected              OperationDocument[]     @relation("DocumentCollectedBy")
   documentsReviewed               OperationDocument[]     @relation("DocumentReviewedBy")
   documentsFinalized              OperationDocument[]     @relation("DocumentFinalizedBy")
@@ -650,11 +653,89 @@ model OrganizationSettings {
   timezone       String       @db.VarChar(80)
   currency       String       @db.VarChar(3)
   documentPrefix String       @map("document_prefix") @db.VarChar(20)
+  /// Janela de apuração das comissões dos técnicos (sugere o intervalo padrão
+  /// nos filtros e no fechamento). Configurada no modal de Comissões.
+  commissionPeriod CommissionPeriod @default(MONTHLY) @map("commission_period")
+  /// Como a comissão é calculada: valor fixo por atendimento (padrão) ou
+  /// percentual sobre o valor do serviço. Configurado no modal de Comissões.
+  commissionMode   CommissionMode   @default(FIXED) @map("commission_mode")
   createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@map("organization_settings")
+}
+
+/// Base de cálculo da comissão do técnico.
+enum CommissionMode {
+  /// Valor fixo por atendimento, independente do valor do serviço.
+  FIXED
+  /// Percentual aplicado sobre o valor do serviço.
+  PERCENT
+}
+
+enum CommissionPeriod {
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+}
+
+/// Função do técnico na operação, para fins de comissão: executor primário
+/// (Operation.operatorId) ou auxiliar (assignment com isPrimary = false).
+enum CommissionRole {
+  PRIMARY
+  ASSISTANT
+}
+
+/// Lançamento de comissão: o que UMA pessoa recebeu por UMA operação num
+/// fechamento. Existe porque a mesma operação paga o técnico primário e os
+/// auxiliares — o vínculo antigo (Operation.commissionPaymentId) só comportava
+/// um beneficiário. É a fonte de verdade do que já foi pago.
+model CommissionEntry {
+  id          String            @id @default(uuid()) @db.Uuid
+  paymentId   String            @map("payment_id") @db.Uuid
+  operationId String            @map("operation_id") @db.Uuid
+  userId      String            @map("user_id") @db.Uuid
+  role        CommissionRole
+  /// Valor congelado no fechamento: o % do tipo pode mudar depois.
+  amount      Decimal           @db.Decimal(14, 2)
+  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  payment     CommissionPayment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  operation   Operation         @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  user        User              @relation("CommissionEntryUser", fields: [userId], references: [id], onDelete: Restrict)
+
+  /// Cada pessoa recebe no máximo uma vez por operação.
+  @@unique([operationId, userId])
+  @@index([userId])
+  @@index([paymentId])
+  @@map("commission_entries")
+}
+
+/// Fechamento de comissão de um técnico: registra o que foi pago, em qual
+/// intervalo e por quem — histórico imutável para auditoria. O detalhe por
+/// operação fica em CommissionEntry, que é o que remove o valor do pendente
+/// (não recalcula o que já foi pago).
+model CommissionPayment {
+  id             String      @id @default(uuid()) @db.Uuid
+  organizationId String      @map("organization_id") @db.Uuid
+  operatorId     String      @map("operator_id") @db.Uuid
+  periodStart    DateTime    @map("period_start") @db.Date
+  periodEnd      DateTime    @map("period_end") @db.Date
+  amount         Decimal     @db.Decimal(14, 2)
+  operationCount Int         @default(0) @map("operation_count")
+  notes          String?     @db.VarChar(500)
+  paidAt         DateTime    @default(now()) @map("paid_at") @db.Timestamptz(3)
+  paidById       String?     @map("paid_by_id") @db.Uuid
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  operator       User              @relation("CommissionOperator", fields: [operatorId], references: [id], onDelete: Restrict)
+  paidBy         User?             @relation("CommissionPaidBy", fields: [paidById], references: [id], onDelete: SetNull)
+  entries        CommissionEntry[]
+  /// Legado do modelo de um beneficiário por operação; ver CommissionEntry.
+  operations     Operation[]
+
+  @@index([operatorId, paidAt])
+  @@index([organizationId, paidAt])
+  @@map("commission_payments")
 }
 
 model BrandAsset {
@@ -1100,6 +1181,14 @@ model Operation {
   /// Valor operacional informado pela gestão ao técnico responsável. Não
   /// integra o Financial Core nem o Document Engine.
   serviceValue                    Decimal?                            @map("service_value") @db.Decimal(15, 2)
+  /// Legado: fechamento que incluiu esta operação quando só havia um
+  /// beneficiário. Continua preenchido para o técnico primário, mas quem manda
+  /// no "já pago" (primário + auxiliares) é CommissionEntry.
+  commissionPaymentId             String?                             @map("commission_payment_id") @db.Uuid
+  /// Legado, idem: valor da comissão do primário congelado no fechamento.
+  commissionAmount                Decimal?                            @map("commission_amount") @db.Decimal(14, 2)
+  commissionPayment               CommissionPayment?                  @relation(fields: [commissionPaymentId], references: [id], onDelete: SetNull)
+  commissionEntries               CommissionEntry[]
   maintenanceReminderIntervalMonths Int?                             @map("maintenance_reminder_interval_months") @db.SmallInt
   receiptNumber                   String?                             @map("receipt_number") @db.VarChar(40)
   receiptIssuedAt                 DateTime?                           @map("receipt_issued_at") @db.Date
@@ -1161,6 +1250,8 @@ model Operation {
   @@index([status, createdAt])
   @@index([scheduledFor, status], map: "operations_schedule_status_idx")
   @@index([sourceSaleId])
+  @@index([operatorId, status, completedAt], map: "operations_commission_idx")
+  @@index([commissionPaymentId])
   @@map("operations")
 }
 
@@ -1478,6 +1569,17 @@ model ServiceType {
   sortOrder              Int       @default(0) @map("sort_order")
   generatesReminder      Boolean   @default(false) @map("generates_reminder")
   reminderIntervalMonths Int?      @map("reminder_interval_months")
+  // Comissão do técnico: elegibilidade + percentual aplicado sobre o valor do
+  // serviço da operação concluída. Por padrão todo tipo é elegível a 0% (o owner
+  // ajusta o percentual no modal em Financeiro).
+  commissionEligible     Boolean   @default(true) @map("commission_eligible")
+  commissionPercent      Decimal   @default(0) @map("commission_percent") @db.Decimal(5, 2)
+  // Percentual do técnico auxiliar (assignment não primário). Nasce em 0: o
+  // auxiliar só passa a receber quando o owner configurar o tipo.
+  commissionPercentAssistant Decimal @default(0) @map("commission_percent_assistant") @db.Decimal(5, 2)
+  // Valores fixos por atendimento, usados quando o modo é FIXED.
+  commissionFixed            Decimal @default(0) @map("commission_fixed") @db.Decimal(14, 2)
+  commissionFixedAssistant   Decimal @default(0) @map("commission_fixed_assistant") @db.Decimal(14, 2)
   deletedAt              DateTime? @map("deleted_at") @db.Timestamptz(3)
   createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)

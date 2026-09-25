@@ -9,9 +9,10 @@ import { EmptyState } from '@erp/ui/empty-state';
 import { StatusChip } from '@erp/ui/status-chip';
 import { SkeletonList } from '@erp/ui/skeletons';
 import { ErrorState } from '@erp/ui/states';
-import { formatDateTime } from '@erp/utils';
+import { formatDateTime, formatCurrencyBRL } from '@erp/utils';
 import { DataTable, type Column } from '@platform/components/data-table';
 import { OperationDetailDrawer } from '@platform/components/operation-detail-drawer';
+import { TechnicianCommissionPanel } from '@platform/components/technician-commission-panel';
 import { PageHeader } from '@platform/components/page-header';
 import { Pagination } from '@platform/components/pagination';
 import { OPERATION_STATUS, operationCode } from '@erp/ui/operations/operation-shared';
@@ -47,10 +48,11 @@ export default function OperatorExecutionDetailPage() {
   const { operator, metrics } = detail.data;
   return <div className="max-w-[1400px] space-y-6">
     <Link href={`/operator-executions?month=${month}`} className="inline-flex items-center gap-2 text-sm text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"><ArrowLeft className="h-4 w-4" />Voltar para operadores</Link>
-    <PageHeader eyebrow="Execuções dos Operadores" title={operator.name} description={`${operator.jobTitle ?? 'Operador'} · @${operator.username}`} actions={<label className="flex items-center gap-2 text-sm font-medium">Competência<input type="month" value={month} onChange={(event) => { if (event.target.value) { setMonth(event.target.value); setPage(1); } }} className="h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3" /></label>} />
+    <PageHeader eyebrow="Execuções dos Operadores" title={operator.name} description={`${operator.isAssistant ? 'Auxiliar Técnico' : (operator.jobTitle ?? 'Operador')} · @${operator.username}`} actions={<label className="flex items-center gap-2 text-sm font-medium">Competência<input type="month" value={month} onChange={(event) => { if (event.target.value) { setMonth(event.target.value); setPage(1); } }} className="h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3" /></label>} />
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">{[
-      ['Atendimentos', metrics.total], ['Concluídos', metrics.completed], ['Pendentes', metrics.pending], ['Em execução', metrics.inProgress], ['Atrasados', metrics.overdue], ['Cancelados', metrics.canceled], ['Taxa de conclusão', `${metrics.completionRate.toLocaleString('pt-BR')}%`], ['Tempo médio', formatDuration(metrics.averageDurationMinutes)],
+      ['Atendimentos', metrics.total], ['Concluídos', metrics.completed], ['Pendentes', metrics.pending], ['Em execução', metrics.inProgress], ['Atrasados', metrics.overdue], ['Cancelados', metrics.canceled], ['Taxa de conclusão', `${metrics.completionRate.toLocaleString('pt-BR')}%`], ['Tempo médio', formatDuration(metrics.averageDurationMinutes)], ['Comissão', formatCurrencyBRL(metrics.commission)],
     ].map(([label, value]) => <div key={label} className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4"><span className="text-caption">{label}</span><strong className="mt-2 block text-xl tabular-nums">{value}</strong></div>)}</div>
+    <TechnicianCommissionPanel operatorId={id} />
     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border)]">
       <div className="flex gap-1">{([['HISTORY', 'Histórico', ClipboardCheck], ['AGENDA', 'Agenda registrada', CalendarDays]] as const).map(([key, label, Icon]) => <button key={key} onClick={() => { setView(key); setPage(1); }} className={`inline-flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium ${view === key ? 'border-[var(--color-primary)] text-[var(--color-primary)]' : 'border-transparent text-[var(--color-muted-foreground)]'}`}><Icon className="h-4 w-4" />{label}</button>)}</div>
       <select value={status} onChange={(event) => { setStatus(event.target.value as 'all' | OperationStatus); setPage(1); }} className="h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm"><option value="all">Todos os status</option>{Object.entries(OPERATION_STATUS).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}</select>

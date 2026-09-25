@@ -7,6 +7,11 @@ export type ServiceTypePayload = {
   active?: boolean;
   generatesReminder?: boolean;
   reminderIntervalMonths?: number | null;
+  commissionEligible?: boolean;
+  commissionPercent?: number;
+  commissionPercentAssistant?: number;
+  commissionFixed?: number;
+  commissionFixedAssistant?: number;
 };
 
 export function list(params?: {
