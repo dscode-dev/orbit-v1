@@ -656,11 +656,22 @@ model OrganizationSettings {
   /// Janela de apuração das comissões dos técnicos (sugere o intervalo padrão
   /// nos filtros e no fechamento). Configurada no modal de Comissões.
   commissionPeriod CommissionPeriod @default(MONTHLY) @map("commission_period")
+  /// Como a comissão é calculada: valor fixo por atendimento (padrão) ou
+  /// percentual sobre o valor do serviço. Configurado no modal de Comissões.
+  commissionMode   CommissionMode   @default(FIXED) @map("commission_mode")
   createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@map("organization_settings")
+}
+
+/// Base de cálculo da comissão do técnico.
+enum CommissionMode {
+  /// Valor fixo por atendimento, independente do valor do serviço.
+  FIXED
+  /// Percentual aplicado sobre o valor do serviço.
+  PERCENT
 }
 
 enum CommissionPeriod {
@@ -1566,6 +1577,9 @@ model ServiceType {
   // Percentual do técnico auxiliar (assignment não primário). Nasce em 0: o
   // auxiliar só passa a receber quando o owner configurar o tipo.
   commissionPercentAssistant Decimal @default(0) @map("commission_percent_assistant") @db.Decimal(5, 2)
+  // Valores fixos por atendimento, usados quando o modo é FIXED.
+  commissionFixed            Decimal @default(0) @map("commission_fixed") @db.Decimal(14, 2)
+  commissionFixedAssistant   Decimal @default(0) @map("commission_fixed_assistant") @db.Decimal(14, 2)
   deletedAt              DateTime? @map("deleted_at") @db.Timestamptz(3)
   createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)

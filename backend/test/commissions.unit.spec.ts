@@ -16,6 +16,8 @@ describe('CommissionsService', () => {
       commissionEligible: true,
       commissionPercent: 10,
       commissionPercentAssistant: 4,
+      commissionFixed: 60,
+      commissionFixedAssistant: 25,
     },
     {
       key: 'CORRETIVA',
@@ -23,6 +25,8 @@ describe('CommissionsService', () => {
       commissionEligible: false,
       commissionPercent: 0,
       commissionPercentAssistant: 0,
+      commissionFixed: 0,
+      commissionFixedAssistant: 0,
     },
     {
       key: 'INSTALACAO',
@@ -30,6 +34,8 @@ describe('CommissionsService', () => {
       commissionEligible: true,
       commissionPercent: 8,
       commissionPercentAssistant: 0,
+      commissionFixed: 90,
+      commissionFixedAssistant: 0,
     },
   ];
 
@@ -41,7 +47,7 @@ describe('CommissionsService', () => {
       type: string;
       status: string;
       completedAt: Date;
-      serviceValue: number;
+      serviceValue: number | null;
       operatorId: string;
       commissionEntries: Array<{ paymentId: string; amount: number }>;
     }> = {},
@@ -57,7 +63,8 @@ describe('CommissionsService', () => {
     ...over,
   });
 
-  function serviceFor(operations: unknown[]) {
+  /** `mode` é a base de cálculo configurada pelo owner (o padrão do app é FIXED). */
+  function serviceFor(operations: unknown[], mode: 'FIXED' | 'PERCENT' = 'PERCENT') {
     const tx = {
       commissionPayment: {
         create: jest.fn(({ data }) => Promise.resolve({ id: 'pay-new', ...data, paidAt: new Date() })),
@@ -67,7 +74,9 @@ describe('CommissionsService', () => {
       auditLog: { create: jest.fn().mockResolvedValue({}) },
     };
     const prisma = {
-      organizationSettings: { findFirst: jest.fn().mockResolvedValue({ commissionPeriod: 'MONTHLY' }) },
+      organizationSettings: {
+        findFirst: jest.fn().mockResolvedValue({ commissionPeriod: 'MONTHLY', commissionMode: mode }),
+      },
       serviceType: { findMany: jest.fn().mockResolvedValue(serviceTypes) },
       operation: { findMany: jest.fn().mockResolvedValue(operations) },
       organization: { findFirst: jest.fn().mockResolvedValue({ id: 'org-1' }) },
@@ -203,6 +212,65 @@ describe('CommissionsService', () => {
       const result = (await service.detail('auxiliar-1', range)) as Detail;
       expect(result.items[0]).toMatchObject({ paid: true, commission: 80, paymentId: 'pay-aux' });
       expect(result.summary.pendingAmount).toBe(0);
+    });
+  });
+
+  describe('valor fixo por atendimento', () => {
+    it('paga o valor fixo do tipo, sem olhar o valor do serviço', async () => {
+      const { service } = serviceFor(
+        [
+          operation({ id: 'op-1', serviceValue: 1000 }),
+          operation({ id: 'op-2', serviceValue: 9000 }),
+        ],
+        'FIXED',
+      );
+
+      const result = (await service.detail('tecnico-1', range)) as Detail;
+
+      // 60 por atendimento nos dois, embora os serviços custem 1.000 e 9.000.
+      expect(result.items.map((item) => item.commission)).toEqual([60, 60]);
+      expect(result.summary.pendingAmount).toBe(120);
+      // A coluna de percentual não se aplica nesse modo.
+      expect(result.items.every((item) => item.percent === 0)).toBe(true);
+    });
+
+    it('usa o valor fixo do auxiliar, que é menor que o do executor', async () => {
+      const { service } = serviceFor([operation({ serviceValue: 1000 })], 'FIXED');
+
+      const result = (await service.detail('auxiliar-1', range)) as Detail;
+
+      expect(result.items[0]).toMatchObject({ role: 'ASSISTANT', commission: 25 });
+    });
+
+    it('conta atendimento sem valor de serviço informado', async () => {
+      const { service, prisma } = serviceFor([operation({ serviceValue: null })], 'FIXED');
+
+      const result = (await service.detail('tecnico-1', range)) as Detail;
+
+      expect(result.summary.pendingAmount).toBe(60);
+      // A busca não pode exigir valor de serviço quando a comissão é fixa.
+      expect(prisma.operation.findMany.mock.calls[0][0].where.serviceValue).toBeUndefined();
+    });
+
+    it('ignora o tipo cujo valor fixo é zero, mesmo sendo elegível', async () => {
+      const { service } = serviceFor([operation({ type: 'INSTALACAO' })], 'FIXED');
+
+      const assistant = (await service.detail('auxiliar-1', range)) as Detail;
+      expect(assistant.items).toHaveLength(0);
+
+      const primary = (await service.detail('tecnico-1', range)) as Detail;
+      expect(primary.items[0]).toMatchObject({ commission: 90 });
+    });
+
+    it('congela o valor fixo no fechamento', async () => {
+      const { service, tx } = serviceFor([operation({ serviceValue: 1000 })], 'FIXED');
+
+      await service.pay('tecnico-1', range, owner);
+
+      const [{ data }] = tx.commissionEntry.createMany.mock.calls[0];
+      expect(data).toEqual([
+        { paymentId: 'pay-new', operationId: 'op-1', userId: 'tecnico-1', role: 'PRIMARY', amount: 60 },
+      ]);
     });
   });
 

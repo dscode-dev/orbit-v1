@@ -94,7 +94,7 @@ export class DocumentEngineService {
         where, skip: (query.page - 1) * query.limit, take: query.limit,
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         include: {
-          operation: { select: { id: true, number: true, customer: { select: { id: true, name: true } }, equipment: { select: { id: true, name: true, tag: true } }, operator: { select: { id: true, name: true } } } },
+          operation: { select: { id: true, number: true, completedAt: true, customer: { select: { id: true, name: true } }, equipment: { select: { id: true, name: true, tag: true } }, operator: { select: { id: true, name: true } } } },
           budget: { select: { id: true, number: true, customer: { select: { id: true, name: true } }, equipment: { select: { id: true, name: true, tag: true } }, creator: { select: { id: true, name: true } } } },
         },
       }),
@@ -112,7 +112,10 @@ export class DocumentEngineService {
       customer: document.operation?.customer ?? document.budget?.customer ?? null,
       equipment: document.operation?.equipment ?? document.budget?.equipment ?? null,
       responsible: document.operation?.operator ?? document.budget?.creator ?? null,
-      issuedAt: document.renderedAt ?? document.createdAt,
+      // Emissão é quando o documento foi emitido, não a última vez que alguém
+      // baixou o PDF (`renderedAt` muda a cada render e desinformava o cliente).
+      issuedAt:
+        document.finalizedAt ?? document.operation?.completedAt ?? document.createdAt,
       renderedAt: document.renderedAt, fileSize: document.fileSize,
       version: this.blueprintVersion(document.renderMetadata),
       createdAt: document.createdAt, updatedAt: document.updatedAt,
@@ -723,21 +726,28 @@ export class DocumentEngineService {
   }
 
   private fingerprintPayload(blueprint: DocumentBlueprint): unknown {
-    const generatedAt = blueprint.metadata.generatedAt;
-    const generatedDate = new Date(generatedAt);
     const timezone = blueprint.metadata.timezone || 'America/Recife';
-    const generatedValues = [
-      generatedAt,
-      new Intl.DateTimeFormat('pt-BR', {
-        dateStyle: 'short',
-        timeStyle: 'short',
-        timeZone: timezone,
-      }).format(generatedDate),
-      new Intl.DateTimeFormat('pt-BR', {
-        dateStyle: 'short',
-        timeZone: timezone,
-      }).format(generatedDate),
-    ].filter(Boolean);
+    // Carimbos de data são neutralizados: a emissão entra aqui junto do
+    // `generatedAt` para que documentos já emitidos antes dela existir não
+    // passem a ser lidos como "fonte alterada" e peçam regeração.
+    const stamps = [blueprint.metadata.generatedAt, blueprint.metadata.issuedAt].filter(
+      (value): value is string => Boolean(value),
+    );
+    const generatedValues = stamps
+      .flatMap((stamp) => {
+        const date = new Date(stamp);
+        if (Number.isNaN(date.getTime())) return [stamp];
+        return [
+          stamp,
+          new Intl.DateTimeFormat('pt-BR', {
+            dateStyle: 'short',
+            timeStyle: 'short',
+            timeZone: timezone,
+          }).format(date),
+          new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeZone: timezone }).format(date),
+        ];
+      })
+      .filter(Boolean);
     const normalize = (value: unknown): unknown => {
       if (typeof value === 'string') {
         return generatedValues.reduce(

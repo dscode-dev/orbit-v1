@@ -425,6 +425,9 @@ export type PublicCompanyProfile = {
 /** Janela de apuração das comissões dos técnicos. */
 export type CommissionPeriod = 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
 
+/** Base de cálculo da comissão: valor fixo por atendimento ou % do serviço. */
+export type CommissionMode = 'FIXED' | 'PERCENT';
+
 export type OrganizationSettings = {
   id: string;
   organizationId: string;
@@ -433,6 +436,7 @@ export type OrganizationSettings = {
   currency: string;
   documentPrefix: string;
   commissionPeriod: CommissionPeriod;
+  commissionMode: CommissionMode;
   createdAt: string;
   updatedAt: string;
 };
@@ -460,6 +464,8 @@ export type CommissionItem = {
 
 export type CommissionDetail = {
   period: CommissionPeriod;
+  /** Base usada no cálculo dos itens deste período. */
+  mode: CommissionMode;
   range: { from: string; to: string };
   summary: {
     pendingAmount: number;
@@ -612,6 +618,7 @@ export type UpdateOrganizationSettingsPayload = Partial<{
   currency: string;
   documentPrefix: string;
   commissionPeriod: CommissionPeriod;
+  commissionMode: CommissionMode;
 }>;
 
 export type CreateDocumentTemplatePayload = {
@@ -970,6 +977,9 @@ export type ServiceType = {
   commissionPercent: number;
   /** Percentual pago ao técnico auxiliar; pode diferir do executor. */
   commissionPercentAssistant: number;
+  /** Valores fixos por atendimento (R$), usados quando o modo é FIXED. */
+  commissionFixed: number;
+  commissionFixedAssistant: number;
   createdAt: string;
   updatedAt: string;
 };

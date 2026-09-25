@@ -93,6 +93,8 @@ export function TechnicianCommissionPanel({ operatorId }: { operatorId: string }
   const summary = data.data?.summary;
   const items = useMemo(() => data.data?.items ?? [], [data.data]);
   const periodLabel = PERIOD_LABEL[data.data?.period ?? "MONTHLY"] ?? "mensal";
+  // No modo de valor fixo não há percentual para mostrar na tabela.
+  const fixedMode = data.data?.mode === "FIXED";
 
   const payableItems = useMemo(() => items.filter(isPayable), [items]);
   // A seleção não sobrevive a filtros/recargas que tiram o item da lista.
@@ -185,7 +187,8 @@ export function TechnicianCommissionPanel({ operatorId }: { operatorId: string }
             <HandCoins className="h-5 w-5 text-[var(--color-primary)]" /> Comissões
           </h2>
           <p className="text-caption">
-            Apuração {periodLabel} · o valor a pagar considera apenas atendimentos ainda não pagos.
+            Apuração {periodLabel} · {fixedMode ? "valor fixo por atendimento" : "percentual sobre o valor do serviço"} ·
+            o valor a pagar considera apenas atendimentos ainda não pagos.
             Operações canceladas continuam listadas para auditoria, mas não entram no total.
           </p>
         </div>
@@ -308,7 +311,7 @@ export function TechnicianCommissionPanel({ operatorId }: { operatorId: string }
                 <th className="py-2 text-left font-medium">Serviço</th>
                 <th className="py-2 text-left font-medium">Função</th>
                 <th className="py-2 text-right font-medium">Valor</th>
-                <th className="py-2 text-right font-medium">%</th>
+                <th className="py-2 text-right font-medium">{fixedMode ? "Base" : "%"}</th>
                 <th className="py-2 text-right font-medium">Comissão</th>
                 <th className="py-2 text-right font-medium">Status</th>
                 {canPay && <th className="py-2 text-right font-medium">Ação</th>}
@@ -341,7 +344,9 @@ export function TechnicianCommissionPanel({ operatorId }: { operatorId: string }
                     </StatusChip>
                   </td>
                   <td className="py-2 text-right tabular-nums">{formatCurrencyBRL(item.serviceValue)}</td>
-                  <td className="py-2 text-right tabular-nums">{item.percent}%</td>
+                  <td className="py-2 text-right tabular-nums">
+                    {fixedMode ? <span className="text-caption">fixo</span> : `${item.percent}%`}
+                  </td>
                   <td
                     className={`py-2 text-right font-semibold tabular-nums ${item.canceled ? "line-through text-[var(--color-muted-foreground)]" : ""}`}
                   >

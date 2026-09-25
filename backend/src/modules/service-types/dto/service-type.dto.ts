@@ -50,6 +50,13 @@ export class CreateServiceTypeDto {
   /** Percentual do técnico auxiliar; pode diferir do executor primário. */
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(100)
   commissionPercentAssistant?: number;
+
+  /** Valores fixos por atendimento (R$), usados quando o modo é FIXED. */
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(1_000_000)
+  commissionFixed?: number;
+
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(1_000_000)
+  commissionFixedAssistant?: number;
 }
 
 export class UpdateServiceTypeDto {
@@ -75,6 +82,13 @@ export class UpdateServiceTypeDto {
   /** Percentual do técnico auxiliar; pode diferir do executor primário. */
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(100)
   commissionPercentAssistant?: number;
+
+  /** Valores fixos por atendimento (R$), usados quando o modo é FIXED. */
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(1_000_000)
+  commissionFixed?: number;
+
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(1_000_000)
+  commissionFixedAssistant?: number;
 }
 
 export class ReorderServiceTypesDto {

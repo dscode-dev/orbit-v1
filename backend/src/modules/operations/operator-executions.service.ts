@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { AssignmentStatus, Prisma, Role } from '@prisma/client';
+import { AssignmentStatus, CommissionMode, Prisma, Role } from '@prisma/client';
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
 import { buildPaginatedResponse } from '../../shared/types/pagination.types';
@@ -470,6 +470,10 @@ export class OperatorExecutionsService {
   ): Promise<Map<string, number>> {
     const result = new Map<string, number>();
     if (operatorIds.length === 0) return result;
+    const settings = await this.prisma.organizationSettings.findFirst({
+      select: { commissionMode: true },
+    });
+    const mode = settings?.commissionMode ?? CommissionMode.FIXED;
     const [types, operations] = await Promise.all([
       this.prisma.serviceType.findMany({
         select: {
@@ -477,6 +481,8 @@ export class OperatorExecutionsService {
           commissionEligible: true,
           commissionPercent: true,
           commissionPercentAssistant: true,
+          commissionFixed: true,
+          commissionFixedAssistant: true,
         },
       }),
       this.prisma.operation.findMany({
@@ -495,7 +501,9 @@ export class OperatorExecutionsService {
           ],
           status: 'COMPLETED',
           completedAt: { gte: period.start, lt: period.end },
-          serviceValue: { not: null },
+          // No modo fixo o valor cobrado não entra na conta, então atendimentos
+          // sem valor informado também rendem comissão.
+          ...(mode === CommissionMode.PERCENT ? { serviceValue: { not: null } } : {}),
         },
         select: {
           operatorId: true,
@@ -514,13 +522,15 @@ export class OperatorExecutionsService {
         },
       }),
     ]);
+    const fixedMode = mode === CommissionMode.FIXED;
     const config = new Map(
       types.map((type) => [
         type.key,
         {
           eligible: type.commissionEligible,
-          percent: Number(type.commissionPercent),
-          assistantPercent: Number(type.commissionPercentAssistant),
+          // Cada função tem a sua taxa, na base que o owner configurou.
+          primary: Number(fixedMode ? type.commissionFixed : type.commissionPercent),
+          assistant: Number(fixedMode ? type.commissionFixedAssistant : type.commissionPercentAssistant),
         },
       ]),
     );
@@ -529,18 +539,19 @@ export class OperatorExecutionsService {
       const cfg = config.get(operation.type);
       if (!cfg || !cfg.eligible) continue;
       const value = Number(operation.serviceValue ?? 0);
-      if (value <= 0) continue;
+      if (!fixedMode && value <= 0) continue;
       const paidUsers = new Set(operation.commissionEntries.map((entry) => entry.userId));
-      const beneficiaries: Array<{ userId: string; percent: number }> = [
-        { userId: operation.operatorId, percent: cfg.percent },
+      const beneficiaries: Array<{ userId: string; rate: number }> = [
+        { userId: operation.operatorId, rate: cfg.primary },
         ...operation.assignments.map((assignment) => ({
           userId: assignment.assignedTo,
-          percent: cfg.assistantPercent,
+          rate: cfg.assistant,
         })),
       ];
-      for (const { userId, percent } of beneficiaries) {
-        if (!targets.has(userId) || paidUsers.has(userId) || percent <= 0) continue;
-        result.set(userId, (result.get(userId) ?? 0) + value * (percent / 100));
+      for (const { userId, rate } of beneficiaries) {
+        if (!targets.has(userId) || paidUsers.has(userId) || rate <= 0) continue;
+        const commission = fixedMode ? rate : value * (rate / 100);
+        result.set(userId, (result.get(userId) ?? 0) + commission);
       }
     }
     for (const [operatorId, value] of result) {

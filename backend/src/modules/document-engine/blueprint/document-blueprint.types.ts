@@ -26,7 +26,14 @@ export interface DocumentMetadata {
   templateId?: string | null;
   templateUpdatedAt?: string | null;
   sourceFingerprint?: string;
+  /** Quando ESTE blueprint foi montado (metadado técnico, muda a cada build). */
   generatedAt: string;
+  /**
+   * Data de emissão exibida no documento. Fica congelada na primeira emissão:
+   * regerar ou baixar de novo um relatório antigo não pode carimbar a data de
+   * hoje. Ausente em pré-visualização de modelo, que não é um documento emitido.
+   */
+  issuedAt?: string;
   locale: 'pt-BR';
   timezone: string;
   currency: string;

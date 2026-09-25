@@ -30,6 +30,8 @@ const SERVICE_TYPE_SELECT = {
   commissionEligible: true,
   commissionPercent: true,
   commissionPercentAssistant: true,
+  commissionFixed: true,
+  commissionFixedAssistant: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.ServiceTypeSelect;
@@ -83,6 +85,8 @@ export class ServiceTypesService {
             commissionEligible: dto.commissionEligible ?? true,
             commissionPercent: dto.commissionPercent ?? 0,
             commissionPercentAssistant: dto.commissionPercentAssistant ?? 0,
+            commissionFixed: dto.commissionFixed ?? 0,
+            commissionFixedAssistant: dto.commissionFixedAssistant ?? 0,
           },
           select: SERVICE_TYPE_SELECT,
         });
@@ -127,6 +131,10 @@ export class ServiceTypesService {
           ...(dto.commissionPercent !== undefined ? { commissionPercent: dto.commissionPercent } : {}),
           ...(dto.commissionPercentAssistant !== undefined
             ? { commissionPercentAssistant: dto.commissionPercentAssistant }
+            : {}),
+          ...(dto.commissionFixed !== undefined ? { commissionFixed: dto.commissionFixed } : {}),
+          ...(dto.commissionFixedAssistant !== undefined
+            ? { commissionFixedAssistant: dto.commissionFixedAssistant }
             : {}),
         },
         select: SERVICE_TYPE_SELECT,

@@ -13,17 +13,40 @@ import {
   serviceTypesApi,
   useQuery,
   errorMessage,
+  type CommissionMode,
   type CommissionPeriod,
   type ServiceType,
 } from "@erp/api";
 import { Drawer } from "@erp/ui/drawer";
 import { SkeletonList } from "@erp/ui/skeletons";
 import { EmptyState } from "@erp/ui/empty-state";
-import { Percent, UserCog, Users } from "lucide-react";
+import { Banknote, Percent, UserCog, Users } from "lucide-react";
 
-type Row = { eligible: boolean; percent: string; assistantPercent: string };
+type Row = {
+  eligible: boolean;
+  percent: string;
+  assistantPercent: string;
+  fixed: string;
+  fixedAssistant: string;
+};
 
-const numeric = (value: string) => Math.min(100, Math.max(0, Number(value || 0)));
+/** Como o valor é cobrado em cada base — muda rótulo, ícone e limite do input. */
+const MODES: Array<{ value: CommissionMode; label: string; hint: string; icon: typeof Banknote }> = [
+  {
+    value: "FIXED",
+    label: "Valor fixo",
+    hint: "o técnico recebe o mesmo por atendimento, qualquer que seja o valor do serviço",
+    icon: Banknote,
+  },
+  {
+    value: "PERCENT",
+    label: "Percentual",
+    hint: "a comissão é uma fatia do valor do serviço de cada atendimento",
+    icon: Percent,
+  },
+];
+
+const numeric = (value: string, max: number) => Math.min(max, Math.max(0, Number(value || 0)));
 
 const percentCls =
   "h-9 w-20 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-2 text-right text-sm outline-none focus:border-[var(--color-primary)] disabled:opacity-40";
@@ -33,14 +56,19 @@ export function CommissionSettingsDrawer({ open, onClose }: { open: boolean; onC
   const settings = useQuery((signal) => organizationApi.getOrganizationSettings({ signal }), [open]);
   const [rows, setRows] = useState<Record<string, Row>>({});
   const [period, setPeriod] = useState<CommissionPeriod>("MONTHLY");
+  const [mode, setMode] = useState<CommissionMode>("FIXED");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
 
   const items = useMemo(() => types.data?.items ?? [], [types.data]);
+  const isFixed = mode === "FIXED";
+  /** Percentual vai até 100; valor em reais tem teto só para evitar engano. */
+  const max = isFixed ? 1_000_000 : 100;
 
   useEffect(() => {
     if (settings.data?.commissionPeriod) setPeriod(settings.data.commissionPeriod);
+    if (settings.data?.commissionMode) setMode(settings.data.commissionMode);
   }, [settings.data]);
 
   useEffect(() => {
@@ -50,6 +78,8 @@ export function CommissionSettingsDrawer({ open, onClose }: { open: boolean; onC
         eligible: item.commissionEligible,
         percent: String(Number(item.commissionPercent) || 0),
         assistantPercent: String(Number(item.commissionPercentAssistant) || 0),
+        fixed: String(Number(item.commissionFixed) || 0),
+        fixedAssistant: String(Number(item.commissionFixedAssistant) || 0),
       };
     }
     setRows(next);
@@ -58,37 +88,52 @@ export function CommissionSettingsDrawer({ open, onClose }: { open: boolean; onC
   const set = (id: string, patch: Partial<Row>) =>
     setRows((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
 
+  /** Só os campos da base ativa são comparados (e salvos): a outra fica intacta. */
   const changed = (item: ServiceType): boolean => {
     const row = rows[item.id];
     if (!row) return false;
-    return (
-      row.eligible !== item.commissionEligible ||
-      numeric(row.percent) !== Number(item.commissionPercent) ||
-      numeric(row.assistantPercent) !== Number(item.commissionPercentAssistant)
-    );
+    if (row.eligible !== item.commissionEligible) return true;
+    return isFixed
+      ? numeric(row.fixed, max) !== Number(item.commissionFixed) ||
+          numeric(row.fixedAssistant, max) !== Number(item.commissionFixedAssistant)
+      : numeric(row.percent, max) !== Number(item.commissionPercent) ||
+          numeric(row.assistantPercent, max) !== Number(item.commissionPercentAssistant);
   };
 
-  const periodChanged = Boolean(settings.data && settings.data.commissionPeriod !== period);
+  const settingsChanged = Boolean(
+    settings.data &&
+      (settings.data.commissionPeriod !== period || settings.data.commissionMode !== mode),
+  );
 
   const save = async () => {
     const dirty = items.filter(changed);
-    if (dirty.length === 0 && !periodChanged) {
+    if (dirty.length === 0 && !settingsChanged) {
       onClose();
       return;
     }
     setSaving(true);
     setError(null);
     try {
-      if (periodChanged) {
-        await organizationApi.updateOrganizationSettings({ commissionPeriod: period });
+      if (settingsChanged) {
+        await organizationApi.updateOrganizationSettings({
+          commissionPeriod: period,
+          commissionMode: mode,
+        });
         await settings.refetch();
       }
       for (const item of dirty) {
         const row = rows[item.id];
         await serviceTypesApi.update(item.id, {
           commissionEligible: row.eligible,
-          commissionPercent: numeric(row.percent),
-          commissionPercentAssistant: numeric(row.assistantPercent),
+          ...(isFixed
+            ? {
+                commissionFixed: numeric(row.fixed, max),
+                commissionFixedAssistant: numeric(row.fixedAssistant, max),
+              }
+            : {
+                commissionPercent: numeric(row.percent, max),
+                commissionPercentAssistant: numeric(row.assistantPercent, max),
+              }),
         });
       }
       await types.refetch();
@@ -110,10 +155,38 @@ export function CommissionSettingsDrawer({ open, onClose }: { open: boolean; onC
     >
       <div className="space-y-4">
         <p className="text-sm text-[var(--color-muted-foreground)]">
-          Marque os tipos que geram comissão e defina o percentual sobre o valor do serviço —
-          separadamente para quem executa e para quem acompanha como auxiliar. A comissão de cada
-          técnico aparece em <strong>Técnicos de Campo</strong>, onde também é feito o fechamento.
+          Marque os tipos que geram comissão e defina quanto cada função recebe — separadamente
+          para quem executa e para quem acompanha como auxiliar. A comissão de cada técnico aparece
+          em <strong>Técnicos de Campo</strong>, onde também é feito o fechamento.
         </p>
+
+        <div className="space-y-1.5">
+          <span className="text-sm font-medium">Base de cálculo</span>
+          <div className="grid grid-cols-2 gap-2">
+            {MODES.map((option) => {
+              const active = mode === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setMode(option.value)}
+                  className={`flex items-center justify-center gap-2 rounded-[var(--radius-md)] border px-3 py-2 text-sm font-medium transition ${
+                    active
+                      ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]"
+                      : "border-[var(--color-border)] text-[var(--color-muted-foreground)]"
+                  }`}
+                >
+                  <option.icon className="h-4 w-4" /> {option.label}
+                </button>
+              );
+            })}
+          </div>
+          <span className="text-caption">
+            {MODES.find((option) => option.value === mode)?.hint}. Os valores da outra base ficam
+            guardados e voltam a valer se você trocar.
+          </span>
+        </div>
 
         <label className="block space-y-1.5">
           <span className="text-sm font-medium">Período de apuração</span>
@@ -165,9 +238,19 @@ export function CommissionSettingsDrawer({ open, onClose }: { open: boolean; onC
 
             <div className="divide-y divide-[var(--color-border)]">
               {items.map((item) => {
-                const row =
-                  rows[item.id] ??
-                  ({ eligible: item.commissionEligible, percent: "0", assistantPercent: "0" } as Row);
+                const row = rows[item.id];
+                if (!row) return null;
+                // Cada função tem o seu campo na base ativa; o "R$" fica antes
+                // do número e o "%" depois, como se escreve.
+                const fields: Array<{ key: keyof Row; label: string }> = isFixed
+                  ? [
+                      { key: "fixed", label: `Valor do técnico em ${item.label}` },
+                      { key: "fixedAssistant", label: `Valor do auxiliar em ${item.label}` },
+                    ]
+                  : [
+                      { key: "percent", label: `Percentual do técnico em ${item.label}` },
+                      { key: "assistantPercent", label: `Percentual do auxiliar em ${item.label}` },
+                    ];
                 return (
                   <div
                     key={item.id}
@@ -183,34 +266,27 @@ export function CommissionSettingsDrawer({ open, onClose }: { open: boolean; onC
                       <span className="font-medium">{item.label}</span>
                       {!item.active && <span className="text-caption">(inativo)</span>}
                     </label>
-                    <span className="flex items-center gap-1">
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        step="0.5"
-                        aria-label={`Percentual do técnico em ${item.label}`}
-                        value={row.percent}
-                        disabled={!row.eligible}
-                        onChange={(e) => set(item.id, { percent: e.target.value })}
-                        className={percentCls}
-                      />
-                      <span className="text-sm text-[var(--color-muted-foreground)]">%</span>
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        step="0.5"
-                        aria-label={`Percentual do auxiliar em ${item.label}`}
-                        value={row.assistantPercent}
-                        disabled={!row.eligible}
-                        onChange={(e) => set(item.id, { assistantPercent: e.target.value })}
-                        className={percentCls}
-                      />
-                      <span className="text-sm text-[var(--color-muted-foreground)]">%</span>
-                    </span>
+                    {fields.map((field) => (
+                      <span key={field.key} className="flex items-center gap-1">
+                        {isFixed && (
+                          <span className="text-sm text-[var(--color-muted-foreground)]">R$</span>
+                        )}
+                        <input
+                          type="number"
+                          min={0}
+                          max={max}
+                          step={isFixed ? "5" : "0.5"}
+                          aria-label={field.label}
+                          value={String(row[field.key])}
+                          disabled={!row.eligible}
+                          onChange={(e) => set(item.id, { [field.key]: e.target.value })}
+                          className={percentCls}
+                        />
+                        {!isFixed && (
+                          <span className="text-sm text-[var(--color-muted-foreground)]">%</span>
+                        )}
+                      </span>
+                    ))}
                   </div>
                 );
               })}
@@ -219,8 +295,8 @@ export function CommissionSettingsDrawer({ open, onClose }: { open: boolean; onC
         )}
 
         <p className="text-caption">
-          <strong>0%</strong> significa que aquela função não recebe comissão nesse tipo de serviço —
-          é como os auxiliares ficam até você definir o percentual deles.
+          <strong>{isFixed ? "R$ 0,00" : "0%"}</strong> significa que aquela função não recebe
+          comissão nesse tipo de serviço — é como cada uma fica até você definir o valor dela.
         </p>
 
         <div className="flex justify-end gap-2 pt-2">

@@ -1,6 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import {
   AssignmentStatus,
+  CommissionMode,
   CommissionPeriod,
   CommissionRole,
   OperationStatus,
@@ -54,23 +55,32 @@ export class CommissionsService {
   }
 
   async period(): Promise<CommissionPeriod> {
+    return (await this.settings()).commissionPeriod;
+  }
+
+  /** Janela de apuração + base de cálculo configuradas pelo owner. */
+  private async settings(): Promise<{ commissionPeriod: CommissionPeriod; commissionMode: CommissionMode }> {
     const settings = await this.prisma.organizationSettings.findFirst({
-      select: { commissionPeriod: true },
+      select: { commissionPeriod: true, commissionMode: true },
     });
-    return settings?.commissionPeriod ?? CommissionPeriod.MONTHLY;
+    return {
+      commissionPeriod: settings?.commissionPeriod ?? CommissionPeriod.MONTHLY,
+      commissionMode: settings?.commissionMode ?? CommissionMode.FIXED,
+    };
   }
 
   /** Apuração do técnico no intervalo, separando pendente de já pago. */
   async detail(operatorId: string, query: CommissionQueryDto): Promise<unknown> {
-    const period = await this.period();
+    const { commissionPeriod: period, commissionMode: mode } = await this.settings();
     const { from, to } = this.resolveRange(period, query);
-    const items = await this.items(operatorId, from, to, query.serviceType);
+    const items = await this.items(operatorId, from, to, query.serviceType, mode);
     // Canceladas continuam na lista (auditoria), mas ficam fora dos totais.
     const canceled = items.filter((item) => item.canceled);
     const pending = items.filter((item) => !item.paid && !item.canceled);
     const paid = items.filter((item) => item.paid && !item.canceled);
     return {
       period,
+      mode,
       range: { from: from.toISOString(), to: to.toISOString() },
       summary: {
         pendingAmount: round(pending.reduce((sum, item) => sum + item.commission, 0)),
@@ -91,9 +101,9 @@ export class CommissionsService {
    * (pagamento individual ou de uma seleção).
    */
   async pay(operatorId: string, dto: PayCommissionDto, actor: AuthenticatedUser): Promise<unknown> {
-    const period = await this.period();
+    const { commissionPeriod: period, commissionMode: mode } = await this.settings();
     const { from, to } = this.resolveRange(period, dto);
-    const items = await this.items(operatorId, from, to, dto.serviceType);
+    const items = await this.items(operatorId, from, to, dto.serviceType, mode);
     // Canceladas nunca entram num fechamento.
     const payable = items.filter((item) => !item.paid && !item.canceled);
     const selection = this.selectPayable(payable, dto.operationIds);
@@ -236,7 +246,8 @@ export class CommissionsService {
     userId: string,
     from: Date,
     to: Date,
-    serviceType?: string,
+    serviceType: string | undefined,
+    mode: CommissionMode,
   ): Promise<CommissionItem[]> {
     const where: Prisma.OperationWhereInput = {
       OR: [
@@ -255,7 +266,9 @@ export class CommissionsService {
       // cancelamento preenche `completedAt`, então elas caem no mesmo intervalo.
       status: { in: [OperationStatus.COMPLETED, OperationStatus.CANCELED] },
       completedAt: { gte: from, lte: to },
-      serviceValue: { not: null },
+      // A comissão fixa independe do valor cobrado, então atendimentos sem valor
+      // informado também contam; no percentual, sem valor não há base.
+      ...(mode === CommissionMode.PERCENT ? { serviceValue: { not: null } } : {}),
       ...(serviceType ? { type: serviceType } : {}),
     };
     const [types, operations] = await Promise.all([
@@ -266,6 +279,8 @@ export class CommissionsService {
           commissionEligible: true,
           commissionPercent: true,
           commissionPercentAssistant: true,
+          commissionFixed: true,
+          commissionFixedAssistant: true,
         },
       }),
       this.prisma.operation.findMany({
@@ -297,15 +312,23 @@ export class CommissionsService {
       const role =
         operation.operatorId === userId ? CommissionRole.PRIMARY : CommissionRole.ASSISTANT;
       const eligible = cfg?.commissionEligible ?? false;
-      const percent = Number(
-        (role === CommissionRole.PRIMARY ? cfg?.commissionPercent : cfg?.commissionPercentAssistant) ??
-          0,
-      );
+      const isPrimary = role === CommissionRole.PRIMARY;
+      const percent = Number((isPrimary ? cfg?.commissionPercent : cfg?.commissionPercentAssistant) ?? 0);
+      const fixed = Number((isPrimary ? cfg?.commissionFixed : cfg?.commissionFixedAssistant) ?? 0);
+      // No modo FIXED o valor do serviço não entra na conta: o técnico recebe o
+      // mesmo por atendimento, qualquer que seja o valor cobrado do cliente.
+      const rate = mode === CommissionMode.FIXED ? fixed : percent;
       const serviceValue = Number(operation.serviceValue ?? 0);
       const entry = operation.commissionEntries[0] ?? null;
       // Já pagas entram no histórico mesmo que o tipo tenha mudado de regra.
-      if (!entry && (!eligible || percent <= 0 || serviceValue <= 0)) continue;
-      const commission = entry ? Number(entry.amount) : round(serviceValue * (percent / 100));
+      if (!entry && (!eligible || rate <= 0)) continue;
+      // Sem valor de serviço não há o que percentuar; no fixo isso não importa.
+      if (!entry && mode === CommissionMode.PERCENT && serviceValue <= 0) continue;
+      const commission = entry
+        ? Number(entry.amount)
+        : mode === CommissionMode.FIXED
+          ? round(fixed)
+          : round(serviceValue * (percent / 100));
       items.push({
         operationId: operation.id,
         number: operation.number,
@@ -314,7 +337,7 @@ export class CommissionsService {
         typeLabel: cfg?.label ?? operation.type,
         serviceValue,
         role,
-        percent,
+        percent: mode === CommissionMode.FIXED ? 0 : percent,
         commission,
         paid: Boolean(entry),
         canceled: operation.status === OperationStatus.CANCELED,

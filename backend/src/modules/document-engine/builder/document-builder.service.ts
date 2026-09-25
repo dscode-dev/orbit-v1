@@ -92,7 +92,8 @@ export class DocumentBuilderService {
     const { organization, settings } = configuration;
     const { type } = configuration;
 
-    const document = operation.documents.find((item) => item.type === type) ?? {
+    const record = operation.documents.find((item) => item.type === type) ?? null;
+    const document = record ?? {
       id: null,
       number: formatDocumentNumber(OPERATION_DOCUMENT_PREFIX[type], operation.number),
     };
@@ -101,7 +102,9 @@ export class DocumentBuilderService {
     // (ex.: PMOC-000042), igual ao RVT. O número da EXECUÇÃO por equipamento
     // (PMOC-001) aparece apenas na seção "Identificação do PMOC".
     const generatedAt = new Date().toISOString();
-    const sections = this.sections(context, generatedAt, document.number);
+    // A data que o cliente lê é a da emissão, não a do clique em "baixar".
+    const issuedAt = this.issuedAt(context, record);
+    const sections = this.sections(context, issuedAt, document.number);
     this.assertBlueprintLimits(sections);
 
     return {
@@ -118,6 +121,7 @@ export class DocumentBuilderService {
           ? new Date(context.template.updatedAt).toISOString()
           : null,
         generatedAt,
+        issuedAt,
         locale: 'pt-BR',
         timezone: settings.timezone,
         currency: settings.currency,
@@ -150,7 +154,7 @@ export class DocumentBuilderService {
           type === DocumentTemplateType.RECEIPT
             ? ''
             : type === DocumentTemplateType.PMOC
-            ? `${organization.tradeName || organization.legalName} · ${organization.phone} · ${organization.email} · ${document.number} · Versão documental 1 · Emissão ${this.date(generatedAt)}`
+            ? `${organization.tradeName || organization.legalName} · ${organization.phone} · ${organization.email} · ${document.number} · Versão documental 1 · Emissão ${this.date(issuedAt)}`
             : context.template?.footerContent ||
                 `${organization.tradeName || organization.legalName} · ${document.number}`,
         ),
@@ -284,20 +288,20 @@ export class DocumentBuilderService {
 
   private sections(
     context: DocumentContext,
-    generatedAt: string,
+    issuedAt: string,
     documentNumber: string,
   ): DocumentSection[] {
     const sections =
       context.configuration.type === DocumentTemplateType.RECEIPT
-        ? this.receiptSections(context, generatedAt, documentNumber)
+        ? this.receiptSections(context, issuedAt, documentNumber)
         : context.configuration.type === DocumentTemplateType.WORK_ORDER
-        ? this.workOrderSections(context, generatedAt, documentNumber)
+        ? this.workOrderSections(context, issuedAt, documentNumber)
         : context.configuration.type === DocumentTemplateType.TECHNICAL_REPORT
-          ? this.visitReportSections(context, generatedAt, documentNumber)
+          ? this.visitReportSections(context, issuedAt, documentNumber)
           : context.configuration.type === DocumentTemplateType.TECHNICAL_OPINION
-            ? this.technicalOpinionSections(context, generatedAt, documentNumber)
+            ? this.technicalOpinionSections(context, issuedAt, documentNumber)
             : context.configuration.type === DocumentTemplateType.PMOC
-              ? this.pmocReportSections(context, generatedAt, documentNumber)
+              ? this.pmocReportSections(context, issuedAt, documentNumber)
             : this.sharedIdentitySections(context);
 
     switch (context.configuration.type) {
@@ -394,13 +398,13 @@ export class DocumentBuilderService {
 
   private workOrderSections(
     context: DocumentContext,
-    generatedAt: string,
+    issuedAt: string,
     documentNumber: string,
   ): DocumentSection[] {
     const { operation } = context;
     const cancellation = operation.cancellations?.[0] ?? null;
     if (cancellation && (cancellation.status === 'REQUESTED' || cancellation.status === 'APPROVED')) {
-      return this.canceledWorkOrderSections(context, generatedAt, documentNumber);
+      return this.canceledWorkOrderSections(context, issuedAt, documentNumber);
     }
     const address = operation.address ?? operation.customer.addresses[0] ?? null;
     const contact = operation.customer.contacts[0] ?? null;
@@ -442,7 +446,7 @@ export class DocumentBuilderService {
         components: [
           this.metadata('work-order-identification-metadata', [
             ['Número', documentNumber],
-            ['Data de emissão', this.date(generatedAt)],
+            ['Data de emissão', this.date(issuedAt)],
             ['Data de criação', this.date(operation.createdAt)],
             ['Data do agendamento', this.date(operation.scheduledFor)],
             ['Status', OPERATION_STATUS_LABEL[operation.status]],
@@ -495,7 +499,7 @@ export class DocumentBuilderService {
 
   private canceledWorkOrderSections(
     context: DocumentContext,
-    generatedAt: string,
+    issuedAt: string,
     documentNumber: string,
   ): DocumentSection[] {
     const { operation } = context;
@@ -509,7 +513,7 @@ export class DocumentBuilderService {
         critical: true,
         components: [this.metadata('work-order-identification-metadata', [
           ['Número', documentNumber],
-          ['Data de emissão', this.date(generatedAt)],
+          ['Data de emissão', this.date(issuedAt)],
           ['Data do agendamento', this.date(operation.scheduledFor)],
           ['Status', 'ATENDIMENTO CANCELADO'],
           ['Operador em campo', cancellation.requestedBy.name],
@@ -540,7 +544,7 @@ export class DocumentBuilderService {
 
   private visitReportSections(
     context: DocumentContext,
-    generatedAt: string,
+    issuedAt: string,
     documentNumber: string,
   ): DocumentSection[] {
     const { operation } = context;
@@ -557,7 +561,7 @@ export class DocumentBuilderService {
         components: [
           this.metadata('technical-report-identification-metadata', [
             ['Número', `RVT-${executionNumber}`],
-            ['Emissão', this.date(generatedAt)],
+            ['Emissão', this.date(issuedAt)],
             ['Responsável técnico', this.technicalResponsibleName(context) ?? 'A definir na revisão'],
             ['Registro profissional', this.technicalResponsibleTitle(context) ?? '—'],
             ['Técnico em campo', operation.operator.name],
@@ -666,7 +670,7 @@ export class DocumentBuilderService {
 
   private technicalOpinionSections(
     context: DocumentContext,
-    generatedAt: string,
+    issuedAt: string,
     documentNumber: string,
   ): DocumentSection[] {
     const { operation } = context;
@@ -682,7 +686,7 @@ export class DocumentBuilderService {
       operation.completedAt ??
       operation.scheduledFor ??
       operation.createdAt ??
-      generatedAt;
+      issuedAt;
     const conditions = this.lines(operation.technicalOpinionConditions);
 
     return [
@@ -694,7 +698,7 @@ export class DocumentBuilderService {
           this.metadata('technical-opinion-identification-metadata', [
             ['Número do Laudo', documentNumber],
             ['Tipo de documento', 'Laudo Técnico'],
-            ['Data de emissão', this.dateOnly(generatedAt)],
+            ['Data de emissão', this.dateOnly(issuedAt)],
             ['Data da vistoria', this.dateOnly(inspectionDate)],
             ['Situação', OPERATION_STATUS_LABEL[operation.status]],
             ['Responsável Técnico', responsibleName],
@@ -889,7 +893,7 @@ export class DocumentBuilderService {
 
   private pmocReportSections(
     context: DocumentContext,
-    generatedAt: string,
+    issuedAt: string,
     documentNumber: string,
   ): DocumentSection[] {
     const { operation } = context;
@@ -916,7 +920,7 @@ export class DocumentBuilderService {
             ['Título', this.pmocTitle(operation)],
             // Número da EXECUÇÃO por equipamento (PMOC-001), só aqui.
             ['Número', this.pmocDisplayNumber(operation, documentNumber)],
-            ['Emissão', this.date(generatedAt)],
+            ['Emissão', this.date(issuedAt)],
             ['Responsável técnico', this.technicalResponsibleName(context) ?? pmoc.responsibleTechnician],
             ['ART/registro', pmoc.artNumber ?? '—'],
             ['Contrato', pmoc.contractNumber ?? '—'],
@@ -1030,7 +1034,7 @@ export class DocumentBuilderService {
 
   private receiptSections(
     context: DocumentContext,
-    generatedAt: string,
+    issuedAt: string,
     documentNumber: string,
   ): DocumentSection[] {
     const { operation } = context;
@@ -1066,7 +1070,7 @@ export class DocumentBuilderService {
         components: [
           this.metadata('receipt-identification-metadata', [
             ['Número', operation.receiptNumber ?? documentNumber],
-            ['Data', this.calendarDate(operation.receiptIssuedAt ?? generatedAt)],
+            ['Data', this.calendarDate(operation.receiptIssuedAt ?? issuedAt)],
             ['Cliente', operation.customer.tradeName ?? operation.customer.name],
             ['Endereço', address ? this.address(address) : '—'],
             ['Valor', amount],
@@ -1095,7 +1099,7 @@ export class DocumentBuilderService {
         components: [
           this.metadata('receipt-warranty-metadata', [
             ['Prazo', warranty],
-            ['Início da contagem', this.calendarDate(operation.receiptIssuedAt ?? generatedAt)],
+            ['Início da contagem', this.calendarDate(operation.receiptIssuedAt ?? issuedAt)],
           ]),
         ],
       },
@@ -2326,6 +2330,36 @@ export class DocumentBuilderService {
         '$1.$2.$3/$4-$5',
       );
     return value;
+  }
+
+  /**
+   * Data de emissão do documento — o que o cliente lê como "Emissão".
+   *
+   * Tem de ficar congelada: antes vinha de `new Date()` a cada build, então
+   * reabrir a pré-visualização ou baixar de novo o PDF de um atendimento antigo
+   * recarimbava o documento com a data de hoje, e o cliente recebia a mesma
+   * peça com datas diferentes. A ordem vai do mais específico ao mais genérico:
+   * finalização do documento, conclusão do atendimento, criação do registro.
+   * Só um documento que ainda não existe (pré-visualização durante a execução)
+   * cai no relógio.
+   */
+  private issuedAt(
+    context: DocumentContext,
+    document: { finalizedAt?: Date | string | null; createdAt?: Date | string | null } | null,
+  ): string {
+    const { operation } = context;
+    const candidates = [
+      document?.finalizedAt,
+      operation.completedAt,
+      document?.createdAt,
+      operation.createdAt,
+    ];
+    for (const candidate of candidates) {
+      if (!candidate) continue;
+      const date = new Date(candidate);
+      if (!Number.isNaN(date.getTime())) return date.toISOString();
+    }
+    return new Date().toISOString();
   }
 
   private date(value: Date | string | null): string {
