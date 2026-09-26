@@ -6,8 +6,9 @@
  * On create, the backend returns a one-time `temporaryPassword` which is shown
  * once in a copyable confirmation and never logged/persisted.
  */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, Copy, Check, KeyRound, Building2, Users } from "lucide-react";
+import { EntityCombobox, type ComboboxQuery } from "@erp/ui/entity-combobox";
 import { Drawer } from "@erp/ui/drawer";
 import {
   usersApi,
@@ -108,9 +109,20 @@ export function UserFormDrawer({
   // OWNER role has all permission flags effectively true.
   const ownerLocked = form.role === "OWNER";
 
-  function selectCustomer(id: string) {
+  const seenCustomers = useRef(new Map<string, Customer>());
+  const searchCustomers = useCallback(async ({ search, page }: ComboboxQuery, signal: AbortSignal) => {
+    const result = await customersApi.listCustomers({ search: search || undefined, page, limit: 50, signal });
+    const active = result.items.filter((item) => item.isActive);
+    for (const item of active) seenCustomers.current.set(item.id, item);
+    return {
+      options: active.map((item) => ({ value: item.id, label: customerLabel(item) })),
+      total: result.pagination?.total,
+    };
+  }, []);
+
+  function selectCustomer(id: string, picked?: Customer) {
     setCustomerId(id);
-    const customer = customers.data?.items.find((item) => item.id === id);
+    const customer = picked ?? customers.data?.items.find((item) => item.id === id);
     if (!customer) return;
     setForm((current) => ({
       ...current,
@@ -309,19 +321,19 @@ export function UserFormDrawer({
             <div className="rounded-[var(--radius-md)] border border-[var(--color-primary)]/20 bg-[var(--color-primary)]/5 px-3 py-2 text-sm">
               Este acesso será válido somente no Portal do Cliente e não poderá entrar na Platform ou no Operator.
             </div>
-            <Field label="Cliente vinculado" required>
-              <select
-                value={customerId}
-                onChange={(event) => selectCustomer(event.target.value)}
-                className={inputCls}
-                disabled={customers.loading}
-              >
-                <option value="">{customers.loading ? "Carregando clientes…" : "Selecione um cliente cadastrado"}</option>
-                {(customers.data?.items ?? []).filter((item) => item.isActive).map((customer) => (
-                  <option key={customer.id} value={customer.id}>{customerLabel(customer)}</option>
-                ))}
-              </select>
-            </Field>
+            <EntityCombobox
+              label="Cliente vinculado"
+              value={customerId}
+              onChange={(id) => selectCustomer(id, id ? seenCustomers.current.get(id) : undefined)}
+              fetchOptions={searchCustomers}
+              selectedOption={
+                seenCustomers.current.get(customerId)
+                  ? { value: customerId, label: customerLabel(seenCustomers.current.get(customerId)!) }
+                  : null
+              }
+              placeholder="Selecione um cliente cadastrado"
+              emptyMessage="Nenhum cliente ativo encontrado."
+            />
             {customers.error && (
               <p className="text-sm text-[var(--color-danger)]">Não foi possível carregar os clientes. Feche e tente novamente.</p>
             )}

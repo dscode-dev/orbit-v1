@@ -5,8 +5,9 @@
  * customerId, type and name are required. Address options are restricted to the
  * selected customer's addresses (loaded on demand).
  */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { EntityCombobox, type ComboboxQuery } from "@erp/ui/entity-combobox";
 import { Drawer } from "@erp/ui/drawer";
 import {
   equipmentsApi,
@@ -77,6 +78,17 @@ export function EquipmentFormDrawer({
   const isEdit = Boolean(equipment);
   const [form, setForm] = useState<FormState>(fromEquipment(equipment, presetCustomerId));
   const [customers, setCustomers] = useState<Customer[]>([]);
+  // Cache dos clientes já vistos (lista inicial + resultados de busca), para
+  // manter o rótulo do selecionado mesmo fora da página atual.
+  const seenCustomers = useRef(new Map<string, Customer>());
+  const searchCustomers = useCallback(async ({ search, page }: ComboboxQuery, signal: AbortSignal) => {
+    const result = await customersApi.listCustomers({ search: search || undefined, page, limit: 50, signal });
+    for (const item of result.items) seenCustomers.current.set(item.id, item);
+    return {
+      options: result.items.map((item) => ({ value: item.id, label: item.tradeName || item.name })),
+      total: result.pagination?.total,
+    };
+  }, []);
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
   const [equipmentTypes, setEquipmentTypes] = useState<TechnicalCatalog[]>([]);
   const [typesError, setTypesError] = useState(false);
@@ -90,8 +102,10 @@ export function EquipmentFormDrawer({
     setError(null);
     setSaving(false);
     const ac = new AbortController();
+    // Primeira página só para exibir o rótulo do cliente já vinculado; a
+    // escolha usa busca no servidor (a base passa de 100 clientes).
     customersApi
-      .listCustomers({ page: 1, limit: 100, signal: ac.signal })
+      .listCustomers({ page: 1, limit: 20, signal: ac.signal })
       .then((res) => setCustomers(res.items))
       .catch(() => undefined);
     technicalCatalogsApi
@@ -195,6 +209,12 @@ export function EquipmentFormDrawer({
     }
   }
 
+  const selectedCustomer =
+    seenCustomers.current.get(form.customerId) ?? customers.find((item) => item.id === form.customerId) ?? null;
+  const selectedCustomerOption = selectedCustomer
+    ? { value: selectedCustomer.id, label: selectedCustomer.tradeName || selectedCustomer.name }
+    : null;
+
   return (
     <Drawer
       open={open}
@@ -225,12 +245,15 @@ export function EquipmentFormDrawer({
           </div>
         )}
 
-        <Field label="Cliente" required>
-          <select value={form.customerId} onChange={(e) => { set("customerId", e.target.value); set("addressId", ""); }} className={inputCls}>
-            <option value="">Selecione o cliente…</option>
-            {customers.map((c) => <option key={c.id} value={c.id}>{c.tradeName || c.name}</option>)}
-          </select>
-        </Field>
+        <EntityCombobox
+          label="Cliente"
+          value={form.customerId}
+          onChange={(id) => { set("customerId", id); set("addressId", ""); }}
+          fetchOptions={searchCustomers}
+          selectedOption={selectedCustomerOption}
+          placeholder="Selecione o cliente…"
+          emptyMessage="Nenhum cliente encontrado."
+        />
 
         <p className="text-[11px] text-[var(--color-muted-foreground)]">
           O equipamento é identificado por marca e modelo (preenchidos abaixo).

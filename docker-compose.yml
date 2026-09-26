@@ -64,8 +64,12 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        # NEXT_PUBLIC_* são embutidos no build (acessados pelo navegador).
+        # NEXT_PUBLIC_* são embutidos no build (acessados pelo navegador), e o
+        # .dockerignore ignora o .env: variável que não estiver aqui chega vazia.
         NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-https://climatize-ar.com/api/v1}
+        # Rastreamento da landing (vazio = sem tag e sem banner de cookies).
+        NEXT_PUBLIC_GOOGLE_ADS_ID: ${NEXT_PUBLIC_GOOGLE_ADS_ID:-}
+        NEXT_PUBLIC_GOOGLE_ADS_WHATSAPP_LABEL: ${NEXT_PUBLIC_GOOGLE_ADS_WHATSAPP_LABEL:-}
     restart: unless-stopped
     environment:
       NODE_ENV: production

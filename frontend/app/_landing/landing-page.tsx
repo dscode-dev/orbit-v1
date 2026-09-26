@@ -33,6 +33,8 @@ import {
   X,
 } from "lucide-react";
 import { BrandLogo } from "@erp/ui/brand";
+import { WhatsAppLink } from "./whatsapp-link";
+import { GOOGLE_ADS_ID, openCookiePreferences } from "./analytics";
 import { organizationApi, type PublicCompanyProfile } from "@erp/api";
 import { PreventiveBenefitsSection } from "./preventive-carousel";
 
@@ -280,14 +282,9 @@ export function LandingPage() {
             </p>
             <div className="lp-hero__cta">
               {whatsappUrl && (
-                <a
-                  href={whatsappUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="lp-btn lp-btn--primary lp-btn--lg"
-                >
+                <WhatsAppLink href={whatsappUrl} className="lp-btn lp-btn--primary lp-btn--lg">
                   <MessageCircle size={18} /> Falar no WhatsApp
-                </a>
+                </WhatsAppLink>
               )}
               <a href="#servicos" className="lp-btn lp-btn--outline lp-btn--lg">
                 Ver serviços <ArrowRight size={18} />
@@ -391,9 +388,9 @@ export function LandingPage() {
                     <h3 className="lp-svc__title">{title}</h3>
                     <p className="lp-svc__text">{text}</p>
                     {ctaUrl && (
-                      <a href={ctaUrl} target="_blank" rel="noopener noreferrer" className="lp-svc__cta">
+                      <WhatsAppLink href={ctaUrl} className="lp-svc__cta">
                         <MessageCircle size={16} /> {cta}
-                      </a>
+                      </WhatsAppLink>
                     )}
                   </div>
                 </article>
@@ -469,14 +466,9 @@ export function LandingPage() {
             </div>
 
             {whatsappUrl && (
-              <a
-                href={whatsappUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="lp-btn lp-btn--primary lp-btn--lg"
-              >
+              <WhatsAppLink href={whatsappUrl} className="lp-btn lp-btn--primary lp-btn--lg">
                 <MessageCircle size={18} /> Solicitar orçamento
-              </a>
+              </WhatsAppLink>
             )}
           </div>
         </div>
@@ -571,10 +563,8 @@ export function LandingPage() {
 
           <div className="lp-grid lp-grid--contact">
             {whatsappUrl && (
-              <a
+              <WhatsAppLink
                 href={whatsappUrl}
-                target="_blank"
-                rel="noopener noreferrer"
                 className="lp-contact lp-contact--primary"
                 data-reveal
               >
@@ -586,7 +576,7 @@ export function LandingPage() {
                 <span className="lp-contact__cta">
                   Iniciar conversa <ArrowRight size={15} />
                 </span>
-              </a>
+              </WhatsAppLink>
             )}
 
             {email && (
@@ -643,6 +633,13 @@ export function LandingPage() {
               </a>
             ))}
             <Link href="/login">Acesso à gestão</Link>
+            {/* Revogar/rever o consentimento de cookies (LGPD art. 8º §5º).
+                Só aparece quando há rastreamento configurado. */}
+            {GOOGLE_ADS_ID && (
+              <button type="button" className="lp-footer__link-btn" onClick={openCookiePreferences}>
+                Preferências de cookies
+              </button>
+            )}
           </div>
           <div className="lp-footer__meta">
             {website && (
@@ -659,17 +656,11 @@ export function LandingPage() {
 
       {/* ---------- WhatsApp flutuante ---------- */}
       {whatsappUrl && (
-        <a
-          href={whatsappUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="lp-fab"
-          aria-label="Falar no WhatsApp"
-        >
+        <WhatsAppLink href={whatsappUrl} className="lp-fab" aria-label="Falar no WhatsApp">
           <svg viewBox="0 0 32 32" width="30" height="30" fill="currentColor" aria-hidden>
             <path d="M16.003 3.2c-7.06 0-12.8 5.74-12.8 12.8 0 2.257.594 4.454 1.72 6.395L3.2 28.8l6.57-1.717a12.74 12.74 0 0 0 6.23 1.62h.005c7.06 0 12.8-5.74 12.8-12.8 0-3.42-1.332-6.635-3.75-9.053A12.72 12.72 0 0 0 16.003 3.2zm0 2.133a10.63 10.63 0 0 1 7.548 3.126 10.6 10.6 0 0 1 3.12 7.542c0 5.884-4.786 10.667-10.67 10.667a10.62 10.62 0 0 1-5.41-1.48l-.388-.23-4.03 1.053 1.076-3.926-.253-.403a10.6 10.6 0 0 1-1.626-5.68c0-5.883 4.786-10.666 10.67-10.666zm-5.87 5.744c-.196 0-.514.074-.784.37-.27.294-1.03 1.006-1.03 2.452 0 1.446 1.055 2.843 1.202 3.04.147.196 2.076 3.17 5.03 4.446.703.303 1.25.485 1.678.62.705.224 1.346.192 1.853.117.565-.084 1.74-.712 1.986-1.4.245-.686.245-1.274.172-1.4-.074-.123-.27-.196-.564-.343-.294-.147-1.74-.858-2.01-.956-.27-.098-.466-.147-.662.148-.196.294-.76.955-.93 1.15-.172.197-.343.222-.637.075-.294-.148-1.24-.457-2.363-1.458-.873-.778-1.463-1.74-1.634-2.034-.17-.294-.018-.453.13-.6.132-.132.294-.343.44-.514.148-.172.196-.294.294-.49.098-.197.05-.368-.025-.515-.074-.147-.646-1.6-.91-2.18-.235-.516-.474-.447-.662-.456l-.564-.01z"/>
           </svg>
-        </a>
+        </WhatsAppLink>
       )}
     </div>
   );
@@ -937,6 +928,9 @@ html { scroll-behavior: smooth; }
 .lp-footer__links { display: flex; flex-wrap: wrap; gap: 18px; }
 .lp-footer__links a { font-size: .92rem; color: color-mix(in srgb, var(--color-foreground) 72%, transparent); text-decoration: none; }
 .lp-footer__links a:hover { color: var(--lp-primary); }
+.lp-footer__link-btn { padding: 0; border: 0; background: none; cursor: pointer; font: inherit; font-size: .92rem;
+  color: color-mix(in srgb, var(--color-foreground) 72%, transparent); }
+.lp-footer__link-btn:hover { color: var(--lp-primary); }
 .lp-footer__meta { display: flex; flex-direction: column; gap: 4px; text-align: right; font-size: .82rem; color: color-mix(in srgb, var(--color-foreground) 55%, transparent); }
 .lp-footer__meta a { color: var(--lp-primary); text-decoration: none; }
 

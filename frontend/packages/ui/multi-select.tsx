@@ -17,6 +17,7 @@ export function MultiSelect({
   onChange,
   placeholder = 'Selecione…',
   emptyMessage = 'Nenhum item encontrado.',
+  hint,
 }: {
   label: string;
   options: MultiSelectOption[];
@@ -24,6 +25,8 @@ export function MultiSelect({
   onChange: (value: string[]) => void;
   placeholder?: string;
   emptyMessage?: string;
+  /** Aviso sob o campo — ex.: a lista veio truncada pelo servidor. */
+  hint?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -65,6 +68,7 @@ export function MultiSelect({
         </span>
         <ChevronDown className="h-4 w-4 shrink-0" />
       </button>
+      {hint && <span className="text-caption font-normal">{hint}</span>}
       {value.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {options

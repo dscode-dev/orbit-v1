@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { LandingPage } from "./_landing/landing-page";
+import { LandingPage } from "../_landing/landing-page";
 
 export const metadata: Metadata = {
   title: "Climatize · Climatização e Refrigeração HVAC-R",

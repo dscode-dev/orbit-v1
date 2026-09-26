@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ClipboardCheck,
@@ -53,6 +53,7 @@ import {
 import { Gate } from '@erp/ui/auth/gate';
 import { useAuth } from '@erp/ui/auth/auth-provider';
 import { Drawer } from '@erp/ui/drawer';
+import { EntityCombobox, type ComboboxOption, type ComboboxPage, type ComboboxQuery } from '@erp/ui/entity-combobox';
 import { EmptyState } from '@erp/ui/empty-state';
 import { StatusChip } from '@erp/ui/status-chip';
 import { SkeletonCard } from '@erp/ui/skeletons';
@@ -613,6 +614,15 @@ export function ReportWorkflowDrawer({
   const draft = useLocalDraft<WorkflowForm>(`reports:new:${type}`, draftEnabled);
   const [recoveredAt, setRecoveredAt] = useState<string | null>(null);
   const [draftMaterialized, setDraftMaterialized] = useState(false);
+  // Clientes vêm por página, carregados sob demanda no seletor: a lista fixa
+  // escondia quem estivesse além dos 100 primeiros.
+  const searchCustomers = useCallback(async ({ search, page }: ComboboxQuery, signal: AbortSignal) => {
+    const result = await customersApi.listCustomers({ search: search || undefined, page, limit: 50, signal });
+    return {
+      options: result.items.map((item) => ({ value: item.id, label: item.tradeName ?? item.name })),
+      total: result.pagination?.total,
+    };
+  }, []);
   const customers = useQuery<Paginated<Customer>>(
     (signal) => customersApi.listCustomers({ page: 1, limit: 100, signal }),
     [],
@@ -1569,6 +1579,7 @@ export function ReportWorkflowDrawer({
             type={type}
             form={form}
             customers={customers.data?.items ?? []}
+            searchCustomers={searchCustomers}
             users={users.data?.items ?? []}
             operations={operations.data?.items ?? []}
             sales={sales.data?.items ?? []}
@@ -1599,6 +1610,7 @@ export function ReportWorkflowDrawer({
           <ReceiptDataStep
             form={form}
             customers={customers.data?.items ?? []}
+            searchCustomers={searchCustomers}
             addresses={addresses}
             customer={selectedCustomer}
             onSet={set}
@@ -1716,10 +1728,17 @@ export function ReportWorkflowDrawer({
   );
 }
 
+/** Rótulo do cliente selecionado, quando ele está na página já carregada. */
+function customerOption(customers: Customer[], id: string): ComboboxOption | null {
+  const found = customers.find((item) => item.id === id);
+  return found ? { value: found.id, label: found.tradeName ?? found.name } : null;
+}
+
 function OriginStep({
   type,
   form,
   customers,
+  searchCustomers,
   users,
   operations,
   sales,
@@ -1748,6 +1767,7 @@ function OriginStep({
   type: DocumentKind;
   form: WorkflowForm;
   customers: Customer[];
+  searchCustomers: (query: ComboboxQuery, signal: AbortSignal) => Promise<ComboboxPage>;
   users: TeamUser[];
   operations: OperationSummary[];
   sales: Sale[];
@@ -1991,24 +2011,20 @@ function OriginStep({
         )}
         {form.workOrderSource === 'NEW' && (
           <div className="grid gap-4 md:grid-cols-2">
-            <Field label="Cliente">
-              <select
-                value={form.customerId}
-                onChange={(event) => {
-                  onSet('customerId', event.target.value);
-                  onSet('addressId', '');
-                  onSet('equipmentId', '');
-                  onSet('inspectedEquipments', []);
-                }}
-              >
-                <option value="">Selecione…</option>
-                {customers.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.tradeName ?? item.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
+            <EntityCombobox
+              label="Cliente"
+              value={form.customerId}
+              onChange={(id) => {
+                onSet('customerId', id);
+                onSet('addressId', '');
+                onSet('equipmentId', '');
+                onSet('inspectedEquipments', []);
+              }}
+              fetchOptions={searchCustomers}
+              selectedOption={customerOption(customers, form.customerId)}
+              placeholder="Selecione…"
+              emptyMessage="Nenhum cliente encontrado."
+            />
             <Field label="Endereço">
               <select
                 value={form.addressId}
@@ -2306,26 +2322,22 @@ function OriginStep({
             )}
           </div>
         )}
-        <Field label="Cliente">
-          <select
-            value={form.customerId}
-            disabled={type === 'PMOC' && form.pmocMode === 'EXISTING' && Boolean(form.pmocId)}
-            onChange={(event) => {
-              onSet('customerId', event.target.value);
-              onSet('addressId', '');
-              onSet('equipmentId', '');
-              onSet('pmocEquipmentIds', []);
-              onSet('inspectedEquipments', []);
-            }}
-          >
-            <option value="">Selecione…</option>
-            {customers.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.tradeName ?? item.name}
-              </option>
-            ))}
-          </select>
-        </Field>
+        <EntityCombobox
+          label="Cliente"
+          value={form.customerId}
+          disabled={type === 'PMOC' && form.pmocMode === 'EXISTING' && Boolean(form.pmocId)}
+          onChange={(id) => {
+            onSet('customerId', id);
+            onSet('addressId', '');
+            onSet('equipmentId', '');
+            onSet('pmocEquipmentIds', []);
+            onSet('inspectedEquipments', []);
+          }}
+          fetchOptions={searchCustomers}
+          selectedOption={customerOption(customers, form.customerId)}
+          placeholder="Selecione…"
+          emptyMessage="Nenhum cliente encontrado."
+        />
         <Field label="Endereço">
           <select
             value={form.addressId}
@@ -2449,12 +2461,14 @@ function RequesterSummary({
 function ReceiptDataStep({
   form,
   customers,
+  searchCustomers,
   addresses,
   customer,
   onSet,
 }: {
   form: WorkflowForm;
   customers: Customer[];
+  searchCustomers: (query: ComboboxQuery, signal: AbortSignal) => Promise<ComboboxPage>;
   addresses: CustomerAddress[];
   customer: CustomerDetail | null;
   onSet: <K extends keyof WorkflowForm>(key: K, value: WorkflowForm[K]) => void;
@@ -2486,29 +2500,26 @@ function ReceiptDataStep({
             onChange={(event) => onSet('receiptDate', event.target.value)}
           />
         </Field>
-        <Field label="Cliente">
-          <select
-            value={form.customerId}
-            onChange={(event) => {
-              const selected = customers.find((item) => item.id === event.target.value);
-              onSet('customerId', event.target.value);
-              onSet('addressId', '');
-              if (!form.receiptDeclarationEdited) {
-                onSet(
-                  'receiptDeclaration',
-                  receiptDeclaration(form, selected),
-                );
-              }
-            }}
-          >
-            <option value="">Selecione…</option>
-            {customers.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.tradeName ?? item.name}
-              </option>
-            ))}
-          </select>
-        </Field>
+        <EntityCombobox
+          label="Cliente"
+          value={form.customerId}
+          onChange={(id, option) => {
+            onSet('customerId', id);
+            onSet('addressId', '');
+            if (!form.receiptDeclarationEdited) {
+              // A declaração cita o nome do cliente: usa o que foi escolhido
+              // agora, que pode não estar na primeira página carregada.
+              const selected =
+                customers.find((item) => item.id === id) ??
+                (option ? ({ name: option.label, tradeName: null } as Customer) : undefined);
+              onSet('receiptDeclaration', receiptDeclaration(form, selected));
+            }
+          }}
+          fetchOptions={searchCustomers}
+          selectedOption={customerOption(customers, form.customerId)}
+          placeholder="Selecione…"
+          emptyMessage="Nenhum cliente encontrado."
+        />
         <Field label="Endereço">
           <select
             value={form.addressId}
