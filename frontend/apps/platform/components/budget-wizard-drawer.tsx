@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { Drawer } from "@erp/ui/drawer";
 import { MultiSelect } from "@erp/ui/multi-select";
+import { EntityCombobox, type ComboboxQuery } from "@erp/ui/entity-combobox";
 import {
   budgetsApi,
   customersApi,
@@ -69,9 +70,22 @@ export function BudgetWizardDrawer({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const customers = useQuery((signal) => open ? customersApi.listCustomers({ limit: 100, signal }) : Promise.resolve(null), [open]);
+  // Cliente e equipamento vêm por busca no servidor: com mais de 100 registros
+  // a página fixa deixava parte da base fora do wizard.
+  const searchCustomers = useCallback(async ({ search, page }: ComboboxQuery, signal: AbortSignal) => {
+    const result = await customersApi.listCustomers({ search: search || undefined, page, limit: 50, signal });
+    return {
+      options: result.items.map((row: Customer) => ({
+        value: row.id,
+        label: row.tradeName || row.name,
+        description: row.tradeName ? row.name : undefined,
+      })),
+      total: result.pagination?.total,
+    };
+  }, []);
   const customer = useQuery<CustomerDetail | null>((signal) => open && customerId ? customersApi.getCustomer(customerId, { signal }) : Promise.resolve(null), [open, customerId]);
   const equipments = useQuery((signal) => open && customerId ? equipmentsApi.listEquipments({ limit: 100, customerId, signal }) : Promise.resolve(null), [open, customerId]);
+  const equipmentOverflow = Math.max(0, (equipments.data?.pagination?.total ?? 0) - (equipments.data?.items.length ?? 0));
   const operations = useQuery((signal) => open && origin === "WORK_ORDER" ? operationApi.listOperations({ limit: 100, status: "COMPLETED", signal }) : Promise.resolve(null), [open, origin]);
   const signatures = useQuery((signal) => open ? signaturesApi.listSignatures({ limit: 100, active: true, signal }) : Promise.resolve(null), [open]);
   const materialDescriptions = useQuery(
@@ -193,7 +207,7 @@ export function BudgetWizardDrawer({
       <div className="flex gap-2 overflow-x-auto pb-1">{STEPS.map((label, index) => <span key={label} className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-xs ${index === step ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]" : index < step ? "border-[var(--color-success)]/40 text-[var(--color-success)]" : "border-[var(--color-border)] text-[var(--color-muted-foreground)]"}`}>{index + 1}. {label}</span>)}</div>
 
       {step === 0 && <OriginStep origin={origin} setOrigin={setOrigin} operationId={operationId} setOperationId={setOperationId} operations={operations.data?.items ?? []} />}
-      {step === 1 && <div className="grid gap-3 sm:grid-cols-2"><Field label="Cliente"><select value={customerId} onChange={(event) => { setCustomerId(event.target.value); setAddressId(""); setEquipmentIds([]); }} className={inputCls}><option value="">Selecione</option>{customers.data?.items.map((row: Customer) => <option key={row.id} value={row.id}>{row.tradeName || row.name}</option>)}</select></Field><Field label="Endereço"><select value={addressId} onChange={(event) => setAddressId(event.target.value)} className={inputCls}><option value="">Selecione</option>{customer.data?.addresses?.map((address) => <option key={address.id} value={address.id}>{address.street}, {address.number} · {address.city}/{address.state}</option>)}</select></Field><div className="sm:col-span-2"><MultiSelect label="Equipamentos (opcional)" placeholder="Selecione um ou mais equipamentos" emptyMessage={customerId ? "Nenhum equipamento para este cliente." : "Selecione um cliente primeiro."} value={equipmentIds} onChange={setEquipmentIds} options={(equipments.data?.items ?? []).map((equipment: EquipmentSummary) => ({ value: equipment.id, label: equipment.name, description: equipment.tag ?? undefined }))} /></div><Field label="Data"><input type="date" value={issuedAt} onChange={(event) => setIssuedAt(event.target.value)} className={inputCls} /></Field><Field label="Título"><input value={title} onChange={(event) => setTitle(event.target.value)} className={inputCls} /></Field><Field label="Descrição"><textarea value={description} onChange={(event) => setDescription(event.target.value)} className={`${inputCls} min-h-20 py-2`} /></Field><div className="sm:col-span-2"><Field label="Texto introdutório"><textarea value={introduction} onChange={(event) => setIntroduction(event.target.value)} className={`${inputCls} min-h-24 py-2`} /></Field></div></div>}
+      {step === 1 && <div className="grid gap-3 sm:grid-cols-2"><EntityCombobox label="Cliente" value={customerId} onChange={(id) => { setCustomerId(id); setAddressId(""); setEquipmentIds([]); }} fetchOptions={searchCustomers} selectedOption={customer.data ? { value: customer.data.id, label: customer.data.tradeName || customer.data.name } : null} placeholder="Selecione" emptyMessage="Nenhum cliente encontrado." /><Field label="Endereço"><select value={addressId} onChange={(event) => setAddressId(event.target.value)} className={inputCls}><option value="">Selecione</option>{customer.data?.addresses?.map((address) => <option key={address.id} value={address.id}>{address.street}, {address.number} · {address.city}/{address.state}</option>)}</select></Field><div className="sm:col-span-2"><MultiSelect label="Equipamentos (opcional)" placeholder="Selecione um ou mais equipamentos" emptyMessage={customerId ? "Nenhum equipamento para este cliente." : "Selecione um cliente primeiro."} hint={equipmentOverflow > 0 ? `Mostrando ${equipments.data?.items.length} de ${equipments.data?.pagination?.total} equipamentos deste cliente.` : undefined} value={equipmentIds} onChange={setEquipmentIds} options={(equipments.data?.items ?? []).map((equipment: EquipmentSummary) => ({ value: equipment.id, label: equipment.name, description: equipment.tag ?? undefined }))} /></div><Field label="Data"><input type="date" value={issuedAt} onChange={(event) => setIssuedAt(event.target.value)} className={inputCls} /></Field><Field label="Título"><input value={title} onChange={(event) => setTitle(event.target.value)} className={inputCls} /></Field><Field label="Descrição"><textarea value={description} onChange={(event) => setDescription(event.target.value)} className={`${inputCls} min-h-20 py-2`} /></Field><div className="sm:col-span-2"><Field label="Texto introdutório"><textarea value={introduction} onChange={(event) => setIntroduction(event.target.value)} className={`${inputCls} min-h-24 py-2`} /></Field></div></div>}
       {step === 2 && <div className="space-y-4"><BudgetItemsEditor type="SERVICE" items={items} onChange={setItems} /><DiscountEditor scope="SERVICE" value={serviceDiscount} onValueChange={setServiceDiscount} description={serviceDiscountDescription} onDescriptionChange={setServiceDiscountDescription} subtotal={serviceSubtotal} /></div>}
       {step === 3 && (
         <div className="space-y-4"><BudgetItemsEditor

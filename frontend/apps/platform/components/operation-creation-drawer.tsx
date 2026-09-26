@@ -167,9 +167,15 @@ export function OperationCreationDrawer({
   );
   const equipments = useQuery(
     (signal) => customerId
+      // Equipamentos de UM cliente cabem numa página; o hint abaixo avisa se
+      // esse cliente tiver mais do que isso.
       ? equipmentsApi.listEquipments({ customerId, limit: 100, signal })
       : Promise.resolve(null),
     [customerId],
+  );
+  const equipmentOverflow = Math.max(
+    0,
+    (equipments.data?.pagination?.total ?? 0) - (equipments.data?.items.length ?? 0),
   );
 
   // Rascunho local: só na criação de OS avulsa do zero (mode operation, sem prefill).
@@ -610,6 +616,7 @@ export function OperationCreationDrawer({
                     <MultiSelect
                       label="Equipamentos da Ordem de Serviço"
                       value={equipmentIds}
+                      hint={equipmentOverflow > 0 ? `Mostrando ${equipments.data?.items.length} de ${equipments.data?.pagination?.total} equipamentos deste cliente.` : undefined}
                       onChange={(ids) => { setEquipmentIds(ids); setEquipmentId(ids[0] ?? ""); }}
                       options={(equipments.data?.items ?? []).map((equipment) => ({
                         value: equipment.id,

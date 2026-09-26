@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { MultiSelect } from "@erp/ui/multi-select";
+import { EntityCombobox, type ComboboxOption, type ComboboxQuery } from "@erp/ui/entity-combobox";
 import {
   customersApi,
   equipmentsApi,
@@ -22,16 +23,45 @@ export const SERVICE_TYPES: Array<{ value: OperationType; label: string }> = [
   { value: "PROJETO", label: "Projeto" },
 ];
 
+/**
+ * Busca no servidor: a base de clientes passa de 100 registros e o select
+ * antigo mostrava só a primeira página.
+ */
 export function CustomerSelect({ value, onChange }: { value: string; onChange: (id: string, customer?: Customer) => void }) {
-  const customers = useQuery((signal) => customersApi.listCustomers({ limit: 100, signal }), []);
-  return (
-    <Field label="Cliente">
-      <select value={value} onChange={(event) => onChange(event.target.value, customers.data?.items.find((c) => c.id === event.target.value))} className={inputCls}>
-        <option value="">Selecione o cliente</option>
-        {(customers.data?.items ?? []).map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}
-      </select>
-    </Field>
+  // Guarda os clientes já trazidos para devolver o objeto certo no onChange:
+  // quem usa este select preenche endereço/contato a partir dele.
+  const loaded = useRef(new Map<string, Customer>());
+  const fetchOptions = useCallback(async ({ search, page }: ComboboxQuery, signal: AbortSignal) => {
+    const result = await customersApi.listCustomers({ search: search || undefined, page, limit: 50, signal });
+    for (const customer of result.items) loaded.current.set(customer.id, customer);
+    return { options: result.items.map(customerOption), total: result.pagination?.total };
+  }, []);
+  // Ao editar um registro antigo, o cliente escolhido pode não estar na
+  // primeira página — busca pelo id só para manter o rótulo visível.
+  const detail = useQuery(
+    (signal) => (value && !loaded.current.has(value) ? customersApi.getCustomer(value, { signal }) : Promise.resolve(null)),
+    [value],
   );
+  const selected = loaded.current.get(value) ?? detail.data ?? null;
+  return (
+    <EntityCombobox
+      label="Cliente"
+      value={value}
+      onChange={(id) => onChange(id, id ? loaded.current.get(id) : undefined)}
+      fetchOptions={fetchOptions}
+      selectedOption={selected ? customerOption(selected) : null}
+      placeholder="Selecione o cliente"
+      emptyMessage="Nenhum cliente encontrado."
+    />
+  );
+}
+
+function customerOption(customer: { id: string; name: string; tradeName?: string | null; document?: string | null }): ComboboxOption {
+  return {
+    value: customer.id,
+    label: customer.name,
+    description: customer.tradeName || customer.document || undefined,
+  };
 }
 
 export function CustomerAddressSelect({ customerId, value, onChange }: { customerId: string; value: string; onChange: (id: string) => void }) {
@@ -48,31 +78,70 @@ export function CustomerAddressSelect({ customerId, value, onChange }: { custome
 }
 
 export function EquipmentSelect({ customerId, value, onChange }: { customerId: string; value: string; onChange: (id: string, equipment?: EquipmentSummary) => void }) {
-  const equipments = useQuery(
-    (signal) => (customerId ? equipmentsApi.listEquipments({ customerId, limit: 100, signal }) : Promise.resolve(null)),
+  const loaded = useRef(new Map<string, EquipmentSummary>());
+  const fetchOptions = useCallback(
+    async ({ search, page }: ComboboxQuery, signal: AbortSignal) => {
+      if (!customerId) return { options: [] };
+      const result = await equipmentsApi.listEquipments({
+        customerId,
+        search: search || undefined,
+        page,
+        limit: 50,
+        signal,
+      });
+      for (const equipment of result.items) loaded.current.set(equipment.id, equipment);
+      return { options: result.items.map(equipmentOption), total: result.pagination?.total };
+    },
     [customerId],
   );
+  const selected = loaded.current.get(value) ?? null;
   return (
-    <Field label="Equipamento">
-      <select value={value} onChange={(event) => onChange(event.target.value, equipments.data?.items.find((e) => e.id === event.target.value))} className={inputCls} disabled={!customerId}>
-        <option value="">Sem equipamento específico</option>
-        {(equipments.data?.items ?? []).map((equipment) => <option key={equipment.id} value={equipment.id}>{equipment.name}{equipment.tag ? ` · ${equipment.tag}` : ""}</option>)}
-      </select>
-    </Field>
+    <EntityCombobox
+      label="Equipamento"
+      value={value}
+      onChange={(id) => onChange(id, id ? loaded.current.get(id) : undefined)}
+      fetchOptions={fetchOptions}
+      selectedOption={selected ? equipmentOption(selected) : null}
+      placeholder="Sem equipamento específico"
+      clearLabel="Sem equipamento específico"
+      emptyMessage="Nenhum equipamento deste cliente."
+      disabled={!customerId}
+    />
   );
 }
 
+function equipmentOption(equipment: EquipmentSummary): ComboboxOption {
+  return { value: equipment.id, label: equipment.name, description: equipment.tag ?? undefined };
+}
+
 export function UserSelect({ value, onChange }: { value: string; onChange: (id: string, user?: TeamUser) => void }) {
-  const users = useQuery((signal) => usersApi.listUsers({ limit: 100, signal }), []);
-  const operators = useMemo(() => (users.data?.items ?? []).filter((user) => user.isActive && user.role !== "VIEWER"), [users.data]);
+  const loaded = useRef(new Map<string, TeamUser>());
+  const fetchOptions = useCallback(async ({ search, page }: ComboboxQuery, signal: AbortSignal) => {
+    const result = await usersApi.listUsers({ search: search || undefined, page, limit: 50, signal });
+    // Quem não pode executar atendimento não aparece como responsável.
+    const operators = result.items.filter((user) => user.isActive && user.role !== "VIEWER");
+    for (const user of operators) loaded.current.set(user.id, user);
+    // O total do servidor inclui quem foi filtrado aqui; sem ele a lista para
+    // de paginar cedo, então usamos o total bruto como referência de "há mais".
+    return { options: operators.map(userOption), total: result.pagination?.total };
+  }, []);
+  const selected = loaded.current.get(value) ?? null;
   return (
-    <Field label="Operador responsável">
-      <select value={value} onChange={(event) => onChange(event.target.value, operators.find((u) => u.id === event.target.value))} className={inputCls}>
-        <option value="">Usar usuário autenticado</option>
-        {operators.map((user) => <option key={user.id} value={user.id}>{user.name} · {user.role}</option>)}
-      </select>
-    </Field>
+    <EntityCombobox
+      label="Operador responsável"
+      value={value}
+      onChange={(id) => onChange(id, id ? loaded.current.get(id) : undefined)}
+      fetchOptions={fetchOptions}
+      selectedOption={selected ? userOption(selected) : null}
+      placeholder="Usar usuário autenticado"
+      clearLabel="Usar usuário autenticado"
+      emptyMessage="Nenhum operador encontrado."
+    />
   );
+}
+
+function userOption(user: TeamUser): ComboboxOption {
+  return { value: user.id, label: user.name, description: user.role };
 }
 
 /**

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import {
   CalendarClock,
@@ -44,6 +44,7 @@ import {
 } from "@erp/api";
 import { Drawer } from "@erp/ui/drawer";
 import { ConfirmDialog } from "@erp/ui/confirm-dialog";
+import { EntityCombobox, type ComboboxQuery } from "@erp/ui/entity-combobox";
 import { DocumentViewer } from "@erp/ui/documents/document-viewer";
 import { SignaturePad } from "@erp/ui/documents/signature-pad";
 import { MultiSelect } from "@erp/ui/multi-select";
@@ -599,7 +600,14 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
     });
   }
 
-  const selectedCustomer = customers.data?.items.find((item) => item.id === form.customerId);
+  // O cliente escolhido pode estar fora da primeira página: busca pelo id só
+  // para manter nome/endereço corretos no resumo do plano.
+  const selectedCustomerDetail = useQuery(
+    (signal) => (form.customerId ? customersApi.getCustomer(form.customerId, { signal }) : Promise.resolve(null)),
+    [form.customerId],
+  );
+  const selectedCustomer =
+    customers.data?.items.find((item) => item.id === form.customerId) ?? selectedCustomerDetail.data ?? undefined;
   const selectedScopes = scopes.data?.items.filter((item) => form.scopeCatalogIds.includes(item.id)) ?? [];
   const activeUsers = users.data?.items.filter((item) => item.isActive && item.role !== "VIEWER") ?? [];
 
@@ -633,7 +641,7 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
 
         {step === 0 && <IdentificationStep
           form={form}
-          customers={customers.data?.items ?? []}
+          selectedCustomer={selectedCustomer ?? null}
           addresses={customer.data?.addresses ?? []}
           set={set}
           onCustomer={(customerId) => {
@@ -651,6 +659,7 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
           form={form}
           set={set}
           equipments={equipments.data?.items ?? []}
+          equipmentOverflow={Math.max(0, (equipments.data?.pagination?.total ?? 0) - (equipments.data?.items.length ?? 0))}
           scopes={scopes.data?.items ?? []}
           loadingScopes={scopes.loading}
           refreshScopes={() => setCatalogTick((value) => value + 1)}
@@ -739,28 +748,38 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
   </>;
 }
 
-function IdentificationStep({ form, set, customers, addresses, onCustomer, onName, suggested, customerLocked, requireAddress = false }: {
-  form: Form; set: FormSetter; customers: Customer[]; addresses: CustomerAddress[];
+function IdentificationStep({ form, set, selectedCustomer, addresses, onCustomer, onName, suggested, customerLocked, requireAddress = false }: {
+  form: Form; set: FormSetter; selectedCustomer: Customer | null; addresses: CustomerAddress[];
   onCustomer: (id: string) => void; onName: (name: string) => void; suggested: boolean; customerLocked?: boolean;
   requireAddress?: boolean;
 }) {
+  // Busca no servidor: a lista fixa escondia clientes além da primeira página.
+  const searchCustomers = useCallback(async ({ search, page }: ComboboxQuery, signal: AbortSignal) => {
+    const result = await customersApi.listCustomers({ search: search || undefined, page, limit: 50, signal });
+    return {
+      options: result.items.map((item) => ({ value: item.id, label: item.tradeName ?? item.name })),
+      total: result.pagination?.total,
+    };
+  }, []);
   return <Section icon={MapPinned} title={requireAddress ? "Identificação e cobertura" : "Identificação"} text="Identifique o cliente, a unidade atendida e o nome oficial do plano.">
     <div className="grid gap-4 md:grid-cols-2">
-      <Field label="Cliente" required><select value={form.customerId} onChange={(event) => onCustomer(event.target.value)} disabled={customerLocked}><option value="">Selecione…</option>{customers.map((item) => <option key={item.id} value={item.id}>{item.tradeName ?? item.name}</option>)}</select></Field>
+      <EntityCombobox label="Cliente" value={form.customerId} onChange={onCustomer} fetchOptions={searchCustomers} selectedOption={selectedCustomer ? { value: selectedCustomer.id, label: selectedCustomer.tradeName ?? selectedCustomer.name } : null} placeholder="Selecione…" emptyMessage="Nenhum cliente encontrado." disabled={customerLocked} />
       <Field label="Endereço" required={requireAddress} optional={!requireAddress}><select value={form.addressId} onChange={(event) => set("addressId", event.target.value)} disabled={!form.customerId}><option value="">{requireAddress ? "Selecione o endereço coberto" : "Endereço principal do cliente"}</option>{addresses.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.street}, {item.number}</option>)}</select></Field>
       <div className="md:col-span-2"><Field label="Nome do plano" required hint={suggested ? "Sugestão automática — você pode editar." : "Nome personalizado — não será substituído automaticamente."}><input value={form.name} maxLength={140} onChange={(event) => onName(event.target.value)} placeholder="Selecione um cliente para gerar a sugestão" /></Field></div>
     </div>
   </Section>;
 }
 
-function CoverageStep({ form, set, equipments, scopes, loadingScopes, refreshScopes, serviceTypeOptions }: {
+function CoverageStep({ form, set, equipments, equipmentOverflow = 0, scopes, loadingScopes, refreshScopes, serviceTypeOptions }: {
   form: Form; set: FormSetter; equipments: EquipmentSummary[];
+  /** Quantos equipamentos do cliente ficaram fora da página carregada. */
+  equipmentOverflow?: number;
   scopes: Array<{ id: string; title: string; description: string | null }>;
   loadingScopes: boolean; refreshScopes: () => void;
   serviceTypeOptions: Array<{ value: string; label: string }>;
 }) {
   return <Section icon={ClipboardCheck} title="Cobertura" text="Defina ativos, ambientes e serviços incluídos no plano.">
-    <MultiSelect label="Equipamentos cobertos *" value={form.equipmentIds} onChange={(value) => set("equipmentIds", value)} placeholder={form.customerId ? "Selecione um ou mais equipamentos" : "Selecione primeiro o cliente"} emptyMessage="Nenhum equipamento ativo disponível para este cliente." options={equipments.map((item) => ({ value: item.id, label: item.name, description: item.tag ?? item.type }))} />
+    <MultiSelect label="Equipamentos cobertos *" value={form.equipmentIds} onChange={(value) => set("equipmentIds", value)} placeholder={form.customerId ? "Selecione um ou mais equipamentos" : "Selecione primeiro o cliente"} emptyMessage="Nenhum equipamento ativo disponível para este cliente." hint={equipmentOverflow > 0 ? `Mostrando ${equipments.length} de ${equipments.length + equipmentOverflow} equipamentos — refine pelo cadastro do cliente.` : undefined} options={equipments.map((item) => ({ value: item.id, label: item.name, description: item.tag ?? item.type }))} />
     <div className="space-y-2">
       <MultiSelect label="Escopo do plano *" value={form.scopeCatalogIds} onChange={(value) => set("scopeCatalogIds", value)} placeholder={loadingScopes ? "Carregando escopos…" : "Selecione uma ou mais áreas"} emptyMessage="Nenhum escopo encontrado. Cadastre um item no Catálogo Técnico." options={scopes.map((item) => ({ value: item.id, label: item.title, description: item.description ?? undefined }))} />
       <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--color-muted-foreground)]"><span>Use “Outros” quando necessário ou cadastre um escopo reutilizável no Catálogo Técnico.</span><a href="/maintenance-checklists?type=PLAN_SCOPE" target="_blank" rel="noreferrer" className="font-medium text-[var(--color-primary)]">Abrir Catálogo Técnico</a><button type="button" onClick={refreshScopes} className="inline-flex items-center gap-1 font-medium text-[var(--color-primary)]"><RefreshCw className="h-3 w-3" /> Atualizar lista</button></div>
