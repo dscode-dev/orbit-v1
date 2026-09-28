@@ -23,7 +23,7 @@ export class PasswordChangeRequiredGuard implements CanActivate {
     if (user?.mustChangePassword) {
       throw new ApplicationException(
         ERROR_CODES.PASSWORD_CHANGE_REQUIRED,
-        'Password change is required before accessing this resource',
+        'Troque a sua senha antes de continuar',
         HttpStatus.FORBIDDEN,
       );
     }

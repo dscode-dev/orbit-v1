@@ -60,7 +60,11 @@ export class RvtPlanningController {
     return this.rvt.prepareExecution(id, body, actor, this.context(request));
   }
 
-  @Roles(Role.OPERATOR)
+  // Última chamada do atendimento de RVT no app: barrar owner/gestor aqui
+  // deixava o atendimento concluído mas terminava com erro de permissão.
+  // Quem pode registrar continua sendo só o executor da operação — o serviço
+  // filtra por `operatorId = actor.id`.
+  @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
   @Post('rvt-plans/ad-hoc')
   registerAdHoc(@Body() body: RegisterAdHocRvtDto, @CurrentUser() actor: AuthenticatedUser, @Req() request: RequestWithId): Promise<unknown> {
     return this.rvt.registerAdHoc(body.operationId, actor, this.context(request));

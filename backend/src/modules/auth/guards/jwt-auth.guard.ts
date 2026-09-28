@@ -29,7 +29,7 @@ export class JwtAuthGuard implements CanActivate {
     if (scheme?.toLowerCase() !== 'bearer' || !token || extra) {
       throw new ApplicationException(
         ERROR_CODES.UNAUTHORIZED,
-        'Bearer access token is required',
+        'Faça login para continuar: token de acesso ausente ou inválido',
         HttpStatus.UNAUTHORIZED,
       );
     }
