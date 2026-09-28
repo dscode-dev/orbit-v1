@@ -50,7 +50,10 @@ export class OperationsController {
     return this.operations.create(body, actor, this.context(request));
   }
 
-  @Roles(Role.OPERATOR)
+  // Owner e gestor também executam atendimento pelo app: quando reatribuem a
+  // operação para si, precisam registrar os equipamentos encontrados em campo.
+  // O acesso real é conferido no serviço (assertOperationAccess).
+  @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
   @RequirePermission('canReports')
   @Post(':id/equipments')
   addFieldEquipments(
