@@ -322,14 +322,14 @@ export class UsersService {
     if (!user || !(await this.passwords.verifyPassword(user.passwordHash, dto.currentPassword))) {
       throw new ApplicationException(
         ERROR_CODES.PASSWORD_CURRENT_INVALID,
-        'Current password is invalid',
+        'Senha atual inválida',
         HttpStatus.BAD_REQUEST,
       );
     }
     if (await this.passwords.verify(user.passwordHash, dto.newPassword)) {
       throw new ApplicationException(
         ERROR_CODES.PASSWORD_REUSE_NOT_ALLOWED,
-        'New password must be different from the current password',
+        'A nova senha deve ser diferente da senha atual',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -375,28 +375,28 @@ export class UsersService {
     if (!user.mustChangePassword) {
       throw new ApplicationException(
         ERROR_CODES.BAD_REQUEST,
-        'First access was already completed',
+        'O primeiro acesso já foi concluído',
         HttpStatus.CONFLICT,
       );
     }
     if (!(await this.passwords.verifyPassword(user.passwordHash, dto.currentPassword))) {
       throw new ApplicationException(
         ERROR_CODES.PASSWORD_CURRENT_INVALID,
-        'Current password is invalid',
+        'Senha atual inválida',
         HttpStatus.BAD_REQUEST,
       );
     }
     if (await this.passwords.verify(user.passwordHash, dto.newPassword)) {
       throw new ApplicationException(
         ERROR_CODES.PASSWORD_REUSE_NOT_ALLOWED,
-        'New password must be different from the current password',
+        'A nova senha deve ser diferente da senha atual',
         HttpStatus.BAD_REQUEST,
       );
     }
     if (!this.signatures) {
       throw new ApplicationException(
         ERROR_CODES.INTERNAL_SERVER_ERROR,
-        'Signature service is unavailable',
+        'Serviço de assinatura indisponível',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -413,7 +413,7 @@ export class UsersService {
         if (!organization) {
           throw new ApplicationException(
             ERROR_CODES.ORGANIZATION_NOT_FOUND,
-            'Organization was not found',
+            'Organização não encontrada',
             HttpStatus.NOT_FOUND,
           );
         }
@@ -566,7 +566,7 @@ export class UsersService {
     if (!organization) {
       throw new ApplicationException(
         ERROR_CODES.ORGANIZATION_NOT_FOUND,
-        'Organization was not found',
+        'Organização não encontrada',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -656,7 +656,7 @@ export class UsersService {
     if (!avatar) {
       throw new ApplicationException(
         ERROR_CODES.NOT_FOUND,
-        'Avatar was not found',
+        'Avatar não encontrado',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -740,7 +740,7 @@ export class UsersService {
   private userNotFound(): ApplicationException {
     return new ApplicationException(
       ERROR_CODES.USER_NOT_FOUND,
-      'User was not found',
+      'Usuário não encontrado',
       HttpStatus.NOT_FOUND,
     );
   }
@@ -779,7 +779,7 @@ export class UsersService {
     if (targetId === actorId) {
       throw new ApplicationException(
         ERROR_CODES.USER_SELF_ACTION_FORBIDDEN,
-        'You cannot disable or delete your own account',
+        'Você não pode desativar ou excluir a própria conta',
         HttpStatus.CONFLICT,
       );
     }
@@ -792,7 +792,7 @@ export class UsersService {
     if (count === 0) {
       throw new ApplicationException(
         ERROR_CODES.USER_LAST_OWNER,
-        'The last active owner cannot be disabled, deleted, or demoted',
+        'O último proprietário ativo não pode ser desativado, excluído ou rebaixado',
         HttpStatus.CONFLICT,
       );
     }
@@ -802,7 +802,7 @@ export class UsersService {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
       throw new ApplicationException(
         ERROR_CODES.USER_CONFLICT,
-        'Email or username is already in use',
+        'E-mail ou nome de usuário já está em uso',
         HttpStatus.CONFLICT,
         { fields: error.meta?.target ?? [] },
       );
@@ -817,14 +817,14 @@ export class UsersService {
     if (!file) {
       throw new ApplicationException(
         ERROR_CODES.UPLOAD_FILE_REQUIRED,
-        'A file field is required',
+        'Envie um arquivo',
         HttpStatus.BAD_REQUEST,
       );
     }
     if (file.size > MAX_AVATAR_SIZE_BYTES) {
       throw new ApplicationException(
         ERROR_CODES.UPLOAD_FILE_TOO_LARGE,
-        'Avatar exceeds the 2 MiB limit',
+        'O avatar excede o limite de 2 MiB',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -835,7 +835,7 @@ export class UsersService {
     ) {
       throw new ApplicationException(
         ERROR_CODES.UPLOAD_INVALID_MIME_TYPE,
-        'Avatar MIME type is not allowed',
+        'Tipo MIME do avatar não permitido',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -845,7 +845,7 @@ export class UsersService {
     ) {
       throw new ApplicationException(
         ERROR_CODES.UPLOAD_INVALID_EXTENSION,
-        'Avatar file extension is not allowed',
+        'Extensão de arquivo do avatar não permitida',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -860,7 +860,7 @@ export class UsersService {
     if ((file.mimetype === 'image/png' && !png) || (file.mimetype === 'image/jpeg' && !jpeg)) {
       throw new ApplicationException(
         ERROR_CODES.UPLOAD_INVALID_MIME_TYPE,
-        'Avatar content does not match its declared image type',
+        'O conteúdo do avatar não corresponde ao tipo de imagem declarado',
         HttpStatus.BAD_REQUEST,
       );
     }

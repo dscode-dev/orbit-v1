@@ -1069,7 +1069,7 @@ describe('DocumentEngine foundation', () => {
     expect(built.header.documentNumber).toBe('RVT-000042');
     expect(identificationMetadata?.kind === 'metadata' ? identificationMetadata.items : []).toContainEqual({
       label: 'Número',
-      value: '007',
+      value: 'RVT-007',
     });
     expect(
       identification?.components.some(
@@ -1594,7 +1594,7 @@ describe('DocumentEngine foundation', () => {
 
     expect(() =>
       normalize(`data:image/png;base64,${Buffer.from('bad').toString('base64')}`),
-    ).toThrow('Signature binary is invalid');
+    ).toThrow('A imagem da assinatura é inválida');
   });
 
   it('waits for signature/photo persistence and returns the authoritative Operation after update', async () => {

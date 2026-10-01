@@ -26,7 +26,7 @@ export class DocumentConfigurationController {
     if (actor.role === Role.OPERATOR && type !== DocumentTemplateType.PMOC) {
       throw new ApplicationException(
         ERROR_CODES.FORBIDDEN,
-        'Operators can only read the PMOC execution signature policy',
+        'O operador só pode consultar a política de assinatura do PMOC',
         HttpStatus.FORBIDDEN,
       );
     }

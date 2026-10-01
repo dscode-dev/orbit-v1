@@ -229,7 +229,7 @@ export class AssignmentsService {
     if (!assignment) {
       throw new ApplicationException(
         ERROR_CODES.ASSIGNMENT_NOT_FOUND,
-        'Assignment was not found',
+        'Atribuição não encontrada',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -255,7 +255,7 @@ export class AssignmentsService {
       if (existing) {
         throw new ApplicationException(
           ERROR_CODES.ASSIGNMENT_INVALID_TRANSITION,
-          'Operation already has a primary assignment',
+          'Este atendimento já tem um técnico responsável',
           HttpStatus.CONFLICT,
         );
       }
@@ -310,7 +310,7 @@ export class AssignmentsService {
       if (transition.count !== 1) {
         throw new ApplicationException(
           ERROR_CODES.ASSIGNMENT_INVALID_TRANSITION,
-          'Assignment changed while reassignment was being processed',
+          'A atribuição mudou durante a reatribuição; tente novamente',
           HttpStatus.CONFLICT,
         );
       }
@@ -480,7 +480,7 @@ export class AssignmentsService {
       if (transition.count !== 1) {
         throw new ApplicationException(
           ERROR_CODES.ASSIGNMENT_INVALID_TRANSITION,
-          'Assignment transition conflicted with another update',
+          'Outra atualização alterou esta atribuição; tente novamente',
           HttpStatus.CONFLICT,
         );
       }
@@ -692,7 +692,7 @@ export class AssignmentsService {
       if (transition.count !== 1) {
         throw new ApplicationException(
           ERROR_CODES.ASSIGNMENT_INVALID_TRANSITION,
-          'Assignment transition conflicted with another update',
+          'Outra atualização alterou esta atribuição; tente novamente',
           HttpStatus.CONFLICT,
         );
       }
@@ -713,7 +713,7 @@ export class AssignmentsService {
         if (operationTransition.count !== 1) {
           throw new ApplicationException(
             ERROR_CODES.OPERATION_NOT_FOUND,
-            'Operation could not be synchronized with assignment',
+            'Não foi possível sincronizar o atendimento com a atribuição',
             HttpStatus.CONFLICT,
           );
         }
@@ -794,7 +794,7 @@ export class AssignmentsService {
     if (!assignment) {
       throw new ApplicationException(
         ERROR_CODES.ASSIGNMENT_NOT_FOUND,
-        'Assignment was not found',
+        'Atribuição não encontrada',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -858,7 +858,7 @@ export class AssignmentsService {
     if (!assignment) {
       throw new ApplicationException(
         ERROR_CODES.ASSIGNMENT_NOT_FOUND,
-        'Assignment was not found',
+        'Atribuição não encontrada',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -870,7 +870,7 @@ export class AssignmentsService {
     if (!operation) {
       throw new ApplicationException(
         ERROR_CODES.OPERATION_NOT_FOUND,
-        'Operation was not found',
+        'Atendimento não encontrado',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -884,7 +884,7 @@ export class AssignmentsService {
     if (!user || !user.isActive || user.disabledAt || user.role === Role.VIEWER) {
       throw new ApplicationException(
         ERROR_CODES.OPERATION_OPERATOR_INVALID,
-        'Assigned operator must exist, be active and have an operational role',
+        'O operador atribuído precisa existir, estar ativo e ter perfil operacional',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -894,7 +894,7 @@ export class AssignmentsService {
     if (actor.role === Role.OPERATOR && assignment.assignedTo !== actor.id) {
       throw new ApplicationException(
         ERROR_CODES.ASSIGNMENT_OPERATOR_FORBIDDEN,
-        'Operators can only access their own assignments',
+        'O operador só acessa os próprios atendimentos',
         HttpStatus.FORBIDDEN,
       );
     }
@@ -904,7 +904,7 @@ export class AssignmentsService {
     if (assignment.assignedTo !== actor.id) {
       throw new ApplicationException(
         ERROR_CODES.ASSIGNMENT_OPERATOR_FORBIDDEN,
-        'Only the assigned operator can execute this transition',
+        'Somente o técnico atribuído pode executar esta ação',
         HttpStatus.FORBIDDEN,
       );
     }
@@ -943,7 +943,7 @@ export class AssignmentsService {
     if (!allowed.includes(current)) {
       throw new ApplicationException(
         ERROR_CODES.ASSIGNMENT_INVALID_TRANSITION,
-        'Assignment transition is not allowed from the current status',
+        'Esta ação não é permitida a partir do status atual',
         HttpStatus.CONFLICT,
       );
     }

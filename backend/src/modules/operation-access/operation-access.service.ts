@@ -44,6 +44,21 @@ export class OperationAccessService {
     };
   }
 
+  /**
+   * Equipamentos que o operador pode enxergar em relatórios: os que aparecem
+   * em alguma operação atribuída a ele. Sem isso, uma exportação entregava a
+   * carteira inteira (equipamento + cliente + local) a qualquer autenticado.
+   */
+  equipmentScope(actor: AuthenticatedUser): Prisma.EquipmentWhereInput {
+    if (actor.role !== Role.OPERATOR) return {};
+    return {
+      OR: [
+        { operations: { some: { assignments: { some: this.assignmentFilter(actor.id) } } } },
+        { operationInspections: { some: { operation: { assignments: { some: this.assignmentFilter(actor.id) } } } } },
+      ],
+    };
+  }
+
   maintenanceExecutionScope(actor: AuthenticatedUser): Prisma.MaintenanceExecutionWhereInput {
     if (actor.role !== Role.OPERATOR) return {};
     return {
@@ -198,7 +213,7 @@ export class OperationAccessService {
       .catch(() => undefined);
     throw new ApplicationException(
       ERROR_CODES.FORBIDDEN,
-      'Operator does not have an active Assignment for this resource',
+      'O operador não possui atribuição ativa para este recurso',
       HttpStatus.FORBIDDEN,
     );
   }

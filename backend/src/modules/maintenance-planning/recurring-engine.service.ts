@@ -77,7 +77,7 @@ export class RecurringEngine {
   private invalid(): ApplicationException {
     return new ApplicationException(
       ERROR_CODES.MAINTENANCE_RECURRENCE_INVALID,
-      'Maintenance recurrence rule is invalid',
+      'A regra de recorrência da manutenção é inválida',
       HttpStatus.BAD_REQUEST,
     );
   }

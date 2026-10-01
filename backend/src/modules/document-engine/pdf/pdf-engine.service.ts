@@ -67,7 +67,7 @@ export class PdfEngineService {
     if (buffer.length > DOCUMENT_MAX_PDF_BYTES) {
       throw new ApplicationException(
         ERROR_CODES.DOCUMENT_SIZE_LIMIT_EXCEEDED,
-        'Rendered PDF exceeds the maximum allowed size',
+        'O PDF gerado ultrapassa o tamanho máximo permitido',
         HttpStatus.BAD_REQUEST,
       );
     }

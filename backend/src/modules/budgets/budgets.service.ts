@@ -351,11 +351,11 @@ export class BudgetsService {
     return this.prisma.$transaction(async (tx) => {
       const current = await tx.budget.findUnique({ where: { id }, include: BUDGET_INCLUDE });
       if (!current) {
-        throw new ApplicationException(ERROR_CODES.BUDGET_NOT_FOUND, 'Budget was not found', HttpStatus.NOT_FOUND);
+        throw new ApplicationException(ERROR_CODES.BUDGET_NOT_FOUND, 'Orçamento não encontrado', HttpStatus.NOT_FOUND);
       }
       this.assertApprovalCandidate(current);
       if (current.expirationDate < new Date()) {
-        throw new ApplicationException(ERROR_CODES.BUDGET_EXPIRED, 'Expired budgets cannot be approved', HttpStatus.CONFLICT);
+        throw new ApplicationException(ERROR_CODES.BUDGET_EXPIRED, 'Orçamentos vencidos não podem ser aprovados', HttpStatus.CONFLICT);
       }
       if (current.operationId) {
         const approved = await tx.budget.findFirst({
@@ -365,7 +365,7 @@ export class BudgetsService {
         if (approved) {
           throw new ApplicationException(
             ERROR_CODES.BUDGET_MULTIPLE_APPROVAL,
-            'Another budget is already approved for this operation',
+            'Já existe um orçamento aprovado para este atendimento',
             HttpStatus.CONFLICT,
             { approvedBudgetId: approved.id, approvedBudgetNumber: approved.number },
           );
@@ -379,7 +379,7 @@ export class BudgetsService {
         data: { status: BudgetStatus.APPROVED, approvedAt: new Date(), rejectedAt: null, canceledAt: null },
       });
       if (transition.count !== 1) {
-        throw new ApplicationException(ERROR_CODES.BUDGET_INVALID_STATUS, 'Budget decision conflicted with another transition', HttpStatus.CONFLICT);
+        throw new ApplicationException(ERROR_CODES.BUDGET_INVALID_STATUS, 'Outra alteração mudou este orçamento; tente novamente', HttpStatus.CONFLICT);
       }
       const budget = await tx.budget.findUniqueOrThrow({ where: { id }, include: BUDGET_INCLUDE });
       await this.createHistoryTx(tx, id, actor.id, BudgetHistoryAction.APPROVED, current.status, BudgetStatus.APPROVED, {
@@ -410,7 +410,7 @@ export class BudgetsService {
     return this.prisma.$transaction(async (tx) => {
       const current = await tx.budget.findUnique({ where: { id }, include: BUDGET_INCLUDE });
       if (!current) {
-        throw new ApplicationException(ERROR_CODES.BUDGET_NOT_FOUND, 'Budget was not found', HttpStatus.NOT_FOUND);
+        throw new ApplicationException(ERROR_CODES.BUDGET_NOT_FOUND, 'Orçamento não encontrado', HttpStatus.NOT_FOUND);
       }
       this.assertApprovalCandidate(current);
       await tx.budgetApproval.create({
@@ -421,7 +421,7 @@ export class BudgetsService {
         data: { status: BudgetStatus.REJECTED, rejectedAt: new Date() },
       });
       if (transition.count !== 1) {
-        throw new ApplicationException(ERROR_CODES.BUDGET_INVALID_STATUS, 'Budget decision conflicted with another transition', HttpStatus.CONFLICT);
+        throw new ApplicationException(ERROR_CODES.BUDGET_INVALID_STATUS, 'Outra alteração mudou este orçamento; tente novamente', HttpStatus.CONFLICT);
       }
       const budget = await tx.budget.findUniqueOrThrow({ where: { id }, include: BUDGET_INCLUDE });
       await this.createHistoryTx(tx, id, actor.id, BudgetHistoryAction.REJECTED, current.status, BudgetStatus.REJECTED, {
@@ -451,7 +451,7 @@ export class BudgetsService {
     await this.prisma.$transaction(async (tx) => {
       const current = await tx.budget.findUnique({ where: { id }, include: BUDGET_INCLUDE });
       if (!current) {
-        throw new ApplicationException(ERROR_CODES.BUDGET_NOT_FOUND, 'Budget was not found', HttpStatus.NOT_FOUND);
+        throw new ApplicationException(ERROR_CODES.BUDGET_NOT_FOUND, 'Orçamento não encontrado', HttpStatus.NOT_FOUND);
       }
       this.assertWritable(current);
       const transition = await tx.budget.updateMany({
@@ -459,7 +459,7 @@ export class BudgetsService {
         data: { status: BudgetStatus.CANCELED, canceledAt: new Date() },
       });
       if (transition.count !== 1) {
-        throw new ApplicationException(ERROR_CODES.BUDGET_INVALID_STATUS, 'Budget cancellation conflicted with another transition', HttpStatus.CONFLICT);
+        throw new ApplicationException(ERROR_CODES.BUDGET_INVALID_STATUS, 'Outra alteração mudou este orçamento; tente novamente', HttpStatus.CONFLICT);
       }
       await this.createHistoryTx(tx, id, actor.id, BudgetHistoryAction.CANCELED, current.status, BudgetStatus.CANCELED, {});
       await this.auditTx(tx, BUDGET_AUDIT_ACTIONS.BUDGET_CANCELED, actor, context, {
@@ -520,10 +520,10 @@ export class BudgetsService {
       this.prisma.customer.findUnique({ where: { id: dto.customerId }, select: { id: true, isActive: true } }),
     ]);
     if (!organization) {
-      throw new ApplicationException(ERROR_CODES.ORGANIZATION_NOT_FOUND, 'Organization was not found', HttpStatus.NOT_FOUND);
+      throw new ApplicationException(ERROR_CODES.ORGANIZATION_NOT_FOUND, 'Organização não encontrada', HttpStatus.NOT_FOUND);
     }
     if (!customer?.isActive) {
-      throw new ApplicationException(ERROR_CODES.CUSTOMER_NOT_FOUND, 'Customer was not found or is inactive', HttpStatus.NOT_FOUND);
+      throw new ApplicationException(ERROR_CODES.CUSTOMER_NOT_FOUND, 'Cliente não encontrado ou inativo', HttpStatus.NOT_FOUND);
     }
 
     let operationId = dto.operationId ?? null;
@@ -534,19 +534,19 @@ export class BudgetsService {
         where: { id: dto.operationId },
         select: { id: true, customerId: true, addressId: true, equipmentId: true, status: true },
       });
-      if (!operation) throw new ApplicationException(ERROR_CODES.OPERATION_NOT_FOUND, 'Operation was not found', HttpStatus.NOT_FOUND);
+      if (!operation) throw new ApplicationException(ERROR_CODES.OPERATION_NOT_FOUND, 'Atendimento não encontrado', HttpStatus.NOT_FOUND);
       if (operation.status !== OperationStatus.COMPLETED) {
         throw new ApplicationException(
           ERROR_CODES.BUDGET_OPERATION_NOT_COMPLETED,
-          'Budget origin must be a completed Work Order',
+          'O orçamento precisa partir de uma Ordem de Serviço concluída',
           HttpStatus.CONFLICT,
         );
       }
       if (operation.customerId !== dto.customerId) {
-        throw new ApplicationException(ERROR_CODES.BUDGET_INVALID_RELATIONSHIP, 'Operation belongs to another customer', HttpStatus.BAD_REQUEST);
+        throw new ApplicationException(ERROR_CODES.BUDGET_INVALID_RELATIONSHIP, 'O atendimento pertence a outro cliente', HttpStatus.BAD_REQUEST);
       }
       if (equipmentId && operation.equipmentId && operation.equipmentId !== equipmentId) {
-        throw new ApplicationException(ERROR_CODES.BUDGET_INVALID_RELATIONSHIP, 'Operation belongs to another equipment', HttpStatus.BAD_REQUEST);
+        throw new ApplicationException(ERROR_CODES.BUDGET_INVALID_RELATIONSHIP, 'O atendimento pertence a outro equipamento', HttpStatus.BAD_REQUEST);
       }
       customerAddressId = customerAddressId ?? operation.addressId;
       equipmentId = equipmentId ?? operation.equipmentId;
@@ -558,7 +558,7 @@ export class BudgetsService {
         select: { customerId: true },
       });
       if (!address || address.customerId !== dto.customerId) {
-        throw new ApplicationException(ERROR_CODES.BUDGET_INVALID_RELATIONSHIP, 'Address belongs to another customer', HttpStatus.BAD_REQUEST);
+        throw new ApplicationException(ERROR_CODES.BUDGET_INVALID_RELATIONSHIP, 'O endereço pertence a outro cliente', HttpStatus.BAD_REQUEST);
       }
     }
     if (equipmentId) {
@@ -567,7 +567,7 @@ export class BudgetsService {
         select: { customerId: true, isActive: true },
       });
       if (!equipment?.isActive || equipment.customerId !== dto.customerId) {
-        throw new ApplicationException(ERROR_CODES.BUDGET_INVALID_RELATIONSHIP, 'Equipment belongs to another customer', HttpStatus.BAD_REQUEST);
+        throw new ApplicationException(ERROR_CODES.BUDGET_INVALID_RELATIONSHIP, 'O equipamento pertence a outro cliente', HttpStatus.BAD_REQUEST);
       }
     }
     return { organizationId: organization.id, customerId: dto.customerId, customerAddressId, equipmentId, operationId };
@@ -622,7 +622,7 @@ export class BudgetsService {
       if (!equipment?.isActive || equipment.customerId !== customerId) {
         throw new ApplicationException(
           ERROR_CODES.BUDGET_INVALID_RELATIONSHIP,
-          'Equipment belongs to another customer',
+          'O equipamento pertence a outro cliente',
           HttpStatus.BAD_REQUEST,
         );
       }
@@ -641,7 +641,7 @@ export class BudgetsService {
 
   private async resolveSnapshotItems(dtoItems: BudgetItemInputDto[]): Promise<SnapshotItem[]> {
     if (!dtoItems.length) {
-      throw new ApplicationException(ERROR_CODES.BUDGET_ITEM_REQUIRED, 'Budget must have at least one item', HttpStatus.BAD_REQUEST);
+      throw new ApplicationException(ERROR_CODES.BUDGET_ITEM_REQUIRED, 'Inclua ao menos um item no orçamento', HttpStatus.BAD_REQUEST);
     }
     const items: SnapshotItem[] = [];
     for (const [index, item] of dtoItems.entries()) {
@@ -661,7 +661,7 @@ export class BudgetsService {
         if (!product?.isActive) {
           throw new ApplicationException(
             ERROR_CODES.PRODUCT_NOT_FOUND,
-            'Product was not found or is inactive',
+            'Produto não encontrado ou inativo',
             HttpStatus.NOT_FOUND,
           );
         }
@@ -781,7 +781,7 @@ export class BudgetsService {
     ) {
       throw new ApplicationException(
         ERROR_CODES.VALIDATION_ERROR,
-        'Budget issue and expiration dates are inconsistent',
+        'A data de validade do orçamento não pode ser anterior à de emissão',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -830,14 +830,14 @@ export class BudgetsService {
   private async budgetOrThrow(id: string): Promise<BudgetWithRelations> {
     const budget = await this.prisma.budget.findUnique({ where: { id }, include: BUDGET_INCLUDE });
     if (!budget) {
-      throw new ApplicationException(ERROR_CODES.BUDGET_NOT_FOUND, 'Budget was not found', HttpStatus.NOT_FOUND);
+      throw new ApplicationException(ERROR_CODES.BUDGET_NOT_FOUND, 'Orçamento não encontrado', HttpStatus.NOT_FOUND);
     }
     return budget;
   }
 
   private async operationOrThrow(id: string): Promise<void> {
     const operation = await this.prisma.operation.findUnique({ where: { id }, select: { id: true } });
-    if (!operation) throw new ApplicationException(ERROR_CODES.OPERATION_NOT_FOUND, 'Operation was not found', HttpStatus.NOT_FOUND);
+    if (!operation) throw new ApplicationException(ERROR_CODES.OPERATION_NOT_FOUND, 'Atendimento não encontrado', HttpStatus.NOT_FOUND);
   }
 
   private listWhere(query: ListBudgetsQueryDto): Prisma.BudgetWhereInput {
@@ -866,31 +866,31 @@ export class BudgetsService {
   private assertCreateStatus(status?: BudgetStatus): void {
     const allowed: BudgetStatus[] = [BudgetStatus.DRAFT, BudgetStatus.PENDING];
     if (status && !allowed.includes(status)) {
-      throw new ApplicationException(ERROR_CODES.BUDGET_INVALID_STATUS, 'Budget can only be created as DRAFT or PENDING', HttpStatus.BAD_REQUEST);
+      throw new ApplicationException(ERROR_CODES.BUDGET_INVALID_STATUS, 'O orçamento só pode ser criado como rascunho ou pendente', HttpStatus.BAD_REQUEST);
     }
   }
 
   private assertUpdateStatus(status?: BudgetStatus): void {
     const allowed: BudgetStatus[] = [BudgetStatus.DRAFT, BudgetStatus.PENDING, BudgetStatus.CANCELED];
     if (status && !allowed.includes(status)) {
-      throw new ApplicationException(ERROR_CODES.BUDGET_INVALID_STATUS, 'Use approval endpoints for final budget decisions', HttpStatus.BAD_REQUEST);
+      throw new ApplicationException(ERROR_CODES.BUDGET_INVALID_STATUS, 'Use o fluxo de aprovação para decidir o orçamento', HttpStatus.BAD_REQUEST);
     }
   }
 
   private assertWritable(budget: BudgetWithRelations): void {
     if (budget.status === BudgetStatus.APPROVED) {
-      throw new ApplicationException(ERROR_CODES.BUDGET_APPROVED_IMMUTABLE, 'Approved budgets cannot be changed', HttpStatus.CONFLICT);
+      throw new ApplicationException(ERROR_CODES.BUDGET_APPROVED_IMMUTABLE, 'Orçamentos aprovados não podem ser alterados', HttpStatus.CONFLICT);
     }
     const finalStatuses: BudgetStatus[] = [BudgetStatus.REJECTED, BudgetStatus.EXPIRED, BudgetStatus.CANCELED];
     if (finalStatuses.includes(budget.status)) {
-      throw new ApplicationException(ERROR_CODES.BUDGET_INVALID_STATUS, 'Final budgets cannot be changed', HttpStatus.CONFLICT);
+      throw new ApplicationException(ERROR_CODES.BUDGET_INVALID_STATUS, 'Orçamentos finalizados não podem ser alterados', HttpStatus.CONFLICT);
     }
   }
 
   private assertApprovalCandidate(budget: BudgetWithRelations): void {
     const allowed: BudgetStatus[] = [BudgetStatus.DRAFT, BudgetStatus.PENDING];
     if (!allowed.includes(budget.status)) {
-      throw new ApplicationException(ERROR_CODES.BUDGET_INVALID_STATUS, 'Budget cannot receive this decision in its current status', HttpStatus.CONFLICT);
+      throw new ApplicationException(ERROR_CODES.BUDGET_INVALID_STATUS, 'O orçamento não aceita esta decisão no status atual', HttpStatus.CONFLICT);
     }
   }
 

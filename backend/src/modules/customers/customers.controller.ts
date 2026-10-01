@@ -43,8 +43,11 @@ export class CustomersController {
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
   @Get()
-  list(@Query() query: ListCustomersQueryDto): Promise<unknown> {
-    return this.customers.list(query);
+  list(
+    @Query() query: ListCustomersQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<unknown> {
+    return this.customers.list(query, actor);
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)

@@ -185,7 +185,7 @@ export class AssetLifecycleService {
     if (!existing) {
       throw new ApplicationException(
         ERROR_CODES.ASSET_LIFECYCLE_ATTACHMENT_NOT_FOUND,
-        'Asset lifecycle attachment was not found',
+        'Anexo do histórico do ativo não encontrado',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -271,7 +271,7 @@ export class AssetLifecycleService {
     if (!event) {
       throw new ApplicationException(
         ERROR_CODES.ASSET_LIFECYCLE_EVENT_NOT_FOUND,
-        'Asset lifecycle event was not found',
+        'Evento do histórico do ativo não encontrado',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -282,21 +282,21 @@ export class AssetLifecycleService {
     if (!file) {
       throw new ApplicationException(
         ERROR_CODES.UPLOAD_FILE_REQUIRED,
-        'Asset lifecycle attachment file is required',
+        'O arquivo do anexo do histórico do ativo é obrigatório',
         HttpStatus.BAD_REQUEST,
       );
     }
     if (file.size <= 0 || file.size > MAX_ASSET_LIFECYCLE_ATTACHMENT_SIZE_BYTES) {
       throw new ApplicationException(
         ERROR_CODES.UPLOAD_FILE_TOO_LARGE,
-        'Asset lifecycle attachment is empty or exceeds the 5 MiB limit',
+        'O anexo do histórico do ativo está vazio ou excede o limite de 5 MiB',
         HttpStatus.BAD_REQUEST,
       );
     }
     if (!ASSET_LIFECYCLE_ATTACHMENT_MIME_TYPES.includes(file.mimetype as never)) {
       throw new ApplicationException(
         ERROR_CODES.UPLOAD_INVALID_MIME_TYPE,
-        'Asset lifecycle attachment MIME type is not allowed',
+        'Tipo MIME do anexo do histórico do ativo não permitido',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -304,14 +304,14 @@ export class AssetLifecycleService {
     if (!ASSET_LIFECYCLE_ATTACHMENT_EXTENSIONS.includes(extension as never)) {
       throw new ApplicationException(
         ERROR_CODES.UPLOAD_INVALID_EXTENSION,
-        'Asset lifecycle attachment extension is not allowed',
+        'Extensão do anexo do histórico do ativo não permitida',
         HttpStatus.BAD_REQUEST,
       );
     }
     if (!this.hasValidBinarySignature(file.buffer, file.mimetype)) {
       throw new ApplicationException(
         ERROR_CODES.UPLOAD_INVALID_MIME_TYPE,
-        'Asset lifecycle attachment binary signature is invalid',
+        'A assinatura binária do anexo do histórico do ativo é inválida',
         HttpStatus.BAD_REQUEST,
       );
     }

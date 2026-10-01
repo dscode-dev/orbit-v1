@@ -567,7 +567,7 @@ export class PmocExecutionRequestsService {
     if (!claimed) {
       throw new ApplicationException(
         ERROR_CODES.PMOC_EXECUTION_REQUEST_CONFLICT,
-        'Execution request is already being processed',
+        'Esta execução já está sendo processada',
         HttpStatus.CONFLICT,
       );
     }
@@ -789,7 +789,7 @@ export class PmocExecutionRequestsService {
       await this.markFailed(id, request.pmocPlanId, actor.id, context, cause);
       throw new ApplicationException(
         ERROR_CODES.PMOC_GENERATION_FAILED,
-        'PMOC Work Order generation failed; the request remains traceable',
+        'Não foi possível gerar a Ordem de Serviço do PMOC; a solicitação segue registrada',
         HttpStatus.CONFLICT,
       );
     }
@@ -1552,7 +1552,7 @@ export class PmocExecutionRequestsService {
     if (!plan) {
       throw new ApplicationException(
         ERROR_CODES.PMOC_PLAN_NOT_FOUND,
-        'PMOC plan was not found',
+        'Plano PMOC não encontrado',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -1594,7 +1594,7 @@ export class PmocExecutionRequestsService {
   private notFound(): ApplicationException {
     return new ApplicationException(
       ERROR_CODES.PMOC_EXECUTION_REQUEST_NOT_FOUND,
-      'PMOC execution request was not found',
+      'Execução de PMOC não encontrada',
       HttpStatus.NOT_FOUND,
     );
   }
