@@ -355,7 +355,7 @@ export class CommissionsService {
     if (!organization) {
       throw new ApplicationException(
         ERROR_CODES.ORGANIZATION_NOT_FOUND,
-        'Organization was not found',
+        'Organização não encontrada',
         HttpStatus.NOT_FOUND,
       );
     }

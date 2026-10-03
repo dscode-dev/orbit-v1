@@ -16,8 +16,15 @@ import { ListExportService, type PdfExportResult } from './list-export.service';
 export class ListExportController {
   constructor(private readonly exports: ListExportService) {}
 
+  /*
+   * Exportação é relatório gerencial: sai da plataforma, que só owner e gestor
+   * acessam (o app do operador não exporta nada). Manter OPERATOR/VIEWER aqui
+   * entregava a carteira inteira num PDF — o de equipamentos nem escopo tinha.
+   * O escopo por atribuição continua no serviço, como defesa em profundidade.
+   */
+
   @RawResponse()
-  @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
+  @Roles(Role.OWNER, Role.MANAGER)
   @Get('operations/export')
   async operations(
     @Query() query: OperationsPdfExportQueryDto,
@@ -28,17 +35,18 @@ export class ListExportController {
   }
 
   @RawResponse()
-  @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
+  @Roles(Role.OWNER, Role.MANAGER)
   @Get('equipments/export')
   async equipments(
     @Query() query: EquipmentsPdfExportQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
     @Res() response: Response,
   ): Promise<void> {
-    this.send(response, await this.exports.equipments(query));
+    this.send(response, await this.exports.equipments(query, actor));
   }
 
   @RawResponse()
-  @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
+  @Roles(Role.OWNER, Role.MANAGER)
   @Get('documents/export')
   async documents(
     @Query() query: DocumentsPdfExportQueryDto,

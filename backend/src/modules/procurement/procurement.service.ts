@@ -216,14 +216,14 @@ export class ProcurementService {
     return this.runSerializable(() =>
       this.prisma.$transaction(async (tx) => {
         const order = await tx.purchaseOrder.findUnique({ where: { id: orderId }, include: ORDER_INCLUDE });
-        if (!order) throw new ApplicationException(ERROR_CODES.PURCHASE_ORDER_NOT_FOUND, 'Purchase order was not found', HttpStatus.NOT_FOUND);
+        if (!order) throw new ApplicationException(ERROR_CODES.PURCHASE_ORDER_NOT_FOUND, 'Pedido de compra não encontrado', HttpStatus.NOT_FOUND);
         const receivableStatuses: PurchaseOrderStatus[] = [PurchaseOrderStatus.SENT, PurchaseOrderStatus.PARTIALLY_RECEIVED];
         if (!receivableStatuses.includes(order.status)) {
           throw this.invalidState('Only sent or partially received purchase orders can be received');
         }
         const lineMap = new Map(dto.items.map((line) => [line.itemId, line.quantity]));
         const items = order.items.filter((item) => lineMap.has(item.id));
-        if (items.length !== dto.items.length) throw new ApplicationException(ERROR_CODES.PURCHASE_ITEM_NOT_FOUND, 'One or more purchase items were not found', HttpStatus.NOT_FOUND);
+        if (items.length !== dto.items.length) throw new ApplicationException(ERROR_CODES.PURCHASE_ITEM_NOT_FOUND, 'Um ou mais itens de compra não foram encontrados', HttpStatus.NOT_FOUND);
         const receipt = await tx.purchaseReceipt.create({
           data: {
             purchaseOrderId: orderId,
@@ -249,7 +249,7 @@ export class ProcurementService {
             data: { receivedQuantity: { increment: quantity } },
           });
           if (itemUpdate.count !== 1) {
-            throw new ApplicationException(ERROR_CODES.PURCHASE_INVALID_RECEIPT, 'Purchase receipt conflicted with another receipt attempt', HttpStatus.CONFLICT);
+            throw new ApplicationException(ERROR_CODES.PURCHASE_INVALID_RECEIPT, 'O recebimento conflitou com outra tentativa de recebimento', HttpStatus.CONFLICT);
           }
           const inventoryItem = await this.inventory.ensureInventoryItemInTransaction(tx, { organizationId: order.organizationId, productId: item.productId, location: null });
           await this.inventory.createMovementInTransaction(
@@ -309,26 +309,26 @@ export class ProcurementService {
 
   private async orderOrThrow(id: string): Promise<PurchaseOrderWithRelations> {
     const order = await this.prisma.purchaseOrder.findUnique({ where: { id }, include: ORDER_INCLUDE });
-    if (!order) throw new ApplicationException(ERROR_CODES.PURCHASE_ORDER_NOT_FOUND, 'Purchase order was not found', HttpStatus.NOT_FOUND);
+    if (!order) throw new ApplicationException(ERROR_CODES.PURCHASE_ORDER_NOT_FOUND, 'Pedido de compra não encontrado', HttpStatus.NOT_FOUND);
     return order;
   }
 
   private async itemOrThrow(id: string): Promise<PurchaseItemWithProduct> {
     const item = await this.prisma.purchaseOrderItem.findFirst({ where: { id, deletedAt: null }, include: { product: true, purchaseOrder: true } });
-    if (!item) throw new ApplicationException(ERROR_CODES.PURCHASE_ITEM_NOT_FOUND, 'Purchase order item was not found', HttpStatus.NOT_FOUND);
+    if (!item) throw new ApplicationException(ERROR_CODES.PURCHASE_ITEM_NOT_FOUND, 'Item do pedido de compra não encontrado', HttpStatus.NOT_FOUND);
     return item;
   }
 
   private async productOrThrow(id: string): Promise<{ id: string; name: string; unit: string }> {
     const product = await this.prisma.product.findFirst({ where: { id, isActive: true }, select: { id: true, name: true, unit: true, isPurchasable: true } });
-    if (!product) throw new ApplicationException(ERROR_CODES.PRODUCT_NOT_FOUND, 'Product was not found', HttpStatus.NOT_FOUND);
-    if (!product.isPurchasable) throw new ApplicationException(ERROR_CODES.PRODUCT_NOT_PURCHASABLE, 'Product is not enabled for purchases', HttpStatus.CONFLICT);
+    if (!product) throw new ApplicationException(ERROR_CODES.PRODUCT_NOT_FOUND, 'Produto não encontrado', HttpStatus.NOT_FOUND);
+    if (!product.isPurchasable) throw new ApplicationException(ERROR_CODES.PRODUCT_NOT_PURCHASABLE, 'O produto não está habilitado para compras', HttpStatus.CONFLICT);
     return product;
   }
 
   private async supplierOrThrow(id: string): Promise<void> {
     const supplier = await this.prisma.supplier.findFirst({ where: { id, isActive: true }, select: { id: true } });
-    if (!supplier) throw new ApplicationException(ERROR_CODES.SUPPLIER_NOT_FOUND, 'Supplier was not found', HttpStatus.NOT_FOUND);
+    if (!supplier) throw new ApplicationException(ERROR_CODES.SUPPLIER_NOT_FOUND, 'Fornecedor não encontrado', HttpStatus.NOT_FOUND);
   }
 
   private assertEditable(status: PurchaseOrderStatus): void {
@@ -382,7 +382,7 @@ export class ProcurementService {
 
   private async organizationId(): Promise<string> {
     const organization = await this.prisma.organization.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } });
-    if (!organization) throw new ApplicationException(ERROR_CODES.ORGANIZATION_NOT_FOUND, 'Organization was not found', HttpStatus.NOT_FOUND);
+    if (!organization) throw new ApplicationException(ERROR_CODES.ORGANIZATION_NOT_FOUND, 'Organização não encontrada', HttpStatus.NOT_FOUND);
     return organization.id;
   }
 

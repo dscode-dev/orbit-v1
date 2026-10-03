@@ -50,7 +50,7 @@
     "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
-    "sharp": "^0.33.5"
+    "sharp": "^0.35.5"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",
@@ -79,7 +79,7 @@
     "typescript-eslint": "^8.33.0"
   },
   "overrides": {
-    "multer": "2.2.0",
+    "multer": "2.4.0",
     "js-yaml": "4.2.0"
   },
   "jest": {

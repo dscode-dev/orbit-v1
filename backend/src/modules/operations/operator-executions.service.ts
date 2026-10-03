@@ -369,7 +369,7 @@ export class OperatorExecutionsService {
     if (!operator) {
       throw new ApplicationException(
         ERROR_CODES.USER_NOT_FOUND,
-        'Operator was not found',
+        'Operador não encontrado',
         HttpStatus.NOT_FOUND,
       );
     }

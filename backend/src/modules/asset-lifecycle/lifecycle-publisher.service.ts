@@ -645,7 +645,7 @@ export class LifecyclePublisher {
     if (!equipment) {
       throw new ApplicationException(
         ERROR_CODES.EQUIPMENT_NOT_FOUND,
-        'Equipment was not found',
+        'Equipamento não encontrado',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -657,14 +657,14 @@ export class LifecyclePublisher {
       if (!operation) {
         throw new ApplicationException(
           ERROR_CODES.OPERATION_NOT_FOUND,
-          'Operation was not found',
+          'Atendimento não encontrado',
           HttpStatus.NOT_FOUND,
         );
       }
       if (operation.equipmentId && operation.equipmentId !== dto.equipmentId) {
         throw new ApplicationException(
           ERROR_CODES.VALIDATION_ERROR,
-          'Operation belongs to another equipment',
+          'O atendimento pertence a outro equipamento',
           HttpStatus.BAD_REQUEST,
         );
       }
@@ -677,7 +677,7 @@ export class LifecyclePublisher {
       if (!document) {
         throw new ApplicationException(
           ERROR_CODES.DOCUMENT_NOT_FOUND,
-          'Document was not found',
+          'Documento não encontrado',
           HttpStatus.NOT_FOUND,
         );
       }
@@ -685,7 +685,7 @@ export class LifecyclePublisher {
       if (documentEquipmentId && documentEquipmentId !== dto.equipmentId) {
         throw new ApplicationException(
           ERROR_CODES.VALIDATION_ERROR,
-          'Document belongs to another equipment',
+          'O documento pertence a outro equipamento',
           HttpStatus.BAD_REQUEST,
         );
       }

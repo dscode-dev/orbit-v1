@@ -88,7 +88,7 @@ export class NotificationsService {
     if (!notification) {
       throw new ApplicationException(
         ERROR_CODES.NOTIFICATION_NOT_FOUND,
-        'Notification was not found',
+        'Notificação não encontrada',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -372,7 +372,7 @@ export class NotificationsService {
     if (!organization) {
       throw new ApplicationException(
         ERROR_CODES.ORGANIZATION_NOT_FOUND,
-        'Organization was not found',
+        'Organização não encontrada',
         HttpStatus.NOT_FOUND,
       );
     }

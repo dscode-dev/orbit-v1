@@ -563,7 +563,7 @@ export class InventoryService {
         if (item.productId !== dto.productId) {
           throw new ApplicationException(
             ERROR_CODES.INVENTORY_PRODUCT_MISMATCH,
-            'Inventory item does not belong to the selected product',
+            'O item de estoque não pertence ao produto selecionado',
             HttpStatus.BAD_REQUEST,
           );
         }
@@ -635,7 +635,7 @@ export class InventoryService {
         if (!part) {
           throw new ApplicationException(
             ERROR_CODES.NOT_FOUND,
-            'Operation material was not found',
+            'Material do atendimento não encontrado',
             HttpStatus.NOT_FOUND,
           );
         }
@@ -646,7 +646,7 @@ export class InventoryService {
         if (removed.count !== 1) {
           throw new ApplicationException(
             ERROR_CODES.NOT_FOUND,
-            'Operation material was already removed',
+            'Este material já foi removido do atendimento',
             HttpStatus.CONFLICT,
           );
         }
@@ -738,7 +738,7 @@ export class InventoryService {
     if (result.count !== 1) {
       throw new ApplicationException(
         ERROR_CODES.INVENTORY_NEGATIVE_STOCK,
-        'Stock movement would result in negative inventory',
+        'A movimentação deixaria o estoque negativo',
         HttpStatus.CONFLICT,
       );
     }
@@ -757,7 +757,7 @@ export class InventoryService {
     if (available.lt(0)) {
       throw new ApplicationException(
         ERROR_CODES.INVENTORY_NEGATIVE_STOCK,
-        'Reserved quantity exceeds current stock',
+        'A quantidade reservada é maior que o estoque atual',
         HttpStatus.CONFLICT,
       );
     }
@@ -810,7 +810,7 @@ export class InventoryService {
     if (isPurchasable === false && isSellable === false) {
       throw new ApplicationException(
         ERROR_CODES.PRODUCT_COMMERCIAL_CLASSIFICATION_REQUIRED,
-        'Product must be available for purchase, sale, or both',
+        'O produto precisa estar disponível para compra, venda ou ambos',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -853,7 +853,7 @@ export class InventoryService {
   private async productOrThrow(id: string): Promise<ProductWithInventory> {
     const product = await this.prisma.product.findUnique({ where: { id }, include: PRODUCT_INCLUDE });
     if (!product) {
-      throw new ApplicationException(ERROR_CODES.PRODUCT_NOT_FOUND, 'Product was not found', HttpStatus.NOT_FOUND);
+      throw new ApplicationException(ERROR_CODES.PRODUCT_NOT_FOUND, 'Produto não encontrado', HttpStatus.NOT_FOUND);
     }
     return product;
   }
@@ -861,7 +861,7 @@ export class InventoryService {
   private async supplierOrThrow(id: string): Promise<Prisma.SupplierGetPayload<object>> {
     const supplier = await this.prisma.supplier.findUnique({ where: { id } });
     if (!supplier) {
-      throw new ApplicationException(ERROR_CODES.SUPPLIER_NOT_FOUND, 'Supplier was not found', HttpStatus.NOT_FOUND);
+      throw new ApplicationException(ERROR_CODES.SUPPLIER_NOT_FOUND, 'Fornecedor não encontrado', HttpStatus.NOT_FOUND);
     }
     return supplier;
   }
@@ -869,17 +869,17 @@ export class InventoryService {
   private async assertSupplierActiveTx(tx: Prisma.TransactionClient, id: string): Promise<void> {
     const supplier = await tx.supplier.findUnique({ where: { id }, select: { id: true, isActive: true } });
     if (!supplier) {
-      throw new ApplicationException(ERROR_CODES.SUPPLIER_NOT_FOUND, 'Supplier was not found', HttpStatus.NOT_FOUND);
+      throw new ApplicationException(ERROR_CODES.SUPPLIER_NOT_FOUND, 'Fornecedor não encontrado', HttpStatus.NOT_FOUND);
     }
     if (!supplier.isActive) {
-      throw new ApplicationException(ERROR_CODES.SUPPLIER_NOT_FOUND, 'Supplier is inactive', HttpStatus.CONFLICT);
+      throw new ApplicationException(ERROR_CODES.SUPPLIER_NOT_FOUND, 'Fornecedor inativo', HttpStatus.CONFLICT);
     }
   }
 
   private async inventoryItemOrThrow(id: string): Promise<InventoryItemWithProduct> {
     const item = await this.prisma.inventoryItem.findUnique({ where: { id }, include: INVENTORY_INCLUDE });
     if (!item) {
-      throw new ApplicationException(ERROR_CODES.INVENTORY_ITEM_NOT_FOUND, 'Inventory item was not found', HttpStatus.NOT_FOUND);
+      throw new ApplicationException(ERROR_CODES.INVENTORY_ITEM_NOT_FOUND, 'Item de estoque não encontrado', HttpStatus.NOT_FOUND);
     }
     return item;
   }
@@ -887,7 +887,7 @@ export class InventoryService {
   private async inventoryItemOrThrowTx(tx: Prisma.TransactionClient, id: string): Promise<Prisma.InventoryItemGetPayload<object>> {
     const item = await tx.inventoryItem.findUnique({ where: { id } });
     if (!item) {
-      throw new ApplicationException(ERROR_CODES.INVENTORY_ITEM_NOT_FOUND, 'Inventory item was not found', HttpStatus.NOT_FOUND);
+      throw new ApplicationException(ERROR_CODES.INVENTORY_ITEM_NOT_FOUND, 'Item de estoque não encontrado', HttpStatus.NOT_FOUND);
     }
     return item;
   }
@@ -895,7 +895,7 @@ export class InventoryService {
   private async operationOrThrow(id: string): Promise<BasicOperation> {
     const operation = await this.prisma.operation.findUnique({ where: { id }, select: { id: true } });
     if (!operation) {
-      throw new ApplicationException(ERROR_CODES.OPERATION_NOT_FOUND, 'Operation was not found', HttpStatus.NOT_FOUND);
+      throw new ApplicationException(ERROR_CODES.OPERATION_NOT_FOUND, 'Atendimento não encontrado', HttpStatus.NOT_FOUND);
     }
     return operation;
   }
@@ -906,7 +906,7 @@ export class InventoryService {
       select: { id: true, number: true, equipmentId: true, completedAt: true },
     });
     if (!operation) {
-      throw new ApplicationException(ERROR_CODES.OPERATION_NOT_FOUND, 'Operation was not found', HttpStatus.NOT_FOUND);
+      throw new ApplicationException(ERROR_CODES.OPERATION_NOT_FOUND, 'Atendimento não encontrado', HttpStatus.NOT_FOUND);
     }
     return operation;
   }
@@ -914,10 +914,10 @@ export class InventoryService {
   private async assertProductActiveTx(tx: Prisma.TransactionClient, id: string): Promise<void> {
     const product = await tx.product.findUnique({ where: { id }, select: { id: true, isActive: true } });
     if (!product) {
-      throw new ApplicationException(ERROR_CODES.PRODUCT_NOT_FOUND, 'Product was not found', HttpStatus.NOT_FOUND);
+      throw new ApplicationException(ERROR_CODES.PRODUCT_NOT_FOUND, 'Produto não encontrado', HttpStatus.NOT_FOUND);
     }
     if (!product.isActive) {
-      throw new ApplicationException(ERROR_CODES.PRODUCT_NOT_FOUND, 'Product is inactive', HttpStatus.CONFLICT);
+      throw new ApplicationException(ERROR_CODES.PRODUCT_NOT_FOUND, 'Produto inativo', HttpStatus.CONFLICT);
     }
   }
 

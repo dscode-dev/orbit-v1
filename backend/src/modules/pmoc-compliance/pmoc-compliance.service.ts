@@ -1559,7 +1559,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     if (from > to || to.getTime() - from.getTime() > 370 * 86_400_000) {
       throw new ApplicationException(
         ERROR_CODES.VALIDATION_ERROR,
-        'PMOC dashboard period must be valid and no longer than 370 days',
+        'O período do painel de PMOC precisa ser válido e ter no máximo 370 dias',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -1695,7 +1695,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     if (!pmoc) {
       throw new ApplicationException(
         ERROR_CODES.PMOC_PLAN_NOT_FOUND,
-        'PMOC plan was not found',
+        'Plano PMOC não encontrado',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -1710,7 +1710,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     if (!environment) {
       throw new ApplicationException(
         ERROR_CODES.PMOC_ENVIRONMENT_NOT_FOUND,
-        'PMOC environment was not found',
+        'Ambiente do PMOC não encontrado',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -1725,7 +1725,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     if (!organization) {
       throw new ApplicationException(
         ERROR_CODES.ORGANIZATION_NOT_FOUND,
-        'Organization was not found',
+        'Organização não encontrada',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -1740,7 +1740,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     if (!equipment) {
       throw new ApplicationException(
         ERROR_CODES.EQUIPMENT_NOT_FOUND,
-        'Equipment was not found',
+        'Equipamento não encontrado',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -1757,14 +1757,14 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     if (!equipment) {
       throw new ApplicationException(
         ERROR_CODES.EQUIPMENT_NOT_FOUND,
-        'Equipment was not found',
+        'Equipamento não encontrado',
         HttpStatus.NOT_FOUND,
       );
     }
     if (equipment.customerId !== customerId) {
       throw new ApplicationException(
         ERROR_CODES.PMOC_INVALID_RELATIONSHIP,
-        'Equipment does not belong to the PMOC customer',
+        'O equipamento não pertence ao cliente do PMOC',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -1782,14 +1782,14 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     if (equipments.length !== equipmentIds.length) {
       throw new ApplicationException(
         ERROR_CODES.EQUIPMENT_NOT_FOUND,
-        'One or more PMOC equipments were not found',
+        'Um ou mais equipamentos do PMOC não foram encontrados',
         HttpStatus.NOT_FOUND,
       );
     }
     if (equipments.some((equipment) => equipment.customerId !== customerId)) {
       throw new ApplicationException(
         ERROR_CODES.PMOC_INVALID_RELATIONSHIP,
-        'All PMOC equipments must belong to the same customer',
+        'Todos os equipamentos do PMOC precisam ser do mesmo cliente',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -1805,7 +1805,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     if (!customer) {
       throw new ApplicationException(
         ERROR_CODES.CUSTOMER_NOT_FOUND,
-        'Active PMOC customer was not found',
+        'Cliente do PMOC não encontrado ou inativo',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -1839,7 +1839,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     if (scopes.length !== uniqueIds.length) {
       throw new ApplicationException(
         ERROR_CODES.TECHNICAL_CATALOG_NOT_FOUND,
-        'Every PMOC scope must be an active PLAN_SCOPE catalog item from this organization',
+        'Todo escopo do PMOC precisa ser um item de catálogo ativo da sua organização',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -1872,7 +1872,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     if (checklists.length !== uniqueIds.length) {
       throw new ApplicationException(
         ERROR_CODES.TECHNICAL_CATALOG_NOT_FOUND,
-        'Every PMOC checklist must be an active checklist from this organization',
+        'Todo checklist do PMOC precisa estar ativo e ser da sua organização',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -1908,7 +1908,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     if (periodicity === PmocPeriodicity.CUSTOM) {
       throw new ApplicationException(
         ERROR_CODES.MAINTENANCE_RECURRENCE_INVALID,
-        'CUSTOM PMOC periodicity requires recurrenceRule',
+        'A periodicidade personalizada exige uma regra de recorrência',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -1929,7 +1929,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
       if (users.length !== userIds.length) {
         throw new ApplicationException(
           ERROR_CODES.USER_NOT_FOUND,
-          'PMOC default users must exist and be active',
+          'Os usuários padrão do PMOC precisam existir e estar ativos',
           HttpStatus.NOT_FOUND,
         );
       }
@@ -1937,7 +1937,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
       if (operator?.role === Role.VIEWER) {
         throw new ApplicationException(
           ERROR_CODES.OPERATION_OPERATOR_INVALID,
-          'Viewer cannot be the default PMOC operator',
+          'Um usuário somente-leitura não pode ser o operador padrão do PMOC',
           HttpStatus.BAD_REQUEST,
         );
       }
@@ -1950,7 +1950,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
       if (!signature) {
         throw new ApplicationException(
           ERROR_CODES.SIGNATURE_NOT_FOUND,
-          'Active PMOC signature override was not found',
+          'Assinatura específica do PMOC não encontrada ou inativa',
           HttpStatus.NOT_FOUND,
         );
       }
@@ -2003,7 +2003,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     if (!address) {
       throw new ApplicationException(
         ERROR_CODES.PMOC_INVALID_RELATIONSHIP,
-        'PMOC default address must belong to the selected customer',
+        'O endereço padrão do PMOC precisa ser do cliente selecionado',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -2015,7 +2015,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
       if (!allowed.has(equipmentId)) {
         throw new ApplicationException(
           ERROR_CODES.PMOC_INVALID_RELATIONSHIP,
-          'Environment equipment must be controlled by the PMOC',
+          'O equipamento do ambiente precisa estar coberto pelo PMOC',
           HttpStatus.BAD_REQUEST,
         );
       }
@@ -2026,7 +2026,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     if (endDate < startDate) {
       throw new ApplicationException(
         ERROR_CODES.VALIDATION_ERROR,
-        'PMOC endDate must be after startDate',
+        'A data final do PMOC precisa ser posterior à inicial',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -2086,7 +2086,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     if (normalized.length > 4) {
       throw new ApplicationException(
         ERROR_CODES.VALIDATION_ERROR,
-        'A PMOC can use at most four official Operation types',
+        'O PMOC aceita no máximo quatro tipos de serviço oficiais',
         HttpStatus.BAD_REQUEST,
       );
     }

@@ -122,7 +122,7 @@ export class EquipmentsService {
     if (!value) {
       throw new ApplicationException(
         ERROR_CODES.VALIDATION_ERROR,
-        'QR code is required',
+        'Informe o QR Code',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -145,7 +145,7 @@ export class EquipmentsService {
     if (!equipment) {
       throw new ApplicationException(
         ERROR_CODES.EQUIPMENT_NOT_FOUND,
-        'Equipment was not found for the provided QR code',
+        'Nenhum equipamento encontrado para o QR Code informado',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -574,7 +574,7 @@ export class EquipmentsService {
     if (!customer)
       throw new ApplicationException(
         ERROR_CODES.CUSTOMER_NOT_FOUND,
-        'Customer was not found',
+        'Cliente não encontrado',
         HttpStatus.NOT_FOUND,
       );
     if (addressId) {
@@ -585,7 +585,7 @@ export class EquipmentsService {
       if (!address)
         throw new ApplicationException(
           ERROR_CODES.EQUIPMENT_ADDRESS_MISMATCH,
-          'Address does not belong to the selected customer',
+          'O endereço não pertence ao cliente selecionado',
           HttpStatus.BAD_REQUEST,
         );
     }
@@ -593,7 +593,7 @@ export class EquipmentsService {
       if (parentId === currentId)
         throw new ApplicationException(
           ERROR_CODES.EQUIPMENT_HIERARCHY_INVALID,
-          'Equipment cannot be its own parent',
+          'O equipamento não pode ser o próprio equipamento pai',
           HttpStatus.BAD_REQUEST,
         );
       const parent = await this.prisma.equipment.findFirst({
@@ -603,7 +603,7 @@ export class EquipmentsService {
       if (!parent || parent.parentEquipmentId === currentId)
         throw new ApplicationException(
           ERROR_CODES.EQUIPMENT_HIERARCHY_INVALID,
-          'Parent equipment is invalid for this customer',
+          'Equipamento pai inválido para este cliente',
           HttpStatus.BAD_REQUEST,
         );
     }
@@ -648,7 +648,7 @@ export class EquipmentsService {
     if (!equipment)
       throw new ApplicationException(
         ERROR_CODES.EQUIPMENT_NOT_FOUND,
-        'Equipment was not found',
+        'Equipamento não encontrado',
         HttpStatus.NOT_FOUND,
       );
     return equipment;
@@ -670,26 +670,26 @@ export class EquipmentsService {
     if (!file)
       throw new ApplicationException(
         ERROR_CODES.UPLOAD_FILE_REQUIRED,
-        'A file field is required',
+        'Envie um arquivo',
         HttpStatus.BAD_REQUEST,
       );
     if (file.size > MAX_EQUIPMENT_ATTACHMENT_SIZE_BYTES)
       throw new ApplicationException(
         ERROR_CODES.UPLOAD_FILE_TOO_LARGE,
-        'Attachment exceeds the 5 MiB limit',
+        'O anexo excede o limite de 5 MiB',
         HttpStatus.BAD_REQUEST,
       );
     const extension = extname(file.originalname).slice(1).toLowerCase();
     if (!EQUIPMENT_ATTACHMENT_EXTENSIONS.includes(extension as never))
       throw new ApplicationException(
         ERROR_CODES.UPLOAD_INVALID_EXTENSION,
-        'Attachment extension is not allowed',
+        'Extensão do anexo não permitida',
         HttpStatus.BAD_REQUEST,
       );
     if (!EQUIPMENT_ATTACHMENT_MIME_TYPES.includes(file.mimetype as never))
       throw new ApplicationException(
         ERROR_CODES.UPLOAD_INVALID_MIME_TYPE,
-        'Attachment MIME type is not allowed',
+        'Tipo MIME do anexo não permitido',
         HttpStatus.BAD_REQUEST,
       );
     const pdf = file.buffer.subarray(0, 5).toString() === '%PDF-';
@@ -708,7 +708,7 @@ export class EquipmentsService {
     )
       throw new ApplicationException(
         ERROR_CODES.UPLOAD_INVALID_MIME_TYPE,
-        'Attachment content does not match its declared type',
+        'O conteúdo do anexo não corresponde ao tipo declarado',
         HttpStatus.BAD_REQUEST,
       );
   }

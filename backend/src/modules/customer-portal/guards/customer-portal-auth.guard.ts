@@ -15,7 +15,7 @@ export class CustomerPortalAuthGuard implements CanActivate {
     if (scheme?.toLowerCase() !== 'bearer' || !token || extra) {
       throw new ApplicationException(
         ERROR_CODES.UNAUTHORIZED,
-        'Bearer customer access token is required',
+        'Informe o token de acesso do cliente',
         HttpStatus.UNAUTHORIZED,
       );
     }

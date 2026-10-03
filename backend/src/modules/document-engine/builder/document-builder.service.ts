@@ -550,8 +550,11 @@ export class DocumentBuilderService {
     const { operation } = context;
     const address = operation.address ?? operation.customer.addresses[0] ?? null;
     const contact = operation.customer.contacts[0] ?? null;
-    const executionNumber = operation.rvtExecution
-      ? String(operation.rvtExecution.executionNumber).padStart(3, '0')
+    // Com execução registrada, o número é a ordem da execução (RVT-007). Sem
+    // ela, cai no número do documento — que já vem prefixado (RVT-000042), por
+    // isso o prefixo não é aplicado de novo.
+    const identificationNumber = operation.rvtExecution
+      ? `RVT-${String(operation.rvtExecution.executionNumber).padStart(3, '0')}`
       : documentNumber;
     const sections: DocumentSection[] = [
       {
@@ -560,7 +563,7 @@ export class DocumentBuilderService {
         critical: true,
         components: [
           this.metadata('technical-report-identification-metadata', [
-            ['Número', `RVT-${executionNumber}`],
+            ['Número', identificationNumber],
             ['Emissão', this.date(issuedAt)],
             ['Responsável técnico', this.technicalResponsibleName(context) ?? 'A definir na revisão'],
             ['Registro profissional', this.technicalResponsibleTitle(context) ?? '—'],
@@ -901,7 +904,7 @@ export class DocumentBuilderService {
     if (!pmoc) {
       throw new ApplicationException(
         ERROR_CODES.DOCUMENT_RENDER_FAILED,
-        'PMOC document requires an Operation linked to a PMOC MaintenanceExecution',
+        'O documento PMOC exige um atendimento vinculado a uma execução de PMOC',
         HttpStatus.CONFLICT,
       );
     }
@@ -1165,7 +1168,7 @@ export class DocumentBuilderService {
     if (!equipment) {
       throw new ApplicationException(
         ERROR_CODES.DOCUMENT_RENDER_FAILED,
-        'Equipment section requested without equipment',
+        'A seção de equipamento foi solicitada sem equipamento',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -1173,7 +1176,7 @@ export class DocumentBuilderService {
     if (includeQrImage && !qrCode) {
       throw new ApplicationException(
         ERROR_CODES.DOCUMENT_RENDER_FAILED,
-        'Equipment QR image could not be resolved',
+        'Não foi possível gerar o QR Code do equipamento',
         HttpStatus.CONFLICT,
       );
     }
@@ -2458,7 +2461,7 @@ export class DocumentBuilderService {
     ) {
       throw new ApplicationException(
         ERROR_CODES.DOCUMENT_SIZE_LIMIT_EXCEEDED,
-        'Document blueprint exceeds production limits',
+        'O documento ultrapassa os limites de geração',
         HttpStatus.BAD_REQUEST,
       );
     }
