@@ -2,8 +2,12 @@ services:
   postgres_climacerto:
     image: postgres:17-alpine
     restart: unless-stopped
+    # Dentro do container o Postgres SEMPRE escuta na 5432. POSTGRES_PORT é só a
+    # porta publicada no host, e presa ao 127.0.0.1: o banco não fica exposto na
+    # internet (porta publicada pelo Docker passa por cima do ufw). Para acessar
+    # de fora, use túnel SSH: ssh -L 5533:127.0.0.1:5533 usuario@servidor
     ports:
-      - 5533:5433
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
     env_file:
       - .env
     environment:
@@ -30,7 +34,9 @@ services:
       - .env
     environment:
       NODE_ENV: ${NODE_ENV:-production}
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${POSTGRES_DB}?schema=public
+      # Conexão pela rede interna do Docker: nome do serviço + porta interna
+      # (5432), independentemente da porta publicada no host (POSTGRES_PORT).
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres_climacerto:5432/${POSTGRES_DB}?schema=public
       STORAGE_PATH: /app/storage
     ports:
       - '${APP_PORT:-6060}:${APP_PORT:-6060}'
