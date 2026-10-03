@@ -120,6 +120,23 @@ const COMPANY_METRICS = [
   { icon: Award, value: "+2 anos", label: "De mercado" },
 ];
 
+/**
+ * Clientes exibidos na esteira "Empresas que confiam no nosso trabalho".
+ * Por ora estático (logos em `public/clientes/*.webp`, quadradas). No futuro
+ * virá do banco, cadastrado pelo OWNER.
+ */
+const CLIENTS = [
+  { name: "Beleza Cão & Gato", logo: "/clientes/beleza-cao-e-gato.webp" },
+  { name: "IEADALPE", logo: "/clientes/ieadalpe.webp" },
+  { name: "AmorSaúde", logo: "/clientes/amor-saude.webp" },
+];
+
+/**
+ * Quantas vezes a lista se repete em cada metade da esteira: com poucos
+ * clientes, uma volta só não preenche a largura da tela e a emenda apareceria.
+ */
+const CLIENT_REPEAT = Math.max(2, Math.ceil(10 / CLIENTS.length));
+
 const REPORTS = [
   {
     icon: ClipboardCheck,
@@ -599,6 +616,45 @@ export function LandingPage() {
         </div>
       </section>
 
+      {/* ---------- Clientes (esteira de logos) ---------- */}
+      {/* A trilha tem duas metades idênticas e anda -50%: quando a primeira
+          sai da tela, a segunda está exatamente no lugar dela (loop sem emenda).
+          A segunda metade é decorativa (aria-hidden) para leitores de tela. */}
+      <section id="clientes" className="lp-section lp-clients" aria-labelledby="lp-clients-title">
+        <div className="lp-container">
+          <header className="lp-section__head" data-reveal>
+            <span className="lp-eyebrow">Nossos clientes</span>
+            <h2 id="lp-clients-title" className="lp-section__title">
+              Empresas que confiam no nosso trabalho
+            </h2>
+          </header>
+        </div>
+        <div className="lp-marquee" data-reveal>
+          <div className="lp-marquee__track">
+            {[0, 1].map((half) => (
+              <ul key={half} className="lp-marquee__group" aria-hidden={half === 1 || undefined}>
+                {Array.from({ length: CLIENT_REPEAT }).flatMap((_, round) =>
+                  CLIENTS.map((client) => (
+                    <li
+                      key={`${round}-${client.name}`}
+                      className={`lp-client ${round > 0 ? "lp-client--copy" : ""}`}
+                    >
+                      <img
+                        src={client.logo}
+                        alt={half === 0 && round === 0 ? client.name : ""}
+                        width={400}
+                        height={400}
+                        loading="lazy"
+                      />
+                    </li>
+                  )),
+                )}
+              </ul>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ---------- Benefícios da manutenção preventiva (carrossel) ---------- */}
       <PreventiveBenefitsSection />
 
@@ -1048,6 +1104,36 @@ html { scroll-behavior: smooth; }
 .lp-guarantee svg { color: var(--lp-primary); flex: none; margin-top: 2px; }
 .lp-guarantee p { margin: 0; }
 
+/* Clientes: esteira horizontal contínua de logos */
+.lp-clients { padding-bottom: 72px; }
+.lp-clients .lp-section__head { margin-bottom: 36px; }
+/* Bordas esmaecidas: as logos entram e saem suavemente da tela. */
+.lp-marquee { position: relative; overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent); }
+.lp-marquee__track { display: flex; width: max-content; animation: lp-marquee 38s linear infinite; }
+.lp-marquee:hover .lp-marquee__track { animation-play-state: paused; }
+.lp-marquee__group { display: flex; gap: 28px; margin: 0; padding: 14px 14px 22px; list-style: none; }
+.lp-client { flex: none; width: 148px; height: 148px; overflow: hidden; border-radius: 26px; background: #fff;
+  border: 1px solid color-mix(in srgb, var(--color-foreground) 9%, transparent);
+  box-shadow: 0 12px 30px color-mix(in srgb, var(--lp-primary) 14%, transparent);
+  transition: transform .3s cubic-bezier(.2,.7,.2,1), box-shadow .3s ease; }
+.lp-client:hover { transform: translateY(-6px) scale(1.04); box-shadow: 0 20px 40px color-mix(in srgb, var(--lp-primary) 24%, transparent); }
+.lp-client img { display: block; width: 100%; height: 100%; object-fit: cover; }
+@keyframes lp-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+/* Sem animação: mostra uma volta da lista, centralizada e com quebra de linha. */
+@media (prefers-reduced-motion: reduce) {
+  .lp-marquee { -webkit-mask-image: none; mask-image: none; }
+  .lp-marquee__track { animation: none; width: auto; justify-content: center; }
+  .lp-marquee__group { flex-wrap: wrap; justify-content: center; }
+  .lp-marquee__group[aria-hidden] { display: none; }
+  .lp-client--copy { display: none; }
+}
+@media (max-width: 720px) {
+  .lp-client { width: 116px; height: 116px; border-radius: 22px; }
+  .lp-marquee__group { gap: 18px; }
+}
+
 /* Carrossel de benefícios da preventiva */
 /* Azul bem suave em degradê: o bloco todo branco pesava na página. */
 .lp-carousel { position: relative; border-radius: 22px; border: 1px solid color-mix(in srgb, var(--lp-primary) 16%, transparent); background:
@@ -1229,7 +1315,7 @@ html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) { .lp-fab, .lp-fab::after { animation: none; } }
 
 /* Anchor offset */
-#servicos, #resultados, #preventiva, #empresa, #relatorios, #contato, #inicio { scroll-margin-top: 84px; }
+#servicos, #resultados, #clientes, #preventiva, #empresa, #relatorios, #contato, #inicio { scroll-margin-top: 84px; }
 
 /* Responsive */
 @media (max-width: 940px) {
