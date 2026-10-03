@@ -139,6 +139,12 @@ const REPORTS = [
 ];
 
 /**
+ * Arte do topo do hero: "logo" (logomarca como marca-d'água) ou "split"
+ * (evaporadora com a logo no painel). Ambas mantêm a neve e o layout centralizado.
+ */
+const HERO_ART: "logo" | "split" = "logo";
+
+/**
  * Flocos de neve do hero. Valores fixos (não aleatórios) para o HTML do
  * servidor bater com o do cliente; cada floco cai com tamanho, velocidade,
  * atraso e deriva diferentes para não parecer um padrão.
@@ -370,27 +376,41 @@ export function LandingPage() {
         </div>
 
         <div className="lp-container lp-hero__inner">
-          <div
-            className="lp-ac"
-            role="img"
-            aria-label={`${name} — ar-condicionado split`}
-            data-reveal
-          >
-            <div className="lp-ac__scene" aria-hidden>
-              {/* Evaporadora com a logo no painel e o ar insuflado. */}
-              <div className="lp-ac__front">
-                <div className="lp-ac__unit">
-                  <img src="/landing/evaporadora.webp" alt="" width={1120} height={370} />
-                  <img className="lp-ac__logo" src="/landing/logo-painel.webp" alt="" width={900} height={252} />
+          {HERO_ART === "logo" ? (
+            // Logomarca em destaque, igual à logo oficial (/brand/logo.png, com
+            // o miolo branco — legível nos dois temas), sobre um halo suave.
+            <div className="lp-mark" data-reveal>
+              <img
+                src="/brand/logo.png"
+                alt={name}
+                width={1000}
+                height={280}
+                className="lp-mark__img"
+              />
+            </div>
+          ) : (
+            <div
+              className="lp-ac"
+              role="img"
+              aria-label={`${name} — ar-condicionado split`}
+              data-reveal
+            >
+              <div className="lp-ac__scene" aria-hidden>
+                {/* Evaporadora com a logo no painel e o ar insuflado. */}
+                <div className="lp-ac__front">
+                  <div className="lp-ac__unit">
+                    <img src="/landing/evaporadora.webp" alt="" width={1120} height={370} />
+                    <img className="lp-ac__logo" src="/landing/logo-painel.webp" alt="" width={900} height={252} />
+                  </div>
+                  <img className="lp-ac__air" src="/landing/fluxo-ar.webp" alt="" width={1120} height={330} />
                 </div>
-                <img className="lp-ac__air" src="/landing/fluxo-ar.webp" alt="" width={1120} height={330} />
               </div>
             </div>
-          </div>
+          )}
 
           <div className="lp-hero__content" data-reveal>
             <span className="lp-badge">
-              <Snowflake size={14} /> Refrigeração &amp; climatização · {segment}
+              <Snowflake size={14} /> Assistência Técnica
             </span>
             <h1 className="lp-hero__title">
               O clima <span className="lp-accent">na medida certa</span> para cada ambiente.
@@ -946,6 +966,13 @@ html { scroll-behavior: smooth; }
 }
 @media (prefers-reduced-motion: reduce) { .lp-snow { display: none; } }
 
+/* Logomarca em destaque, com um halo frio por trás. */
+.lp-mark { position: relative; width: min(450px, 84%); margin: 34px auto 30px; }
+.lp-mark::before { content: ""; position: absolute; inset: -30% -12%; z-index: -1; border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--lp-primary) 20%, transparent), transparent); }
+.lp-mark__img { display: block; width: 100%; height: auto;
+  filter: drop-shadow(0 14px 30px color-mix(in srgb, var(--lp-primary) 28%, transparent)); }
+
 /* Evaporadora real (recorte da foto), fixa, com o ar insuflado abaixo. */
 .lp-ac { position: relative; width: 100%; max-width: 500px; margin-bottom: 14px; }
 .lp-ac::before { content: ""; position: absolute; inset: 6% -12% 0; z-index: -1; border-radius: 50%;
@@ -1231,6 +1258,7 @@ html { scroll-behavior: smooth; }
   .lp-section { padding: 60px 0; }
   .lp-hero { padding: 28px 0 60px; }
   .lp-ac { max-width: 360px; }
+  .lp-mark { margin: 22px auto 22px; }
 }
 @media (max-width: 480px) {
   .lp-grid--4, .lp-grid--contact { grid-template-columns: 1fr; }
