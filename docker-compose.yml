@@ -1,5 +1,5 @@
 services:
-  postgres:
+  postgres_climacerto:
     image: postgres:17-alpine
     restart: unless-stopped
     ports:
