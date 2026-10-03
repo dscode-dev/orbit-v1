@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Landing page pública da Climatize (cartão de visita + canal de contato).
+ * Landing page pública da Clima Certo Refrigeração (cartão de visita + canal de contato).
  *
  * Página única com navegação por âncoras (#servicos, #relatorios, #empresa,
  * #contato) e efeito de reveal ao rolar (IntersectionObserver + CSS — sem
@@ -10,7 +10,7 @@
  *
  * O botão "Gestão" leva à tela de login da plataforma (/login).
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -19,6 +19,7 @@ import {
   ClipboardCheck,
   FileSignature,
   Gauge,
+  Instagram,
   Mail,
   MapPin,
   Menu,
@@ -35,8 +36,9 @@ import {
 import { BrandLogo } from "@erp/ui/brand";
 import { WhatsAppLink } from "./whatsapp-link";
 import { GOOGLE_ADS_ID, openCookiePreferences } from "./analytics";
-import { organizationApi, type PublicCompanyProfile } from "@erp/api";
+import { organizationApi, type PublicCompanyContact, type PublicCompanyProfile } from "@erp/api";
 import { PreventiveBenefitsSection } from "./preventive-carousel";
+import { BRAND } from "../brand";
 
 const WHATSAPP_MESSAGE =
   "Olá! Vim pelo site e gostaria de saber mais sobre os serviços de climatização e refrigeração.";
@@ -44,89 +46,140 @@ const WHATSAPP_MESSAGE =
 const NAV = [
   { href: "#servicos", label: "Serviços" },
   { href: "#resultados", label: "Resultados" },
-  { href: "#relatorios", label: "Documentação" },
   { href: "#empresa", label: "A empresa" },
+  { href: "#relatorios", label: "Documentação" },
   { href: "#contato", label: "Contato" },
 ];
 
 /**
  * Serviços exibidos como cards com foto (estilo comercial). As fotos reais ficam
  * em `public/servicos/*.webp` (otimizadas). Se um arquivo faltar, o card cai num
- * degradê com o ícone do serviço, sem quebrar o layout.
+ * degradê com o ícone do serviço, sem quebrar o layout. `focus` é o
+ * object-position do recorte 4:3: aponta para onde estão as pessoas na foto.
  */
 const SERVICES = [
   {
-    icon: Settings2,
-    title: "Projetos",
-    image: "/servicos/projetos.webp",
-    text: "Projetos de climatização sob medida para ambientes residenciais, comerciais e industriais — dimensionados por responsável técnico.",
-    cta: "Solicitar um projeto",
-  },
-  {
-    icon: Wrench,
-    title: "Manutenção Corretiva",
-    image: "/servicos/manutencao-corretiva.webp",
-    text: "Diagnóstico e reparo ágil de falhas em ar-condicionado e refrigeração, com peças e procedimentos rastreáveis.",
-    cta: "Preciso de um reparo",
+    icon: Wind,
+    title: "Instalação",
+    image: "/servicos/instalacao.webp",
+    focus: "center 40%",
+    text: "Instalação e troca de aparelhos seguindo as normas técnicas e as recomendações do fabricante, com acabamento limpo e teste de funcionamento na entrega.",
+    cta: "Quero instalar",
   },
   {
     icon: ShieldCheck,
     title: "Manutenção Preventiva",
     image: "/servicos/manutencao-preventiva.webp",
-    text: "Planos periódicos que prolongam a vida útil dos equipamentos, reduzem o consumo de energia e evitam paradas inesperadas.",
-    cta: "Quero agendar manutenção",
+    focus: "30% 0%",
+    text: "Limpeza, inspeção e ajustes programados para o equipamento gastar menos energia, durar mais e não parar quando você mais precisa.",
+    cta: "Agendar preventiva",
+  },
+  {
+    icon: Wrench,
+    title: "Manutenção Corretiva",
+    image: "/servicos/manutencao-corretiva.webp",
+    focus: "center 22%",
+    text: "Aparelho pingando, sem gelar ou desligando sozinho? Diagnosticamos a causa e resolvemos com peças e procedimentos registrados.",
+    cta: "Solicitar reparo",
   },
   {
     icon: ClipboardCheck,
     title: "PMOC",
     image: "/servicos/pmoc.webp",
-    text: "Plano de Manutenção, Operação e Controle elaborado e executado conforme a legislação, com relatórios que comprovam a conformidade do ambiente.",
-    cta: "Quero meu PMOC",
+    focus: "center 42%",
+    text: "Elaboração e execução do Plano de Manutenção, Operação e Controle exigido por lei, com relatórios que comprovam a conformidade do ambiente.",
+    cta: "Regularizar meu PMOC",
   },
   {
     icon: Gauge,
     title: "Cálculo de Carga Térmica",
     image: "/servicos/calculo-carga-termica.webp",
-    text: "Levantamento técnico para definir a capacidade (BTUs) ideal do equipamento, evitando gasto excessivo e baixo desempenho.",
-    cta: "Calcular minha carga térmica",
+    focus: "82% center",
+    text: "Dimensionamento técnico dos BTUs certos para o seu espaço — nem aparelho fraco que não dá conta, nem potência sobrando na conta de luz.",
+    cta: "Calcular meus BTUs",
   },
   {
-    icon: Wind,
-    title: "Instalação",
-    image: "/servicos/instalacao.webp",
-    text: "Instalação e substituição de equipamentos executadas dentro das normas técnicas, com acabamento profissional.",
-    cta: "Preciso de uma instalação",
+    icon: Settings2,
+    title: "Projetos",
+    image: "/servicos/projetos.webp",
+    focus: "center 62%",
+    text: "Projetos de climatização para residências, comércios e indústrias, pensados para o uso real de cada ambiente e assinados por responsável técnico.",
+    cta: "Falar sobre um projeto",
   },
 ];
 
 /**
- * Números de vitrine da seção "Resultados". São de marketing (não vêm do banco):
- * ajuste aqui conforme os dados reais da empresa.
+ * Números de vitrine da seção "Resultados". Por ora são fixos (marketing): a base
+ * da empresa ainda não tem histórico. Quando houver, devem vir do endpoint
+ * público em vez de ficar aqui.
  */
 const COMPANY_METRICS = [
-  { icon: Wind, value: "+2.500", label: "Equipamentos instalados" },
-  { icon: Wrench, value: "+4.000", label: "Atendimentos concluídos" },
-  { icon: Building2, value: "+180", label: "Empresas atendidas" },
-  { icon: Award, value: "+5 anos", label: "De mercado" },
+  { icon: Wind, value: "+1.250", label: "Equipamentos instalados" },
+  { icon: Wrench, value: "+2.000", label: "Atendimentos concluídos" },
+  { icon: Building2, value: "+90", label: "Empresas atendidas" },
+  { icon: Award, value: "+2 anos", label: "De mercado" },
 ];
 
 const REPORTS = [
   {
     icon: ClipboardCheck,
     title: "PMOC",
-    text: "Plano de Manutenção, Operação e Controle emitido e acompanhado de forma totalmente digital.",
+    text: "Plano de Manutenção, Operação e Controle emitido, atualizado e consultado sem papel.",
   },
   {
     icon: FileSignature,
     title: "Relatório de Visita Técnica",
-    text: "Registro completo de cada atendimento em campo, com evidências e assinatura no ato.",
+    text: "Tudo o que foi visto e feito em campo, com fotos e assinatura no momento do atendimento.",
   },
   {
     icon: ClipboardCheck,
     title: "Ordem de Serviço",
-    text: "Escopo, execução e materiais documentados em uma OS clara e auditável.",
+    text: "Escopo, execução e materiais registrados numa OS clara, fácil de conferir e de auditar.",
   },
 ];
+
+/**
+ * Flocos de neve do hero. Valores fixos (não aleatórios) para o HTML do
+ * servidor bater com o do cliente; cada floco cai com tamanho, velocidade,
+ * atraso e deriva diferentes para não parecer um padrão.
+ */
+const SNOWFLAKES = [
+  { left: 4, size: 14, duration: 13, delay: -2, drift: 24, opacity: 0.55 },
+  { left: 11, size: 10, duration: 16, delay: -9, drift: -18, opacity: 0.4 },
+  { left: 18, size: 18, duration: 11, delay: -5, drift: 30, opacity: 0.6 },
+  { left: 25, size: 9, duration: 18, delay: -13, drift: -22, opacity: 0.35 },
+  { left: 32, size: 13, duration: 14, delay: -1, drift: 18, opacity: 0.5 },
+  { left: 39, size: 11, duration: 17, delay: -7, drift: -26, opacity: 0.4 },
+  { left: 46, size: 16, duration: 12, delay: -11, drift: 22, opacity: 0.55 },
+  { left: 53, size: 10, duration: 15, delay: -4, drift: -16, opacity: 0.4 },
+  { left: 60, size: 14, duration: 13, delay: -8, drift: 26, opacity: 0.5 },
+  { left: 67, size: 9, duration: 19, delay: -15, drift: -20, opacity: 0.35 },
+  { left: 74, size: 17, duration: 12, delay: -3, drift: 20, opacity: 0.6 },
+  { left: 81, size: 11, duration: 16, delay: -10, drift: -24, opacity: 0.45 },
+  { left: 88, size: 13, duration: 14, delay: -6, drift: 18, opacity: 0.5 },
+  { left: 95, size: 10, duration: 17, delay: -12, drift: -14, opacity: 0.4 },
+  { left: 8, size: 8, duration: 20, delay: -17, drift: 12, opacity: 0.3 },
+  { left: 57, size: 8, duration: 21, delay: -19, drift: -12, opacity: 0.3 },
+  { left: 92, size: 15, duration: 13, delay: -14, drift: 16, opacity: 0.5 },
+  { left: 35, size: 8, duration: 22, delay: -20, drift: 10, opacity: 0.3 },
+];
+
+/** Link do wa.me com mensagem pré-preenchida. */
+function waLink(number: string, message: string) {
+  return `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
+}
+
+function telLink(phone: string) {
+  return `tel:${phone.replace(/[^\d+]/g, "")}`;
+}
+
+/** Iniciais para o avatar do responsável ("Ana Souza" → "AS"). */
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const first = parts[0]?.[0] ?? "";
+  const last = parts.length > 1 ? parts[parts.length - 1][0] : "";
+  return (first + last).toUpperCase();
+}
 
 /**
  * Reveal ao rolar. Reexecuta quando `deps` muda (ex.: dados assíncronos que
@@ -163,6 +216,7 @@ export function LandingPage() {
   const [company, setCompany] = useState<PublicCompanyProfile | null>(null);
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [fabOpen, setFabOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useReveal([company]);
@@ -183,7 +237,7 @@ export function LandingPage() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const name = company?.name ?? "Climatize";
+  const name = company?.name ?? BRAND.name;
   const segment = company?.segment ?? "HVAC-R";
   const email = company?.email ?? null;
   const phone = company?.phones?.[0] ?? null;
@@ -193,9 +247,34 @@ export function LandingPage() {
     return company.state ? `${company.city} · ${company.state}` : company.city;
   }, [company]);
 
-  const whatsappUrl = company?.whatsapp
-    ? `https://wa.me/${company.whatsapp}?text=${encodeURIComponent(WHATSAPP_MESSAGE)}`
-    : null;
+  // Botões gerais (hero, serviços, resultados) falam com o contato principal;
+  // a seção de contato e o botão flutuante mostram cada responsável.
+  const whatsappUrl = company?.whatsapp ? waLink(company.whatsapp, WHATSAPP_MESSAGE) : null;
+  const contacts: PublicCompanyContact[] = company?.contacts ?? [];
+  // Números exibidos em "Fale com a gente": um por responsável (nome e função
+  // como legenda) ou, sem responsáveis cadastrados, o WhatsApp/telefones gerais.
+  const caption = (c: PublicCompanyContact) => [c.name, c.role].filter(Boolean).join(" · ");
+  const whatsappLines =
+    contacts.length > 0
+      ? contacts
+          .filter((c) => c.whatsapp)
+          .map((c) => ({
+            phone: c.phone,
+            caption: caption(c),
+            href: waLink(c.whatsapp as string, WHATSAPP_MESSAGE),
+          }))
+      : whatsappUrl
+        ? [{ phone: phone ?? "Enviar mensagem", caption: "", href: whatsappUrl }]
+        : [];
+  const phoneLines =
+    contacts.length > 0
+      ? contacts.map((c) => ({ phone: c.phone, caption: caption(c) }))
+      : (company?.phones ?? []).slice(0, 2).map((p) => ({ phone: p, caption: "" }));
+  // Opcional por empresa: sem ORGANIZATION_INSTAGRAM na API, nada aparece.
+  const instagram = company?.instagram ?? null;
+  const whatsappContacts = contacts.filter((c): c is PublicCompanyContact & { whatsapp: string } =>
+    Boolean(c.whatsapp),
+  );
 
   const accentStyle = company
     ? ({
@@ -212,7 +291,7 @@ export function LandingPage() {
       <header className={`lp-header ${scrolled ? "lp-header--solid" : ""}`}>
         <div className="lp-container lp-header__inner">
           <a href="#inicio" className="lp-brand" aria-label={name}>
-            <BrandLogo height={34} alt={name} />
+            <BrandLogo height={26} alt={name} />
           </a>
 
           <nav className="lp-nav" aria-label="Seções">
@@ -265,26 +344,71 @@ export function LandingPage() {
       </header>
 
       {/* ---------- Hero ---------- */}
+      {/* Composição centralizada: a evaporadora fica fixa no topo e o texto
+          vem logo abaixo. O único movimento é a neve caindo por todo o bloco. */}
       <section id="inicio" className="lp-hero">
         <div className="lp-hero__glow" aria-hidden />
+        <div className="lp-snow" aria-hidden>
+          {SNOWFLAKES.map((flake, i) => (
+            <span
+              key={i}
+              className="lp-snow__flake"
+              style={
+                {
+                  left: `${flake.left}%`,
+                  "--lp-flake-size": `${flake.size}px`,
+                  "--lp-flake-drift": `${flake.drift}px`,
+                  "--lp-flake-opacity": flake.opacity,
+                  animationDuration: `${flake.duration}s`,
+                  animationDelay: `${flake.delay}s`,
+                } as React.CSSProperties
+              }
+            >
+              <Snowflake size={flake.size} />
+            </span>
+          ))}
+        </div>
+
         <div className="lp-container lp-hero__inner">
+          <div
+            className="lp-ac"
+            role="img"
+            aria-label={`${name} — ar-condicionado split`}
+            data-reveal
+          >
+            <div className="lp-ac__scene" aria-hidden>
+              {/* Evaporadora com a logo no painel e o ar insuflado. */}
+              <div className="lp-ac__front">
+                <div className="lp-ac__unit">
+                  <img src="/landing/evaporadora.webp" alt="" width={1120} height={370} />
+                  <img className="lp-ac__logo" src="/landing/logo-painel.webp" alt="" width={900} height={252} />
+                </div>
+                <img className="lp-ac__air" src="/landing/fluxo-ar.webp" alt="" width={1120} height={330} />
+              </div>
+            </div>
+          </div>
+
           <div className="lp-hero__content" data-reveal>
             <span className="lp-badge">
-              <Snowflake size={14} /> Segmento {segment}
+              <Snowflake size={14} /> Refrigeração &amp; climatização · {segment}
             </span>
             <h1 className="lp-hero__title">
-              Climatização e refrigeração com <span className="lp-accent">excelência técnica</span>.
+              O clima <span className="lp-accent">na medida certa</span> para cada ambiente.
             </h1>
             <p className="lp-hero__lead">
-              A {name} cuida da manutenção, instalação e do desempenho dos seus equipamentos de
-              refrigeração — com documentação técnica <strong>100% digital</strong> e assinada por
-              responsável técnico credenciado.
+              Da instalação à manutenção preventiva, a {name} mantém seu ar-condicionado e seus
+              equipamentos de refrigeração rendendo o máximo — com relatórios{" "}
+              <strong>100% digitais</strong>, assinados por responsável técnico credenciado.
             </p>
             <div className="lp-hero__cta">
-              {whatsappUrl && (
+              {whatsappUrl ? (
                 <WhatsAppLink href={whatsappUrl} className="lp-btn lp-btn--primary lp-btn--lg">
                   <MessageCircle size={18} /> Falar no WhatsApp
                 </WhatsAppLink>
+              ) : (
+                <a href="#contato" className="lp-btn lp-btn--primary lp-btn--lg">
+                  <MessageCircle size={18} /> Fale com a gente
+                </a>
               )}
               <a href="#servicos" className="lp-btn lp-btn--outline lp-btn--lg">
                 Ver serviços <ArrowRight size={18} />
@@ -292,60 +416,18 @@ export function LandingPage() {
             </div>
             <ul className="lp-hero__facts">
               <li>
-                <strong>Preventiva & PMOC</strong>
+                <strong>Orçamento rápido</strong>
+                <span>Direto pelo WhatsApp</span>
+              </li>
+              <li>
+                <strong>PMOC em dia</strong>
                 <span>Conformidade legal</span>
               </li>
               <li>
-                <strong>Instalação</strong>
-                <span>Dentro das normas</span>
-              </li>
-              <li>
-                <strong>Relatórios assinados</strong>
-                <span>Responsável técnico</span>
+                <strong>Laudos digitais</strong>
+                <span>Assinatura técnica</span>
               </li>
             </ul>
-          </div>
-
-          <div className="lp-hero__visual" data-reveal>
-            {/* Split real recortado da foto do equipamento: condensadora ao
-                fundo e evaporadora à frente, com a logo aplicada no painel
-                como marca. O jato de ar é peça separada, para respirar. */}
-            <div
-              className="lp-ac"
-              role="img"
-              aria-label={`${name} — sistema split: evaporadora e condensadora`}
-            >
-              <span className="lp-ac__glow" aria-hidden />
-
-              <div className="lp-ac__scene" aria-hidden>
-                {/* Condensadora ao fundo: menor e levemente recuada. */}
-                <div className="lp-ac__back">
-                  <img src="/landing/condensadora.webp" alt="" width={968} height={658} />
-                </div>
-
-                {/* Evaporadora à frente, com a marca e o ar insuflado. */}
-                <div className="lp-ac__front">
-                  <div className="lp-ac__unit">
-                    <img src="/landing/evaporadora.webp" alt="" width={1120} height={370} />
-                  </div>
-                  <img className="lp-ac__air" src="/landing/fluxo-ar.webp" alt="" width={1120} height={330} />
-                  <span className="lp-ac__flake lp-ac__flake--1">
-                    <Snowflake size={18} />
-                  </span>
-                  <span className="lp-ac__flake lp-ac__flake--2">
-                    <Snowflake size={13} />
-                  </span>
-                  <span className="lp-ac__flake lp-ac__flake--3">
-                    <Snowflake size={15} />
-                  </span>
-                </div>
-              </div>
-
-              <div className="lp-ac__badge">
-                <Snowflake size={16} />
-                <span>Ar-condicionado &amp; Refrigeração</span>
-              </div>
-            </div>
           </div>
         </div>
       </section>
@@ -354,17 +436,17 @@ export function LandingPage() {
       <section id="servicos" className="lp-section">
         <div className="lp-container">
           <header className="lp-section__head" data-reveal>
-            <span className="lp-eyebrow">O que fazemos</span>
-            <h2 className="lp-section__title">Serviços em climatização e refrigeração</h2>
+            <span className="lp-eyebrow">Nossos serviços</span>
+            <h2 className="lp-section__title">Tudo o que o seu ar-condicionado precisa, em um só lugar</h2>
             <p className="lp-section__sub">
-              Do atendimento pontual ao contrato de manutenção contínua, cobrindo todo o ciclo de
-              vida dos seus equipamentos.
+              Da instalação ao contrato de manutenção contínua: acompanhamos o equipamento em todas
+              as fases, do primeiro dia ao último.
             </p>
           </header>
           <div className="lp-svc-grid">
-            {SERVICES.map(({ icon: Icon, title, text, image, cta }, i) => {
-              const ctaUrl = whatsappUrl
-                ? `https://wa.me/${company?.whatsapp}?text=${encodeURIComponent(`Olá! Tenho interesse em ${title}.`)}`
+            {SERVICES.map(({ icon: Icon, title, text, image, focus, cta }, i) => {
+              const ctaUrl = company?.whatsapp
+                ? waLink(company.whatsapp, `Olá! Tenho interesse em ${title}.`)
                 : null;
               return (
                 <article key={title} className="lp-svc" data-reveal style={{ transitionDelay: `${i * 60}ms` }}>
@@ -373,6 +455,7 @@ export function LandingPage() {
                       src={image}
                       alt={title}
                       loading="lazy"
+                      style={{ objectPosition: focus }}
                       onError={(e) => {
                         (e.currentTarget as HTMLImageElement).style.display = "none";
                       }}
@@ -380,17 +463,22 @@ export function LandingPage() {
                     <span className="lp-svc__media-fallback" aria-hidden>
                       <Icon size={40} />
                     </span>
-                    <span className="lp-svc__tag">
-                      <Icon size={15} /> {title}
-                    </span>
                   </div>
                   <div className="lp-svc__body">
+                    <span className="lp-svc__icon" aria-hidden>
+                      <Icon size={22} />
+                    </span>
                     <h3 className="lp-svc__title">{title}</h3>
                     <p className="lp-svc__text">{text}</p>
-                    {ctaUrl && (
+                    {/* Sem WhatsApp disponível, o botão leva ao contato em vez de sumir. */}
+                    {ctaUrl ? (
                       <WhatsAppLink href={ctaUrl} className="lp-svc__cta">
                         <MessageCircle size={16} /> {cta}
                       </WhatsAppLink>
+                    ) : (
+                      <a href="#contato" className="lp-svc__cta">
+                        {cta} <ArrowRight size={16} />
+                      </a>
                     )}
                   </div>
                 </article>
@@ -399,10 +487,10 @@ export function LandingPage() {
           </div>
           <div className="lp-benefits" data-reveal>
             {[
+              { icon: MessageCircle, label: "Orçamento pelo WhatsApp" },
               { icon: ShieldCheck, label: "Responsável técnico credenciado" },
-              { icon: Gauge, label: "Economia de energia" },
-              { icon: Snowflake, label: "Ambiente mais saudável" },
-              { icon: MessageCircle, label: "Atendimento ágil pelo WhatsApp" },
+              { icon: Gauge, label: "Menos gasto com energia" },
+              { icon: Snowflake, label: "Ar mais limpo no ambiente" },
             ].map(({ icon: Icon, label }) => (
               <div key={label} className="lp-benefit">
                 <Icon size={20} />
@@ -415,17 +503,18 @@ export function LandingPage() {
 
       {/* ---------- Resultados (prova social / números) ---------- */}
       <section id="resultados" className="lp-section lp-section--muted">
-        <div className="lp-container lp-results">
-          {/* Colagem: instalação em destaque, preventiva e carga térmica ao fundo. */}
+        <div className="lp-container lp-results lp-results--reverse">
+          {/* Colagem com fotos verticais da equipe: corretiva e projeto ao fundo,
+              a equipe em destaque ao centro. */}
           <div className="lp-collage" data-reveal>
             <figure className="lp-collage__item lp-collage__item--back-left">
-              <img src="/servicos/manutencao-preventiva.webp" alt="Manutenção preventiva em campo" loading="lazy" />
+              <img src="/servicos/manutencao-corretiva.webp" alt="Técnico em manutenção corretiva" loading="lazy" style={{ objectPosition: "8% 22%" }} />
             </figure>
             <figure className="lp-collage__item lp-collage__item--back-right">
-              <img src="/servicos/calculo-carga-termica.webp" alt="Cálculo de carga térmica" loading="lazy" />
+              <img src="/servicos/projetos.webp" alt="Equipe executando projeto de climatização" loading="lazy" style={{ objectPosition: "center 65%" }} />
             </figure>
             <figure className="lp-collage__item lp-collage__item--front">
-              <img src="/servicos/instalacao.webp" alt="Instalação de ar-condicionado" loading="lazy" />
+              <img src="/servicos/pmoc.webp" alt={`Equipe ${name}`} loading="lazy" style={{ objectPosition: "center 45%" }} />
             </figure>
             <div className="lp-collage__seal" aria-label="Garantia e qualidade">
               <ShieldCheck size={22} />
@@ -438,11 +527,11 @@ export function LandingPage() {
 
           <div className="lp-results__content" data-reveal>
             <span className="lp-eyebrow">Resultados</span>
-            <h2 className="lp-section__title">O resultado se mede em equipamento funcionando</h2>
+            <h2 className="lp-section__title">Ambiente na temperatura certa e cliente sem dor de cabeça</h2>
             <p className="lp-section__sub">
-              Equipe própria, prazo combinado e serviço que não precisa voltar. Cada ambiente recebe
-              a solução que o seu uso exige — e cada entrega vem com a documentação que comprova
-              como o trabalho foi feito.
+              Equipe própria, horário cumprido e serviço feito para não ter retorno. Cada ambiente
+              recebe a solução que o seu uso pede — e cada entrega vem documentada, do diagnóstico
+              à assinatura do técnico.
             </p>
 
             <div className="lp-metrics">
@@ -460,16 +549,32 @@ export function LandingPage() {
             <div className="lp-guarantee">
               <ShieldCheck size={20} />
               <p>
-                <strong>Garantia e Qualidade.</strong> Todo serviço é executado dentro das normas
-                técnicas e acompanhado de relatório assinado por responsável técnico credenciado.
+                <strong>Serviço com garantia.</strong> Executamos tudo dentro das normas técnicas e
+                entregamos relatório assinado por responsável técnico credenciado.
               </p>
             </div>
 
-            {whatsappUrl && (
-              <WhatsAppLink href={whatsappUrl} className="lp-btn lp-btn--primary lp-btn--lg">
-                <MessageCircle size={18} /> Solicitar orçamento
-              </WhatsAppLink>
-            )}
+            <div className="lp-hero__cta">
+              {whatsappUrl ? (
+                <WhatsAppLink href={whatsappUrl} className="lp-btn lp-btn--primary lp-btn--lg">
+                  <MessageCircle size={18} /> Solicitar orçamento
+                </WhatsAppLink>
+              ) : (
+                <a href="#contato" className="lp-btn lp-btn--primary lp-btn--lg">
+                  <MessageCircle size={18} /> Solicitar orçamento
+                </a>
+              )}
+              {instagram && (
+                <a
+                  href={instagram.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="lp-btn lp-btn--outline lp-btn--lg"
+                >
+                  <Instagram size={18} /> Ver trabalhos no Instagram
+                </a>
+              )}
+            </div>
           </div>
         </div>
       </section>
@@ -477,56 +582,23 @@ export function LandingPage() {
       {/* ---------- Benefícios da manutenção preventiva (carrossel) ---------- */}
       <PreventiveBenefitsSection />
 
-      {/* ---------- Documentação / Relatórios ---------- */}
-      <section id="relatorios" className="lp-section lp-section--muted">
-        <div className="lp-container">
-          <header className="lp-section__head" data-reveal>
-            <span className="lp-eyebrow">Documentação técnica</span>
-            <h2 className="lp-section__title">Relatórios digitais, assinados e auditáveis</h2>
-            <p className="lp-section__sub">
-              Cada serviço gera documentação profissional emitida de forma totalmente digital e
-              assinada por responsável técnico credenciado.
-            </p>
-          </header>
-          <div className="lp-grid lp-grid--3">
-            {REPORTS.map(({ icon: Icon, title, text }, i) => (
-              <article key={title} className="lp-card lp-card--report" data-reveal style={{ transitionDelay: `${i * 60}ms` }}>
-                <span className="lp-card__icon">
-                  <Icon size={22} />
-                </span>
-                <h3 className="lp-card__title">{title}</h3>
-                <p className="lp-card__text">{text}</p>
-              </article>
-            ))}
-          </div>
-          <div className="lp-signature-note" data-reveal>
-            <FileSignature size={18} />
-            <span>
-              Todos os documentos são assinados digitalmente pelo responsável técnico — validade,
-              rastreabilidade e transparência em cada atendimento.
-            </span>
-          </div>
-        </div>
-      </section>
-
       {/* ---------- A empresa ---------- */}
       <section id="empresa" className="lp-section">
-        <div className="lp-container lp-about">
+        <div className="lp-container lp-about lp-about--reverse">
           <div className="lp-about__text" data-reveal>
             <span className="lp-eyebrow">A empresa</span>
-            <h2 className="lp-section__title">Especialistas em {segment}</h2>
+            <h2 className="lp-section__title">Quem cuida do seu clima</h2>
             <p className="lp-section__sub">
-              A {name} atua com ventilação, ar-condicionado e refrigeração, entregando
-              soluções confiáveis para clientes residenciais, comerciais e industriais. Nosso
-              compromisso é unir execução técnica de qualidade a uma gestão transparente e
-              documentada.
+              A {name} é especialista em ar-condicionado e refrigeração ({segment}) e atende
+              residências, comércios e indústrias. Trabalhamos com proximidade: você sabe quem vai
+              ao local, o que foi feito e por quê — tudo registrado e assinado.
             </p>
             <ul className="lp-checklist">
               {[
-                "Equipe técnica qualificada e responsável credenciado",
-                "Processos padronizados e rastreáveis",
-                "Atendimento ágil e comunicação clara",
-                "Conformidade com as normas do setor",
+                "Técnicos qualificados e responsável técnico credenciado",
+                "Atendimento direto com os responsáveis pela empresa",
+                "Procedimentos padronizados e rastreáveis",
+                "Serviço dentro das normas do setor",
               ].map((item) => (
                 <li key={item}>
                   <ShieldCheck size={18} /> {item}
@@ -536,10 +608,10 @@ export function LandingPage() {
           </div>
           <div className="lp-about__stats" data-reveal>
             {[
-              { k: segment, v: "Segmento de atuação" },
-              { k: "100% digital", v: "Documentação técnica" },
-              { k: "PMOC · RVT · OS", v: "Relatórios assinados" },
-              { k: "Preventiva", v: "Foco em eficiência" },
+              { k: "Residencial", v: "Casas e apartamentos" },
+              { k: "Comercial", v: "Lojas, escritórios e clínicas" },
+              { k: "Industrial", v: "Refrigeração de processos" },
+              { k: "100% digital", v: "PMOC · RVT · OS assinados" },
             ].map((s) => (
               <div key={s.v} className="lp-stat">
                 <strong>{s.k}</strong>
@@ -550,8 +622,42 @@ export function LandingPage() {
         </div>
       </section>
 
+      {/* ---------- Documentação / Relatórios ---------- */}
+      <section id="relatorios" className="lp-section lp-section--muted">
+        <div className="lp-container lp-docs">
+          <div className="lp-docs__intro" data-reveal>
+            <span className="lp-eyebrow">Documentação técnica</span>
+            <h2 className="lp-section__title">Cada atendimento vira um documento assinado</h2>
+            <p className="lp-section__sub">
+              Nada de papel perdido: os relatórios são emitidos no sistema, assinados pelo
+              responsável técnico e ficam disponíveis para você no portal do cliente.
+            </p>
+            <div className="lp-signature-note" data-reveal>
+              <FileSignature size={18} />
+              <span>
+                Assinatura digital do responsável técnico: validade, rastreabilidade e transparência
+                em cada visita.
+              </span>
+            </div>
+          </div>
+          <div className="lp-docs__list">
+            {REPORTS.map(({ icon: Icon, title, text }, i) => (
+              <article key={title} className="lp-card lp-card--report" data-reveal style={{ transitionDelay: `${i * 60}ms` }}>
+                <span className="lp-card__icon">
+                  <Icon size={22} />
+                </span>
+                <div>
+                  <h3 className="lp-card__title">{title}</h3>
+                  <p className="lp-card__text">{text}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ---------- Contato ---------- */}
-      <section id="contato" className="lp-section lp-section--muted">
+      <section id="contato" className="lp-section">
         <div className="lp-container">
           <header className="lp-section__head" data-reveal>
             <span className="lp-eyebrow">Fale com a gente</span>
@@ -561,46 +667,90 @@ export function LandingPage() {
             </p>
           </header>
 
+          {/* Uma linha de cards compactos. WhatsApp e Telefone listam um ou mais
+              números (um por responsável, quando cadastrados). */}
           <div className="lp-grid lp-grid--contact">
-            {whatsappUrl && (
-              <WhatsAppLink
-                href={whatsappUrl}
-                className="lp-contact lp-contact--primary"
-                data-reveal
-              >
+            {whatsappLines.length > 0 && (
+              <div className="lp-contact lp-contact--primary" data-reveal>
                 <span className="lp-contact__icon">
-                  <MessageCircle size={22} />
+                  <MessageCircle size={20} />
                 </span>
                 <span className="lp-contact__label">WhatsApp</span>
-                <span className="lp-contact__value">{phone ?? "Enviar mensagem"}</span>
-                <span className="lp-contact__cta">
-                  Iniciar conversa <ArrowRight size={15} />
+                <div className="lp-contact__lines">
+                  {whatsappLines.map((line) => (
+                    <WhatsAppLink key={line.href} href={line.href} className="lp-contact__line">
+                      <span className="lp-contact__line-main">
+                        <strong>{line.phone}</strong>
+                        {line.caption && <small>{line.caption}</small>}
+                      </span>
+                      <ArrowRight size={15} />
+                    </WhatsAppLink>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {phoneLines.length > 0 && (
+              <div className="lp-contact" data-reveal>
+                <span className="lp-contact__icon">
+                  <Phone size={20} />
                 </span>
-              </WhatsAppLink>
+                <span className="lp-contact__label">Telefone</span>
+                <div className="lp-contact__lines">
+                  {phoneLines.map((line) => (
+                    <a key={line.phone} href={telLink(line.phone)} className="lp-contact__line">
+                      <span className="lp-contact__line-main">
+                        <strong>{line.phone}</strong>
+                        {line.caption && <small>{line.caption}</small>}
+                      </span>
+                      <ArrowRight size={15} />
+                    </a>
+                  ))}
+                </div>
+              </div>
             )}
 
             {email && (
               <a href={`mailto:${email}`} className="lp-contact" data-reveal>
                 <span className="lp-contact__icon">
-                  <Mail size={22} />
+                  <Mail size={20} />
                 </span>
                 <span className="lp-contact__label">E-mail</span>
-                <span className="lp-contact__value">{email}</span>
+                {/* Quebra o endereço no @ em vez de no meio de uma palavra. */}
+                <span className="lp-contact__value lp-contact__value--email">
+                  {email.split("@")[0]}@<wbr />
+                  {email.split("@").slice(1).join("@")}
+                </span>
                 <span className="lp-contact__cta">
                   Enviar e-mail <ArrowRight size={15} />
                 </span>
               </a>
             )}
 
-            {phone && (
-              <a href={`tel:${phone.replace(/[^\d+]/g, "")}`} className="lp-contact" data-reveal>
+            {instagram && (
+              <a
+                href={instagram.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="lp-contact lp-contact--instagram"
+                data-reveal
+              >
                 <span className="lp-contact__icon">
-                  <Phone size={22} />
+                  <Instagram size={20} />
                 </span>
-                <span className="lp-contact__label">Telefone</span>
-                <span className="lp-contact__value">{phone}</span>
+                <span className="lp-contact__label">Instagram</span>
+                {/* Usuários longos quebram só depois de "_" ou ".", nunca no meio da palavra. */}
+                <span className="lp-contact__value lp-contact__value--handle">
+                  @
+                  {instagram.handle.split(/(?<=[._])/).map((part, i) => (
+                    <Fragment key={i}>
+                      {i > 0 && <wbr />}
+                      {part}
+                    </Fragment>
+                  ))}
+                </span>
                 <span className="lp-contact__cta">
-                  Ligar agora <ArrowRight size={15} />
+                  Seguir perfil <ArrowRight size={15} />
                 </span>
               </a>
             )}
@@ -608,7 +758,7 @@ export function LandingPage() {
             {location && (
               <div className="lp-contact" data-reveal>
                 <span className="lp-contact__icon">
-                  <MapPin size={22} />
+                  <MapPin size={20} />
                 </span>
                 <span className="lp-contact__label">Localização</span>
                 <span className="lp-contact__value">{location}</span>
@@ -625,6 +775,19 @@ export function LandingPage() {
           <div className="lp-footer__brand">
             <BrandLogo height={30} alt={name} />
             <p>Climatização e refrigeração · Segmento {segment}</p>
+            {instagram && (
+              <a
+                href={instagram.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="lp-footer__social"
+              >
+                <span className="lp-ig-btn lp-ig-btn--sm" aria-hidden>
+                  <Instagram size={15} />
+                </span>
+                @{instagram.handle}
+              </a>
+            )}
           </div>
           <div className="lp-footer__links">
             {NAV.map((item) => (
@@ -655,16 +818,58 @@ export function LandingPage() {
       </footer>
 
       {/* ---------- WhatsApp flutuante ---------- */}
-      {whatsappUrl && (
-        <WhatsAppLink href={whatsappUrl} className="lp-fab" aria-label="Falar no WhatsApp">
-          <svg viewBox="0 0 32 32" width="30" height="30" fill="currentColor" aria-hidden>
-            <path d="M16.003 3.2c-7.06 0-12.8 5.74-12.8 12.8 0 2.257.594 4.454 1.72 6.395L3.2 28.8l6.57-1.717a12.74 12.74 0 0 0 6.23 1.62h.005c7.06 0 12.8-5.74 12.8-12.8 0-3.42-1.332-6.635-3.75-9.053A12.72 12.72 0 0 0 16.003 3.2zm0 2.133a10.63 10.63 0 0 1 7.548 3.126 10.6 10.6 0 0 1 3.12 7.542c0 5.884-4.786 10.667-10.67 10.667a10.62 10.62 0 0 1-5.41-1.48l-.388-.23-4.03 1.053 1.076-3.926-.253-.403a10.6 10.6 0 0 1-1.626-5.68c0-5.883 4.786-10.666 10.67-10.666zm-5.87 5.744c-.196 0-.514.074-.784.37-.27.294-1.03 1.006-1.03 2.452 0 1.446 1.055 2.843 1.202 3.04.147.196 2.076 3.17 5.03 4.446.703.303 1.25.485 1.678.62.705.224 1.346.192 1.853.117.565-.084 1.74-.712 1.986-1.4.245-.686.245-1.274.172-1.4-.074-.123-.27-.196-.564-.343-.294-.147-1.74-.858-2.01-.956-.27-.098-.466-.147-.662.148-.196.294-.76.955-.93 1.15-.172.197-.343.222-.637.075-.294-.148-1.24-.457-2.363-1.458-.873-.778-1.463-1.74-1.634-2.034-.17-.294-.018-.453.13-.6.132-.132.294-.343.44-.514.148-.172.196-.294.294-.49.098-.197.05-.368-.025-.515-.074-.147-.646-1.6-.91-2.18-.235-.516-.474-.447-.662-.456l-.564-.01z"/>
-          </svg>
-        </WhatsAppLink>
+      {/* Com mais de um responsável no WhatsApp, o botão abre a escolha de
+          com quem falar; com um só, vai direto para a conversa. */}
+      {whatsappContacts.length > 1 ? (
+        <div className="lp-fab-wrap">
+          {fabOpen && (
+            <div className="lp-fab-menu" role="menu" aria-label="Falar no WhatsApp com">
+              <span className="lp-fab-menu__title">Falar no WhatsApp com</span>
+              {whatsappContacts.map((contact) => (
+                <WhatsAppLink
+                  key={`${contact.name}-${contact.whatsapp}`}
+                  href={waLink(contact.whatsapp, WHATSAPP_MESSAGE)}
+                  className="lp-fab-menu__item"
+                  role="menuitem"
+                >
+                  <span className="lp-person__avatar lp-person__avatar--sm" aria-hidden>
+                    {initials(contact.name)}
+                  </span>
+                  <span className="lp-fab-menu__text">
+                    <strong>{contact.name}</strong>
+                    <span>{contact.role ?? contact.phone}</span>
+                  </span>
+                </WhatsAppLink>
+              ))}
+            </div>
+          )}
+          <button
+            type="button"
+            className="lp-fab"
+            aria-label="Falar no WhatsApp"
+            aria-haspopup="menu"
+            aria-expanded={fabOpen}
+            onClick={() => setFabOpen((v) => !v)}
+          >
+            {fabOpen ? <X size={26} /> : WHATSAPP_ICON}
+          </button>
+        </div>
+      ) : (
+        whatsappUrl && (
+          <WhatsAppLink href={whatsappUrl} className="lp-fab" aria-label="Falar no WhatsApp">
+            {WHATSAPP_ICON}
+          </WhatsAppLink>
+        )
       )}
     </div>
   );
 }
+
+const WHATSAPP_ICON = (
+  <svg viewBox="0 0 32 32" width="30" height="30" fill="currentColor" aria-hidden>
+            <path d="M16.003 3.2c-7.06 0-12.8 5.74-12.8 12.8 0 2.257.594 4.454 1.72 6.395L3.2 28.8l6.57-1.717a12.74 12.74 0 0 0 6.23 1.62h.005c7.06 0 12.8-5.74 12.8-12.8 0-3.42-1.332-6.635-3.75-9.053A12.72 12.72 0 0 0 16.003 3.2zm0 2.133a10.63 10.63 0 0 1 7.548 3.126 10.6 10.6 0 0 1 3.12 7.542c0 5.884-4.786 10.667-10.67 10.667a10.62 10.62 0 0 1-5.41-1.48l-.388-.23-4.03 1.053 1.076-3.926-.253-.403a10.6 10.6 0 0 1-1.626-5.68c0-5.883 4.786-10.666 10.67-10.666zm-5.87 5.744c-.196 0-.514.074-.784.37-.27.294-1.03 1.006-1.03 2.452 0 1.446 1.055 2.843 1.202 3.04.147.196 2.076 3.17 5.03 4.446.703.303 1.25.485 1.678.62.705.224 1.346.192 1.853.117.565-.084 1.74-.712 1.986-1.4.245-.686.245-1.274.172-1.4-.074-.123-.27-.196-.564-.343-.294-.147-1.74-.858-2.01-.956-.27-.098-.466-.147-.662.148-.196.294-.76.955-.93 1.15-.172.197-.343.222-.637.075-.294-.148-1.24-.457-2.363-1.458-.873-.778-1.463-1.74-1.634-2.034-.17-.294-.018-.453.13-.6.132-.132.294-.343.44-.514.148-.172.196-.294.294-.49.098-.197.05-.368-.025-.515-.074-.147-.646-1.6-.91-2.18-.235-.516-.474-.447-.662-.456l-.564-.01z"/>
+          </svg>
+);
 
 const LP_CSS = `
 html { scroll-behavior: smooth; }
@@ -709,85 +914,82 @@ html { scroll-behavior: smooth; }
 .lp-btn--ghost { color: var(--color-foreground); background: color-mix(in srgb, var(--color-foreground) 6%, transparent); }
 .lp-btn--ghost:hover { background: color-mix(in srgb, var(--color-foreground) 12%, transparent); }
 
-/* Hero */
-.lp-hero { position: relative; padding: 72px 0 80px; overflow: clip; }
-.lp-hero__glow { position: absolute; inset: -20% 0 auto; height: 620px; background:
-  radial-gradient(600px 320px at 22% 12%, color-mix(in srgb, var(--lp-primary) 24%, transparent), transparent 70%),
-  radial-gradient(520px 300px at 88% 8%, color-mix(in srgb, var(--lp-secondary) 20%, transparent), transparent 70%);
-  pointer-events: none; }
-.lp-hero__inner { position: relative; display: grid; grid-template-columns: 1.15fr .85fr; gap: 48px; align-items: center; }
+/* Hero: arte centralizada no topo, texto centralizado abaixo, neve caindo */
+.lp-hero { position: relative; padding: 40px 0 84px; overflow: clip; isolation: isolate;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--lp-primary) 10%, transparent), transparent 78%); }
+.lp-hero__glow { position: absolute; inset: 0; z-index: -1; pointer-events: none; background:
+  radial-gradient(48% 42% at 50% 22%, color-mix(in srgb, var(--lp-primary) 26%, transparent), transparent 72%),
+  radial-gradient(30% 30% at 12% 70%, color-mix(in srgb, var(--lp-secondary) 14%, transparent), transparent 70%),
+  radial-gradient(30% 30% at 88% 64%, color-mix(in srgb, var(--lp-secondary) 14%, transparent), transparent 70%); }
+.lp-hero__inner { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; text-align: center; }
+.lp-hero__content { display: flex; flex-direction: column; align-items: center; max-width: 760px; }
 .lp-badge { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; color: var(--lp-primary); background: color-mix(in srgb, var(--lp-primary) 12%, transparent); border: 1px solid color-mix(in srgb, var(--lp-primary) 22%, transparent); }
-.lp-hero__title { margin: 18px 0 0; font-size: clamp(2.1rem, 4.6vw, 3.4rem); line-height: 1.06; font-weight: 800; letter-spacing: -0.02em; }
+.lp-hero__title { margin: 18px 0 0; font-size: clamp(2.1rem, 5vw, 3.6rem); line-height: 1.06; font-weight: 800; letter-spacing: -0.02em; max-width: 18ch; }
 .lp-accent { background: linear-gradient(100deg, var(--lp-primary), var(--lp-secondary)); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.lp-hero__lead { margin: 20px 0 0; font-size: clamp(1rem, 1.6vw, 1.15rem); line-height: 1.6; color: color-mix(in srgb, var(--color-foreground) 74%, transparent); max-width: 44ch; }
-.lp-hero__cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
-.lp-hero__facts { list-style: none; display: flex; flex-wrap: wrap; gap: 28px; margin: 36px 0 0; padding: 0; }
-.lp-hero__facts li { display: flex; flex-direction: column; }
+.lp-hero__lead { margin: 20px auto 0; font-size: clamp(1rem, 1.6vw, 1.15rem); line-height: 1.6; color: color-mix(in srgb, var(--color-foreground) 74%, transparent); max-width: 60ch; }
+.lp-hero__cta { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 28px; }
+.lp-hero__facts { list-style: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 12px 36px; margin: 34px 0 0; padding: 0; }
+.lp-hero__facts li { display: flex; flex-direction: column; align-items: center; }
 .lp-hero__facts strong { font-size: 15px; }
 .lp-hero__facts span { font-size: 13px; color: color-mix(in srgb, var(--color-foreground) 60%, transparent); }
-.lp-hero__visual { display: flex; justify-content: center; }
-.lp-hero__card { width: 100%; max-width: 380px; padding: 28px; border-radius: 22px; background: color-mix(in srgb, var(--color-foreground) 4%, transparent); border: 1px solid color-mix(in srgb, var(--color-foreground) 10%, transparent); box-shadow: 0 24px 60px color-mix(in srgb, var(--lp-primary) 14%, transparent); backdrop-filter: blur(6px); }
-.lp-hero__card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 22px; }
-.lp-chip { display: flex; align-items: center; gap: 10px; padding: 14px; border-radius: 14px; font-size: 14px; font-weight: 500; background: color-mix(in srgb, var(--lp-primary) 8%, transparent); border: 1px solid color-mix(in srgb, var(--lp-primary) 16%, transparent); color: color-mix(in srgb, var(--lp-primary) 72%, var(--color-foreground)); }
-.lp-chip svg { color: var(--lp-primary); }
 
-/* Hero: sistema split real (recorte da foto) com a logo como marca.
-   A condensadora fica atrás e recuada; a evaporadora, à frente e maior. */
-.lp-ac { position: relative; width: 100%; max-width: 560px; display: flex; flex-direction: column; align-items: center; }
-/* Sem altura fixa: o brilho acompanha a cena e desvanece antes das bordas,
-   senão o retângulo do gradiente fica visível no tema escuro. */
-.lp-ac__glow { position: absolute; inset: -14% -14% -6%; background:
-  radial-gradient(42% 32% at 40% 24%, color-mix(in srgb, var(--lp-primary) 26%, transparent), transparent 68%),
-  radial-gradient(34% 28% at 78% 74%, color-mix(in srgb, var(--lp-secondary) 20%, transparent), transparent 66%);
-  pointer-events: none; }
-.lp-ac__scene { position: relative; width: 100%; aspect-ratio: 1 / .86; }
+/* Neve: cobre o bloco inteiro, cai de cima a baixo com leve deriva lateral. */
+.lp-snow { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.lp-snow__flake { position: absolute; top: -24px; display: block; line-height: 0;
+  color: color-mix(in srgb, var(--lp-primary) 45%, #bfe3ff); opacity: 0;
+  animation: lp-snow-fall linear infinite; will-change: transform; }
+@keyframes lp-snow-fall {
+  0% { transform: translate3d(0, 0, 0) rotate(0deg); opacity: 0; }
+  8% { opacity: var(--lp-flake-opacity, .5); }
+  85% { opacity: var(--lp-flake-opacity, .5); }
+  100% { transform: translate3d(var(--lp-flake-drift, 0px), 920px, 0) rotate(220deg); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .lp-snow { display: none; } }
+
+/* Evaporadora real (recorte da foto), fixa, com o ar insuflado abaixo. */
+.lp-ac { position: relative; width: 100%; max-width: 500px; margin-bottom: 14px; }
+.lp-ac::before { content: ""; position: absolute; inset: 6% -12% 0; z-index: -1; border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--lp-primary) 22%, transparent), transparent); }
+.lp-ac__scene { position: relative; width: 100%; }
 .lp-ac img { display: block; width: 100%; height: auto; }
-
-/* Fundo: condensadora recuada. A profundidade vem do tamanho, do brilho e da
-   sombra — nada de rotação 3D: numa foto frontal ela entorta o equipamento. */
-.lp-ac__back { position: absolute; top: 0; right: 0; width: 50%; filter: brightness(.94) saturate(.96) drop-shadow(0 22px 30px rgba(8, 15, 30, .5)); }
-/* Frente: evaporadora em destaque, sobrepondo o canto da condensadora. */
-.lp-ac__front { position: absolute; left: 0; bottom: 4%; width: 92%; filter: drop-shadow(0 30px 40px rgba(8, 15, 30, .55)); }
+.lp-ac__front { position: relative; width: 88%; margin: 18px auto 0;
+  filter: drop-shadow(0 26px 36px rgba(8, 15, 30, .45)); }
 .lp-ac__unit { position: relative; }
-
-/* Ar insuflado: peça separada da foto. A máscara evita que o jato termine
-   num corte reto na base da imagem. */
+/* Marca centralizada no painel frontal (área branca acima do friso de luz). */
+.lp-ac .lp-ac__logo { position: absolute; left: 51%; top: 39%; width: 42%; transform: translate(-50%, -50%); }
+/* Ar insuflado: peça separada; a máscara evita o corte reto na base. */
 .lp-ac__air { margin-top: -1.5%;
-  -webkit-mask-image: linear-gradient(to bottom, #000 58%, transparent 98%);
-  mask-image: linear-gradient(to bottom, #000 58%, transparent 98%); }
-.lp-ac__flake { position: absolute; color: color-mix(in srgb, var(--lp-primary) 74%, transparent); animation: lp-ac-flake 6s ease-in-out infinite; }
-.lp-ac__flake--1 { left: 18%; top: 72%; animation-delay: -.6s; }
-.lp-ac__flake--2 { left: 48%; top: 84%; animation-delay: -2.6s; }
-.lp-ac__flake--3 { left: 74%; top: 76%; animation-delay: -4.2s; }
-@keyframes lp-ac-flake {
-  0% { opacity: 0; transform: translateY(-14px) rotate(0deg); }
-  30% { opacity: .85; }
-  100% { opacity: 0; transform: translateY(46px) rotate(150deg); }
-}
+  -webkit-mask-image: linear-gradient(to bottom, #000 50%, transparent 96%);
+  mask-image: linear-gradient(to bottom, #000 50%, transparent 96%); }
 
-.lp-ac__badge { margin-top: 4px; display: inline-flex; align-items: center; gap: 8px; padding: 9px 18px; border-radius: 999px; font-size: 13px; font-weight: 600; color: var(--lp-primary); background: color-mix(in srgb, var(--lp-primary) 10%, transparent); border: 1px solid color-mix(in srgb, var(--lp-primary) 22%, transparent); }
-@media (prefers-reduced-motion: reduce) {
-  .lp-ac__flake { animation: none; opacity: .6; }
-}
-
-/* Serviços: cards com foto + CTA (estilo comercial) */
-.lp-svc-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
-.lp-svc { display: flex; flex-direction: column; overflow: hidden; border-radius: 18px; background: var(--color-background); border: 1px solid color-mix(in srgb, var(--color-foreground) 10%, transparent); transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
-.lp-svc:hover { transform: translateY(-4px); box-shadow: 0 20px 44px color-mix(in srgb, var(--color-foreground) 12%, transparent); border-color: color-mix(in srgb, var(--lp-primary) 40%, transparent); }
-.lp-svc__media { position: relative; aspect-ratio: 4 / 3; display: flex; align-items: center; justify-content: center; overflow: hidden; background: linear-gradient(135deg, color-mix(in srgb, var(--lp-primary) 20%, transparent), color-mix(in srgb, var(--lp-secondary) 12%, transparent)); }
-/* As fotos de campo costumam ser verticais: o recorte prioriza o centro/topo. */
-.lp-svc__media img { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; object-fit: cover; object-position: center 35%; transition: transform .4s ease; }
-.lp-svc:hover .lp-svc__media img { transform: scale(1.04); }
-.lp-svc__media::after { content: ""; position: absolute; inset: 0; z-index: 2; background: linear-gradient(180deg, transparent 45%, rgba(15,23,42,.45)); }
-/* Ícone só aparece quando a foto não carrega: fica na camada de baixo, senão o
-   opacity cria contexto de empilhamento e ele pinta por cima da imagem. */
+/* Serviços: card com foto, ícone sobreposto e CTA */
+.lp-svc-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+.lp-svc { position: relative; display: flex; flex-direction: column; overflow: hidden; border-radius: 22px; background: var(--color-background);
+  border: 1px solid color-mix(in srgb, var(--color-foreground) 9%, transparent);
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--color-foreground) 7%, transparent);
+  transition: transform .3s cubic-bezier(.2,.7,.2,1), box-shadow .3s ease, border-color .3s ease; }
+.lp-svc:hover { transform: translateY(-6px); border-color: color-mix(in srgb, var(--lp-primary) 38%, transparent);
+  box-shadow: 0 24px 54px color-mix(in srgb, var(--lp-primary) 20%, transparent); }
+.lp-svc__media { position: relative; aspect-ratio: 16 / 11; overflow: hidden;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--lp-primary) 22%, transparent), color-mix(in srgb, var(--lp-secondary) 12%, transparent)); }
+.lp-svc__media img { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; object-fit: cover; object-position: center 35%; transition: transform .6s cubic-bezier(.2,.7,.2,1); }
+.lp-svc:hover .lp-svc__media img { transform: scale(1.06); }
+/* Degradê na base da foto: funde a foto com o card. */
+.lp-svc__media::after { content: ""; position: absolute; inset: 0; z-index: 2;
+  background: linear-gradient(180deg, rgba(8, 15, 35, .05) 40%, rgba(8, 15, 35, .55)); }
+/* Ícone só aparece quando a foto não carrega: fica na camada de baixo. */
 .lp-svc__media-fallback { position: absolute; inset: 0; z-index: 0; display: flex; align-items: center; justify-content: center; color: color-mix(in srgb, var(--lp-primary) 65%, var(--color-foreground)); opacity: .55; }
-.lp-svc__tag { position: absolute; left: 12px; bottom: 12px; z-index: 1; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 700; color: #fff; background: color-mix(in srgb, var(--lp-primary) 92%, #000 8%); box-shadow: 0 6px 16px color-mix(in srgb, var(--lp-primary) 40%, transparent); }
-.lp-svc__body { display: flex; flex: 1; flex-direction: column; padding: 20px; }
-.lp-svc__title { margin: 0; font-size: 1.12rem; font-weight: 700; }
-.lp-svc__text { margin: 8px 0 16px; font-size: .93rem; line-height: 1.55; color: color-mix(in srgb, var(--color-foreground) 70%, transparent); }
-.lp-svc__cta { margin-top: auto; display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 42px; border-radius: 12px; font-size: 14px; font-weight: 600; text-decoration: none; color: #fff; background: var(--lp-primary); transition: transform .15s ease, box-shadow .2s ease; }
-.lp-svc__cta:hover { transform: translateY(-1px); box-shadow: 0 10px 24px color-mix(in srgb, var(--lp-primary) 42%, transparent); }
+.lp-svc__body { position: relative; display: flex; flex: 1; flex-direction: column; padding: 0 22px 22px; }
+/* Ícone sobreposto à borda da foto: metade na imagem, metade no card. */
+.lp-svc__icon { position: relative; z-index: 3; display: inline-flex; align-items: center; justify-content: center; width: 54px; height: 54px; margin-top: -27px;
+  border-radius: 16px; color: #fff; background: linear-gradient(135deg, var(--lp-primary), color-mix(in srgb, var(--lp-primary) 55%, var(--lp-secondary)));
+  border: 4px solid var(--color-background); box-shadow: 0 10px 22px color-mix(in srgb, var(--lp-primary) 35%, transparent); }
+.lp-svc__title { margin: 14px 0 0; font-size: 1.15rem; font-weight: 700; letter-spacing: -0.01em; }
+.lp-svc__text { margin: 8px 0 20px; font-size: .93rem; line-height: 1.6; color: color-mix(in srgb, var(--color-foreground) 70%, transparent); }
+.lp-svc__cta { margin-top: auto; display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 46px; border-radius: 12px; font-size: 14.5px; font-weight: 700; text-decoration: none;
+  color: #fff; background: linear-gradient(135deg, var(--lp-primary), color-mix(in srgb, var(--lp-primary) 70%, var(--lp-secondary)));
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--lp-primary) 28%, transparent); transition: transform .15s ease, box-shadow .2s ease; }
+.lp-svc__cta:hover { transform: translateY(-1px); box-shadow: 0 12px 28px color-mix(in srgb, var(--lp-primary) 42%, transparent); }
 .lp-benefits { margin-top: 34px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
 .lp-benefit { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-radius: 14px; font-size: .92rem; font-weight: 500; background: color-mix(in srgb, var(--lp-primary) 7%, transparent); border: 1px solid color-mix(in srgb, var(--lp-primary) 15%, transparent); }
 .lp-benefit svg { color: var(--lp-primary); flex: none; }
@@ -829,7 +1031,8 @@ html { scroll-behavior: smooth; }
 .lp-carousel__viewport { overflow: hidden; border-radius: 22px; }
 .lp-carousel__track { display: flex; transition: transform .55s cubic-bezier(.2,.7,.2,1); }
 .lp-slide { flex: 0 0 100%; display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 48px; padding: 56px 64px; min-height: 420px; }
-.lp-slide__art { display: flex; align-items: center; justify-content: center; padding: 30px; border-radius: 20px; background: linear-gradient(140deg, color-mix(in srgb, var(--lp-primary) 16%, transparent), color-mix(in srgb, var(--lp-secondary) 10%, transparent)); }
+/* Ilustração à direita do texto no desktop; no mobile volta para o topo. */
+.lp-slide__art { order: 2; display: flex; align-items: center; justify-content: center; padding: 30px; border-radius: 20px; background: linear-gradient(140deg, color-mix(in srgb, var(--lp-primary) 16%, transparent), color-mix(in srgb, var(--lp-secondary) 10%, transparent)); }
 .lp-slide__svg { width: 100%; max-width: 380px; height: auto; }
 .lp-slide__step { display: inline-block; font-size: .82rem; font-weight: 800; letter-spacing: .06em; color: var(--lp-primary); }
 .lp-slide__step i { font-style: normal; opacity: .55; }
@@ -885,11 +1088,26 @@ html { scroll-behavior: smooth; }
 .lp-section__title { margin: 12px 0 0; font-size: clamp(1.6rem, 3vw, 2.2rem); font-weight: 800; letter-spacing: -0.02em; }
 .lp-section__sub { margin: 14px 0 0; font-size: 1rem; line-height: 1.6; color: color-mix(in srgb, var(--color-foreground) 70%, transparent); }
 
+/* Lados invertidos (texto à esquerda, imagem à direita) */
+.lp-results--reverse .lp-collage { order: 2; }
+.lp-about--reverse { grid-template-columns: .9fr 1.1fr; }
+.lp-about--reverse .lp-about__stats { order: -1; }
+
+/* Documentação: texto à esquerda, documentos em lista à direita */
+.lp-docs { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; }
+.lp-docs .lp-signature-note { margin: 28px 0 0; max-width: none; }
+.lp-docs__list { display: grid; gap: 16px; }
+.lp-docs__list .lp-card { display: flex; align-items: flex-start; gap: 18px; padding: 22px; }
+.lp-docs__list .lp-card:hover { transform: translateX(4px); }
+.lp-docs__list .lp-card__icon { flex: none; }
+.lp-docs__list .lp-card__title { margin: 2px 0 0; }
+
 /* Grids & cards */
 .lp-grid { display: grid; gap: 20px; }
 .lp-grid--4 { grid-template-columns: repeat(4, 1fr); }
 .lp-grid--3 { grid-template-columns: repeat(3, 1fr); }
-.lp-grid--contact { grid-template-columns: repeat(4, 1fr); }
+/* Até 5 cards numa linha; com menos canais, os cards se expandem. */
+.lp-grid--contact { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; }
 .lp-card { padding: 26px; border-radius: 18px; background: var(--color-background); border: 1px solid color-mix(in srgb, var(--color-foreground) 9%, transparent); transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
 .lp-card:hover { transform: translateY(-4px); box-shadow: 0 18px 40px color-mix(in srgb, var(--color-foreground) 10%, transparent); border-color: color-mix(in srgb, var(--lp-primary) 40%, transparent); }
 .lp-card--report { background: color-mix(in srgb, var(--color-background) 100%, transparent); }
@@ -910,16 +1128,47 @@ html { scroll-behavior: smooth; }
 .lp-stat span { display: block; margin-top: 6px; font-size: .9rem; color: color-mix(in srgb, var(--lp-primary) 55%, var(--color-foreground)); }
 
 /* Contact */
-.lp-contact { display: flex; flex-direction: column; gap: 6px; padding: 24px; border-radius: 18px; text-decoration: none; color: var(--color-foreground); background: var(--color-background); border: 1px solid color-mix(in srgb, var(--color-foreground) 10%, transparent); transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
-.lp-contact:hover { transform: translateY(-4px); box-shadow: 0 18px 40px color-mix(in srgb, var(--color-foreground) 10%, transparent); border-color: color-mix(in srgb, var(--lp-primary) 40%, transparent); }
-.lp-contact__icon { display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: 14px; color: var(--lp-primary); background: color-mix(in srgb, var(--lp-primary) 12%, transparent); margin-bottom: 6px; }
+.lp-contact { display: flex; flex-direction: column; gap: 6px; padding: 20px; border-radius: 18px; min-width: 0; text-decoration: none; color: var(--color-foreground); background: var(--color-background); border: 1px solid color-mix(in srgb, var(--color-foreground) 10%, transparent); transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
+.lp-contact:is(a):hover { transform: translateY(-4px); box-shadow: 0 18px 40px color-mix(in srgb, var(--color-foreground) 10%, transparent); border-color: color-mix(in srgb, var(--lp-primary) 40%, transparent); }
+.lp-contact__icon { display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 12px; color: var(--lp-primary); background: color-mix(in srgb, var(--lp-primary) 12%, transparent); margin-bottom: 6px; }
 .lp-contact__label { font-size: 13px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: color-mix(in srgb, var(--color-foreground) 55%, transparent); }
-.lp-contact__value { font-size: 1rem; font-weight: 600; word-break: break-word; }
+.lp-contact__value { font-size: .98rem; font-weight: 600; overflow-wrap: anywhere; }
+.lp-contact__value--email { font-size: .92rem; }
+.lp-contact__value--handle { overflow-wrap: normal; }
+/* Números (1 ou 2) dentro do card de WhatsApp/Telefone, cada um clicável. */
+.lp-contact__lines { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
+.lp-contact__line { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; margin: 0 -10px; border-radius: 10px;
+  color: inherit; text-decoration: none; transition: background .2s ease; }
+.lp-contact__line:hover { background: color-mix(in srgb, var(--lp-primary) 8%, transparent); }
+.lp-contact__line svg { flex: none; color: var(--lp-primary); }
+.lp-contact__line-main { display: flex; flex-direction: column; min-width: 0; }
+.lp-contact__line-main strong { font-size: .98rem; white-space: nowrap; }
+.lp-contact__line-main small { font-size: .78rem; color: color-mix(in srgb, var(--color-foreground) 58%, transparent); overflow-wrap: anywhere; }
+.lp-contact--primary .lp-contact__line:hover { background: rgba(255, 255, 255, .14); }
+.lp-contact--primary .lp-contact__line svg { color: #fff; }
+.lp-contact--primary .lp-contact__line-main small { color: rgba(255, 255, 255, .78); }
 .lp-contact__cta { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; font-size: .9rem; font-weight: 600; color: var(--lp-primary); }
 .lp-contact__cta--static { color: color-mix(in srgb, var(--color-foreground) 55%, transparent); }
 .lp-contact--primary { background: var(--lp-primary); border-color: var(--lp-primary); color: #fff; box-shadow: 0 14px 34px color-mix(in srgb, var(--lp-primary) 34%, transparent); }
 .lp-contact--primary .lp-contact__icon { background: rgba(255,255,255,.18); color: #fff; }
 .lp-contact--primary .lp-contact__label, .lp-contact--primary .lp-contact__cta { color: rgba(255,255,255,.9); }
+
+/* Avatar com iniciais do responsável (menu do botão flutuante de WhatsApp) */
+.lp-person__avatar { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 52px; border-radius: 50%;
+  font-size: 1.05rem; font-weight: 800; letter-spacing: .02em; color: #fff;
+  background: linear-gradient(135deg, var(--lp-primary), var(--lp-secondary)); }
+.lp-person__avatar--sm { width: 38px; height: 38px; font-size: .85rem; }
+
+/* Instagram: degradê da marca só no ícone, para não brigar com a paleta da empresa */
+.lp-ig-btn { flex: none; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; color: #fff; text-decoration: none;
+  background: radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285aeb 90%);
+  box-shadow: 0 6px 16px rgba(214, 36, 159, .3); transition: transform .15s ease, box-shadow .2s ease; }
+.lp-ig-btn:hover { transform: translateY(-1px) scale(1.05); box-shadow: 0 10px 22px rgba(214, 36, 159, .4); }
+.lp-ig-btn--sm { width: 28px; height: 28px; box-shadow: none; }
+.lp-contact--instagram .lp-contact__icon { color: #fff; background: radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285aeb 90%); }
+.lp-results__content .lp-hero__cta { margin-top: 0; }
+.lp-footer__social { display: inline-flex; align-items: center; gap: 8px; margin-top: 10px; font-size: .9rem; font-weight: 600; color: var(--color-foreground); text-decoration: none; }
+.lp-footer__social:hover { color: var(--lp-primary); }
 
 /* Footer */
 .lp-footer { padding: 44px 0; border-top: 1px solid color-mix(in srgb, var(--color-foreground) 10%, transparent); }
@@ -935,6 +1184,16 @@ html { scroll-behavior: smooth; }
 .lp-footer__meta a { color: var(--lp-primary); text-decoration: none; }
 
 /* WhatsApp flutuante */
+.lp-fab-wrap { position: fixed; right: 22px; bottom: 22px; z-index: 60; display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
+.lp-fab-wrap .lp-fab { position: relative; right: auto; bottom: auto; border: 0; cursor: pointer; }
+.lp-fab-menu { display: flex; flex-direction: column; gap: 4px; min-width: 240px; padding: 10px; border-radius: 16px; background: var(--color-background);
+  border: 1px solid color-mix(in srgb, var(--color-foreground) 10%, transparent); box-shadow: 0 18px 44px rgba(8, 15, 30, .28); animation: lp-fab-in .2s ease both; }
+.lp-fab-menu__title { padding: 4px 8px 6px; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: color-mix(in srgb, var(--color-foreground) 55%, transparent); }
+.lp-fab-menu__item { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 12px; color: var(--color-foreground); text-decoration: none; }
+.lp-fab-menu__item:hover { background: color-mix(in srgb, #25d366 12%, transparent); }
+.lp-fab-menu__text { display: flex; flex-direction: column; line-height: 1.2; }
+.lp-fab-menu__text strong { font-size: .95rem; }
+.lp-fab-menu__text span { font-size: .8rem; color: color-mix(in srgb, var(--color-foreground) 60%, transparent); }
 .lp-fab { position: fixed; right: 22px; bottom: 22px; z-index: 60; display: inline-flex; align-items: center; justify-content: center; width: 58px; height: 58px; border-radius: 50%; background: #25d366; color: #fff; box-shadow: 0 10px 28px rgba(37,211,102,.45); transition: transform .2s ease, box-shadow .2s ease; animation: lp-fab-in .4s ease both; }
 .lp-fab:hover { transform: translateY(-2px) scale(1.05); box-shadow: 0 14px 34px rgba(37,211,102,.55); }
 .lp-fab::after { content: ""; position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 0 0 rgba(37,211,102,.5); animation: lp-fab-pulse 2.4s ease-out infinite; }
@@ -943,13 +1202,14 @@ html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) { .lp-fab, .lp-fab::after { animation: none; } }
 
 /* Anchor offset */
-#servicos, #resultados, #preventiva, #relatorios, #empresa, #contato, #inicio { scroll-margin-top: 84px; }
+#servicos, #resultados, #preventiva, #empresa, #relatorios, #contato, #inicio { scroll-margin-top: 84px; }
 
 /* Responsive */
 @media (max-width: 940px) {
-  .lp-hero__inner { grid-template-columns: 1fr; gap: 36px; }
-  .lp-hero__visual { order: -1; }
-  .lp-about { grid-template-columns: 1fr; gap: 32px; }
+  .lp-about, .lp-about--reverse { grid-template-columns: 1fr; gap: 32px; }
+  .lp-about--reverse .lp-about__stats { order: 0; }
+  .lp-results--reverse .lp-collage { order: -1; }
+  .lp-docs { grid-template-columns: 1fr; gap: 32px; }
   .lp-grid--4 { grid-template-columns: repeat(2, 1fr); }
   .lp-grid--contact { grid-template-columns: repeat(2, 1fr); }
   .lp-svc-grid { grid-template-columns: repeat(2, 1fr); }
@@ -969,7 +1229,8 @@ html { scroll-behavior: smooth; }
   .lp-mobile-menu { display: flex; }
   .lp-grid--3 { grid-template-columns: 1fr; }
   .lp-section { padding: 60px 0; }
-  .lp-hero { padding: 48px 0 60px; }
+  .lp-hero { padding: 28px 0 60px; }
+  .lp-ac { max-width: 360px; }
 }
 @media (max-width: 480px) {
   .lp-grid--4, .lp-grid--contact { grid-template-columns: 1fr; }

@@ -42,7 +42,7 @@ async function showNotification(fresh: Assignment[]): Promise<void> {
   const options: NotificationOptions = {
     body,
     tag: "assignment-assigned",
-    icon: "/icons/operator-icon.svg",
+    icon: "/icons/icon-192.png",
   };
   try {
     const registration = await navigator.serviceWorker?.getRegistration?.();

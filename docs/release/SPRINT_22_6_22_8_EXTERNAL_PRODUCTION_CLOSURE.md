@@ -85,7 +85,7 @@ Active database protection actions:
 Migration status:
 
 - Prisma schema loaded from `prisma/schema.prisma`.
-- Database: `climatize_db`.
+- Database: `minha_empresa_db`.
 - Migrations found: 23.
 - Result: `Database schema is up to date!`
 

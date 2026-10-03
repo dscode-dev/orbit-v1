@@ -1408,7 +1408,7 @@ Seed:
 
 Dados reais nas entidades existentes:
 
-- organização Climatize Refrigeração em instalação vazia/bootstrap;
+- organização Minha Empresa em instalação vazia/bootstrap;
 - usuários `ninja`, `ricardo`, `joao`, `maria`, `financeiro`;
 - preferências e permissões para contas criadas.
 

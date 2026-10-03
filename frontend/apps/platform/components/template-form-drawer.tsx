@@ -8,6 +8,7 @@
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Drawer } from "@erp/ui/drawer";
+import { useAuth } from "@erp/ui/auth/auth-provider";
 import { organizationApi, signaturesApi, ApiClientError, type DocumentTemplate, type DocumentTemplateType, type Signature, type SignatureMode } from "@erp/api";
 
 type FormState = {
@@ -42,6 +43,7 @@ export function TemplateFormDrawer({
   template?: DocumentTemplate | null;
 }) {
   const isEdit = Boolean(template);
+  const orgName = useAuth().session?.organization.tradeName;
   const [form, setForm] = useState<FormState>(blank());
   const [signatures, setSignatures] = useState<Signature[]>([]);
   const [saving, setSaving] = useState(false);
@@ -68,13 +70,13 @@ export function TemplateFormDrawer({
             executionSignatureTechnician: template.executionSignatureTechnician ?? false,
             executionSignatureOperator: template.executionSignatureOperator ?? false,
           }
-        : { ...blank(), name: `${typeLabel} — Climatize` },
+        : { ...blank(), name: orgName ? `${typeLabel} — ${orgName}` : typeLabel },
     );
     signaturesApi
       .listSignatures({ active: true, limit: 100 })
       .then((result) => setSignatures(result.items))
       .catch(() => setSignatures([]));
-  }, [open, template, typeLabel]);
+  }, [open, template, typeLabel, orgName]);
 
   function set<K extends keyof FormState>(k: K, v: FormState[K]) {
     setForm((f) => ({ ...f, [k]: v }));

@@ -1,5 +1,5 @@
 import { CommissionMode, CommissionPeriod } from '@prisma/client';
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
@@ -13,6 +13,8 @@ import {
   Length,
   Matches,
   MaxLength,
+  MinLength,
+  ValidateNested,
 } from 'class-validator';
 
 function trim(value: unknown): unknown {
@@ -36,6 +38,32 @@ function normalizedStringArray(value: unknown): unknown {
     .filter((item): item is string => typeof item === 'string')
     .map((item) => item.trim())
     .filter((item) => item.length > 0);
+}
+
+/** Telefone com 8 a 15 dígitos (com ou sem DDI), aceitando máscara comum. */
+const CONTACT_PHONE_PATTERN = /^\+?[\d\s().-]{8,30}$/;
+
+export class OrganizationContactDto {
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  name!: string;
+
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(80)
+  role?: string;
+
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @Matches(CONTACT_PHONE_PATTERN, { message: 'Telefone do responsável inválido' })
+  phone!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isWhatsapp?: boolean;
 }
 
 export class UpdateOrganizationDto {
@@ -82,6 +110,17 @@ export class UpdateOrganizationDto {
   @IsString({ each: true })
   @MaxLength(30, { each: true })
   phoneNumbers?: string[];
+
+  /**
+   * Responsáveis de contato, na ordem de exibição. Substitui a lista inteira
+   * (envie `[]` para remover todos); omitido, a lista atual é mantida.
+   */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(5)
+  @ValidateNested({ each: true })
+  @Type(() => OrganizationContactDto)
+  contacts?: OrganizationContactDto[];
 
   @IsOptional()
   @Transform(({ value }) => lowercase(value))

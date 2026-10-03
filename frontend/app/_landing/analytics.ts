@@ -27,13 +27,13 @@ export const WHATSAPP_CONVERSION_LABEL =
   process.env.NEXT_PUBLIC_GOOGLE_ADS_WHATSAPP_LABEL ?? "";
 
 /** Onde a resposta do banner de cookies é guardada. */
-export const CONSENT_STORAGE_KEY = "climatize:cookie-consent";
+export const CONSENT_STORAGE_KEY = "lp:cookie-consent";
 
 /** Evento interno: o banner avisa a tag para entrar/sair sem recarregar. */
-export const CONSENT_EVENT = "climatize:consent-changed";
+export const CONSENT_EVENT = "lp:consent-changed";
 
 /** Evento interno: pedido de reabrir o banner para rever a escolha. */
-export const CONSENT_OPEN_EVENT = "climatize:consent-open";
+export const CONSENT_OPEN_EVENT = "lp:consent-open";
 
 export type ConsentChoice = "granted" | "denied";
 

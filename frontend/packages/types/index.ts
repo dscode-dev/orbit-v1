@@ -383,6 +383,16 @@ export type DocumentTemplateType =
 
 export type SignatureMode = 'NONE' | 'FIXED' | 'COLLECTED' | 'HYBRID';
 
+/** Responsável de contato da organização (exibido na landing). */
+export type OrganizationContact = {
+  id: string;
+  name: string;
+  role: string | null;
+  phone: string;
+  isWhatsapp: boolean;
+  position: number;
+};
+
 export type Organization = {
   id: string;
   legalName: string;
@@ -404,8 +414,18 @@ export type Organization = {
   secondaryColor: string;
   segment: string | null;
   isActive: boolean;
+  /** Ordenados por `position`; o primeiro com WhatsApp é o contato principal. */
+  contacts: OrganizationContact[];
   createdAt: string;
   updatedAt: string;
+};
+
+/** Responsável na vitrine pública. `whatsapp` vem pronto para o wa.me (ou null). */
+export type PublicCompanyContact = {
+  name: string;
+  role: string | null;
+  phone: string;
+  whatsapp: string | null;
 };
 
 /** Vitrine pública da empresa (landing page) — somente dados não sigilosos. */
@@ -414,7 +434,11 @@ export type PublicCompanyProfile = {
   segment: string | null;
   email: string;
   phones: string[];
+  /** WhatsApp principal: do primeiro responsável que usa, senão o telefone geral. */
   whatsapp: string | null;
+  contacts: PublicCompanyContact[];
+  /** Perfil do Instagram (ORGANIZATION_INSTAGRAM na API) ou null quando não divulga. */
+  instagram: { handle: string; url: string } | null;
   website: string | null;
   city: string;
   state: string;
@@ -599,6 +623,8 @@ export type UpdateOrganizationPayload = Partial<{
   email: string;
   phone: string;
   phoneNumbers: string[];
+  /** Substitui a lista inteira, na ordem enviada. */
+  contacts: Array<{ name: string; role?: string; phone: string; isWhatsapp?: boolean }>;
   website: string;
   zipCode: string;
   street: string;

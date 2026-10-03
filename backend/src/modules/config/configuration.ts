@@ -26,6 +26,8 @@ export interface EnvironmentVariables {
   RATE_LIMIT_TTL_MS: number;
   RATE_LIMIT_MAX: number;
   LOG_LEVEL: 'debug' | 'info' | 'warn' | 'error';
+  /** Usuário do Instagram da empresa (sem @), exibido na landing. Opcional. */
+  ORGANIZATION_INSTAGRAM: string | null;
 }
 
 const REQUIRED_VARIABLES = [
@@ -104,6 +106,28 @@ function parseCorsOrigins(rawOrigins: string): string[] {
   }
 
   return [...new Set(origins)];
+}
+
+/**
+ * Aceita `@usuario`, `usuario` ou a URL do perfil e devolve só o usuário. Vazio
+ * ou ausente desliga o Instagram na landing (nem toda empresa usa).
+ */
+export function parseInstagramHandle(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string') {
+    throw new Error('ORGANIZATION_INSTAGRAM must be a string');
+  }
+  const raw = value.trim();
+  if (raw === '') return null;
+  const handle = raw
+    .replace(/^https?:\/\/(www\.)?instagram\.com\//i, '')
+    .replace(/^@/, '')
+    .replace(/[/?#].*$/, '');
+  // Regras do Instagram: até 30 caracteres entre letras, números, ponto e _.
+  if (!/^[A-Za-z0-9._]{1,30}$/.test(handle)) {
+    throw new Error('ORGANIZATION_INSTAGRAM must be a valid Instagram username (e.g. @minhaempresa)');
+  }
+  return handle;
 }
 
 function assertProductionSecret(value: string, key: string): void {
@@ -220,5 +244,6 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
       'RATE_LIMIT_MAX',
     ),
     LOG_LEVEL: logLevel as EnvironmentVariables['LOG_LEVEL'],
+    ORGANIZATION_INSTAGRAM: parseInstagramHandle(config.ORGANIZATION_INSTAGRAM),
   };
 }

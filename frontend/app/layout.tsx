@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import { ThemeProvider } from "@erp/ui/theme/theme-provider";
 import { AppProviders } from "./app-providers";
+import { BRAND } from "./brand";
 import "./globals.css";
 
 /**
@@ -16,8 +17,12 @@ import "./globals.css";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Climatize - ERP",
-  description: "Plataforma de gestão e operação de campo.",
+  title: BRAND.name,
+  description: `Plataforma de gestão e operação de campo da ${BRAND.name}.`,
+  applicationName: BRAND.shortName,
+  // iOS não lê o manifest: título e modo "app" do atalho na tela inicial vêm daqui
+  // (o ícone vem de app/apple-icon.png).
+  appleWebApp: { capable: true, title: BRAND.shortName, statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {
@@ -26,7 +31,8 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
-};  
+  themeColor: BRAND.themeColor,
+};
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // O `next-themes` injeta um script inline para aplicar o tema antes da

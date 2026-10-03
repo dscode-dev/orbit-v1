@@ -255,9 +255,10 @@ export function PreventiveBenefitsSection() {
       <div className="lp-container">
         <header className="lp-section__head" data-reveal>
           <span className="lp-eyebrow">Manutenção preventiva</span>
-          <h2 className="lp-section__title">Por que a preventiva vale a pena</h2>
+          <h2 className="lp-section__title">Prevenir sai mais barato que consertar</h2>
           <p className="lp-section__sub">
-            Os ganhos de manter o ar-condicionado em dia — do bolso à saúde de quem usa o ambiente.
+            Veja o que muda quando o ar-condicionado recebe cuidado no tempo certo — na conta de
+            luz, na vida útil do aparelho e no ar que você respira.
           </p>
         </header>
 

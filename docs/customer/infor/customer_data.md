@@ -1,16 +1,16 @@
-Climatize Refrigeração LTDA
+Minha Empresa LTDA
 
 Informações da Empresa
 
 Campo	Informação
-Razão Social	Climatize Refrigeração LTDA
-Nome Fantasia	Climatize Refrigeração LTDA
-CNPJ	21.505.237/0001-02
+Razão Social	Minha Empresa LTDA
+Nome Fantasia	Minha Empresa
+CNPJ	00.000.000/0000-00
 Segmento	Serviços Técnicos em Refrigeração
-Telefone	(81) 98789-4836
-E-mail	climatize-ar@hotmail.com
-Cidade	Paulista
-Estado	Pernambuco
+Telefone	(11) 4000-0000
+E-mail	contato@minhaempresa.com.br
+Cidade	São Paulo
+Estado	São Paulo
 Quantidade de Colaboradores	4
 
 ⸻
@@ -18,10 +18,10 @@ Quantidade de Colaboradores	4
 Endereço
 
 Campo	Informação
-Logradouro	Rua Arquiteto José Geraldo de Castro Paes, 457
-Bairro	Pau Amarelo
-Cidade	Paulista
-Estado	Pernambuco
+Logradouro	Rua Exemplo, 100
+Bairro	Centro
+Cidade	São Paulo
+Estado	São Paulo
 
 ⸻
 
@@ -29,7 +29,7 @@ Identidade Visual
 
 Campo	Informação
 Cores da Marca	Azul e Branco
-Domínio/Subdomínio	climatize.com.br
+Domínio/Subdomínio	minhaempresa.com.br
 
 ⸻
 
@@ -70,10 +70,10 @@ Tipos de Equipamentos Atendidos
 Equipe Operacional
 
 Colaborador	Função
-Pablo	Operador
-Daniel	Operador
-Emerson	Operador
-Danielle	Administrativo
+Operador 1	Operador
+Operador 2	Operador
+Operador 3	Operador
+Administrativo 1	Administrativo
 
 ⸻
 
@@ -83,8 +83,8 @@ Acesso Financeiro
 
 Os seguintes usuários poderão visualizar informações financeiras:
 
-* Daniel
-* Danielle
+* Operador 2
+* Administrativo 1
 
 ⸻
 
@@ -92,8 +92,8 @@ Assinatura de Documentos
 
 Os seguintes usuários poderão assinar documentos emitidos pelo sistema:
 
-* Pablo
-* Daniel
+* Operador 1
+* Operador 2
 
 ⸻
 
@@ -127,6 +127,6 @@ Implementar uma plataforma operacional capaz de:
 
 Observações
 
-A Climatize Refrigeração atua no segmento de serviços técnicos em climatização, realizando projetos, instalações e manutenções em sistemas de refrigeração e ar-condicionado.
+A Minha Empresa atua no segmento de serviços técnicos em climatização, realizando projetos, instalações e manutenções em sistemas de refrigeração e ar-condicionado.
 
 O sistema ERP deverá ser configurado inicialmente para atender as necessidades operacionais da empresa, servindo posteriormente como base para novos clientes do modelo ERP Operation.

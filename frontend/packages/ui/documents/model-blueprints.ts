@@ -33,7 +33,7 @@ type Blueprint = {
   label: string;
   description: string;
   templateType: DocumentTemplateType;
-  build: (ctx: ModelContext) => { sections: DocPaperSection[]; signatures: { name: string; role: string }[] };
+  build: (ctx: ModelContext, org: OrgInfo) => { sections: DocPaperSection[]; signatures: { name: string; role: string }[] };
 };
 
 export const MODEL_BLUEPRINTS: Blueprint[] = [
@@ -101,13 +101,13 @@ export const MODEL_BLUEPRINTS: Blueprint[] = [
     label: "Orçamento",
     description: "Proposta comercial para aprovação do cliente.",
     templateType: "QUOTE",
-    build: (c) => ({
+    build: (c, org) => ({
       sections: [
         { title: "Itens do orçamento", kind: "table", columns: ["Descrição", "Qtd", "Valor"], rows: [["Mão de obra técnica", "1", formatCurrencyBRL((c.value ?? 2400) * 0.6)], ["Materiais e peças", "1", formatCurrencyBRL((c.value ?? 2400) * 0.4)]], total: formatCurrencyBRL(c.value ?? 2400) },
         { title: "Condições comerciais", kind: "list", items: ["Pagamento: 50% na aprovação, 50% na entrega", "Garantia de 90 dias sobre o serviço", "Prazo de execução: a combinar"] },
         { title: "Validade", kind: "fields", fields: [{ label: "Validade da proposta", value: "7 dias" }, { label: "Emissão", value: formatDate(c.date) }] },
       ],
-      signatures: [{ name: "Responsável comercial", role: "Climatize" }],
+      signatures: [{ name: "Responsável comercial", role: org.name }],
     }),
   },
   {
@@ -115,13 +115,13 @@ export const MODEL_BLUEPRINTS: Blueprint[] = [
     label: "Recibo",
     description: "Comprovante de pagamento do serviço.",
     templateType: "RECEIPT",
-    build: (c) => ({
+    build: (c, org) => ({
       sections: [
         { title: "Recebemos de", kind: "fields", fields: [{ label: "Cliente", value: c.customer }, { label: "Data", value: formatDate(c.date) }] },
         { title: "Referente a", kind: "text", text: `Pagamento referente ao serviço técnico no equipamento ${c.equipment ?? "—"}.` },
         { title: "Valor", kind: "fields", fields: [{ label: "Valor recebido", value: formatCurrencyBRL(c.value ?? 2750) }, { label: "Forma de pagamento", value: "PIX / Transferência" }] },
       ],
-      signatures: [{ name: "Climatize Refrigeração", role: "Recebedor" }],
+      signatures: [{ name: org.name, role: "Recebedor" }],
     }),
   },
 ];
@@ -131,7 +131,7 @@ export function blueprintByType(type: DocumentTemplateType): Blueprint {
 }
 
 export function buildDocument(blueprint: Blueprint, ctx: ModelContext, org: OrgInfo): DocPaperData {
-  const { sections, signatures } = blueprint.build(ctx);
+  const { sections, signatures } = blueprint.build(ctx, org);
   return {
     kindLabel: blueprint.label,
     number: ctx.number,

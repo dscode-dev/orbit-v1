@@ -70,6 +70,7 @@ async function main(): Promise<void> {
   // The whole application assumes a single Organization exists (profile, settings,
   // templates all resolve `findFirst`). Guarantee one so first login works.
   await ensureDefaultOrganization();
+  await ensureOrganizationContacts();
   await ensureEquipmentTypeDefaults();
   await ensureActivePmocTemplate();
   await ensureRvtChecklistDefaults();
@@ -298,6 +299,73 @@ async function ensureActivePmocTemplate(): Promise<void> {
   });
   process.stdout.write(
     `${JSON.stringify({ event: 'pmoc_default_template_created', organizationId: organization.id })}\n`,
+  );
+}
+
+type OrganizationContactInput = {
+  name: string;
+  role: string | null;
+  phone: string;
+  isWhatsapp: boolean;
+};
+
+/**
+ * Responsáveis de contato da landing, opcionais. Formato em ORGANIZATION_CONTACTS:
+ * contatos separados por `;` e campos por `|` — `Nome|Função|Telefone|whatsapp`.
+ * Função pode ficar vazia; o último campo é opcional (`sim`/`nao`, padrão `sim`).
+ * Ex.: `Ana Souza|Comercial|(81) 99999-0000;Bruno Lima|Técnico|(81) 98888-0000`
+ */
+function organizationContactsInput(): OrganizationContactInput[] {
+  const raw = process.env.ORGANIZATION_CONTACTS?.trim();
+  if (!raw) return [];
+  const contacts = raw
+    .split(';')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry, index) => {
+      const [name = '', role = '', phone = '', whatsapp = ''] = entry.split('|').map((part) => part.trim());
+      if (name.length < 2 || name.length > 120) {
+        throw new Error(`ORGANIZATION_CONTACTS[${index}]: name must contain between 2 and 120 characters`);
+      }
+      if (role.length > 80) {
+        throw new Error(`ORGANIZATION_CONTACTS[${index}]: role must contain at most 80 characters`);
+      }
+      if (!/^\+?[\d\s().-]{8,30}$/.test(phone)) {
+        throw new Error(`ORGANIZATION_CONTACTS[${index}]: phone must be a valid phone number`);
+      }
+      return {
+        name,
+        role: role || null,
+        phone,
+        isWhatsapp: !/^(n|nao|não|no|false|0)$/i.test(whatsapp),
+      };
+    });
+  if (contacts.length > 5) throw new Error('ORGANIZATION_CONTACTS accepts at most 5 contacts');
+  return contacts;
+}
+
+/**
+ * Cria os responsáveis de contato a partir do ambiente. Idempotente: só age
+ * quando a organização ainda não tem nenhum (depois disso, quem manda é a tela
+ * de Configurações) — e nada faz se ORGANIZATION_CONTACTS não estiver definido.
+ */
+async function ensureOrganizationContacts(): Promise<void> {
+  const contacts = organizationContactsInput();
+  if (contacts.length === 0) return;
+  const organization = await prisma.organization.findFirst({
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, _count: { select: { contacts: true } } },
+  });
+  if (!organization || organization._count.contacts > 0) return;
+  await prisma.organizationContact.createMany({
+    data: contacts.map((contact, position) => ({
+      organizationId: organization.id,
+      ...contact,
+      position,
+    })),
+  });
+  process.stdout.write(
+    `${JSON.stringify({ event: 'organization_contacts_created', organizationId: organization.id, count: contacts.length })}\n`,
   );
 }
 

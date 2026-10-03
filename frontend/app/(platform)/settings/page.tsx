@@ -14,6 +14,8 @@ import {
   PenLine,
   Trash2,
   Download,
+  Plus,
+  UserRound,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { PageHeader } from '@platform/components/page-header';
@@ -31,6 +33,7 @@ import {
   ApiClientError,
   type BrandAssetType,
   type Organization,
+  type OrganizationContact,
   type OrganizationSettings,
   type Signature,
 } from '@erp/api';
@@ -267,6 +270,14 @@ function OrganizationSection({
         email: form.email,
         phone: form.phone,
         phoneNumbers: form.phoneNumbers,
+        contacts: form.contacts
+          .map((contact) => ({
+            name: contact.name.trim(),
+            role: contact.role?.trim() || undefined,
+            phone: contact.phone.trim(),
+            isWhatsapp: contact.isWhatsapp,
+          }))
+          .filter((contact) => contact.name || contact.phone),
         city: form.city,
         state: form.state,
         website: form.website ?? undefined,
@@ -416,6 +427,11 @@ function OrganizationSection({
           disabled={!canEdit}
         />
       </div>
+      <ContactsEditor
+        contacts={form.contacts}
+        onChange={(contacts) => set('contacts', contacts)}
+        disabled={!canEdit}
+      />
     </SectionCard>
   );
 }
@@ -1189,6 +1205,124 @@ function hasCanvasInk(canvas: HTMLCanvasElement): boolean {
 }
 
 /* ---------- Inputs ---------- */
+
+const MAX_CONTACTS = 5;
+
+/**
+ * Responsáveis de contato exibidos na landing (nome, função e telefone de cada
+ * um). A ordem importa: o primeiro com WhatsApp recebe os botões gerais da página.
+ */
+function ContactsEditor({
+  contacts,
+  onChange,
+  disabled,
+}: {
+  contacts: OrganizationContact[];
+  onChange: (contacts: OrganizationContact[]) => void;
+  disabled?: boolean;
+}) {
+  function update(index: number, patch: Partial<OrganizationContact>) {
+    onChange(contacts.map((contact, i) => (i === index ? { ...contact, ...patch } : contact)));
+  }
+  function add() {
+    onChange([
+      ...contacts,
+      {
+        id: `new-${Date.now()}`,
+        name: '',
+        role: null,
+        phone: '',
+        isWhatsapp: true,
+        position: contacts.length,
+      },
+    ]);
+  }
+
+  return (
+    <div className="mt-6 border-t border-[var(--color-border)] pt-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold">Responsáveis de contato</h3>
+          <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
+            Aparecem na página inicial, cada um com seu telefone e WhatsApp. O primeiro com
+            WhatsApp é o contato principal dos botões da página.
+          </p>
+        </div>
+        {!disabled && contacts.length < MAX_CONTACTS && (
+          <button
+            type="button"
+            onClick={add}
+            className="inline-flex items-center gap-1.5 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 h-9 text-sm hover:bg-[var(--color-muted)]"
+          >
+            <Plus className="h-4 w-4" /> Adicionar responsável
+          </button>
+        )}
+      </div>
+
+      {contacts.length === 0 ? (
+        <p className="mt-3 rounded-[var(--radius-md)] border border-dashed border-[var(--color-border)] px-3 py-4 text-center text-sm text-[var(--color-muted-foreground)]">
+          Nenhum responsável cadastrado — a página inicial usa o telefone da organização.
+        </p>
+      ) : (
+        <ul className="mt-3 space-y-3">
+          {contacts.map((contact, index) => (
+            <li
+              key={contact.id}
+              className="rounded-[var(--radius-md)] border border-[var(--color-border)] p-3"
+            >
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--color-muted-foreground)]">
+                  <UserRound className="h-3.5 w-3.5" /> Responsável {index + 1}
+                  {index === 0 && ' · principal'}
+                </span>
+                {!disabled && (
+                  <button
+                    type="button"
+                    onClick={() => onChange(contacts.filter((_, i) => i !== index))}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10"
+                    aria-label={`Remover responsável ${index + 1}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Input
+                  label="Nome"
+                  value={contact.name}
+                  onChange={(v) => update(index, { name: v })}
+                  disabled={disabled}
+                />
+                <Input
+                  label="Função (opcional)"
+                  value={contact.role ?? ''}
+                  onChange={(v) => update(index, { role: v })}
+                  disabled={disabled}
+                />
+                <Input
+                  label="Telefone"
+                  value={contact.phone}
+                  onChange={(v) => update(index, { phone: v })}
+                  disabled={disabled}
+                />
+              </div>
+              <label className="mt-2 inline-flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={contact.isWhatsapp}
+                  onChange={(e) => update(index, { isWhatsapp: e.target.checked })}
+                  disabled={disabled}
+                  className="h-4 w-4 accent-[var(--color-primary)]"
+                />
+                Este número atende pelo WhatsApp
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 function SaveButton({
   saving,

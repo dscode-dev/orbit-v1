@@ -646,8 +646,28 @@ model Organization {
   rvtPlans               RvtPlan[]
   customerPortalAccounts CustomerPortalAccount[]
   customerServiceTickets CustomerServiceTicket[]
+  contacts               OrganizationContact[]
 
   @@map("organizations")
+}
+
+/// Responsáveis/canais de contato exibidos na landing (ex.: dois sócios, cada
+/// um com o próprio telefone/WhatsApp). A ordem (`position`) define o contato
+/// principal: o primeiro com WhatsApp recebe os botões gerais da página.
+model OrganizationContact {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  name           String       @db.VarChar(120)
+  role           String?      @db.VarChar(80)
+  phone          String       @db.VarChar(30)
+  isWhatsapp     Boolean      @default(true) @map("is_whatsapp")
+  position       Int          @default(0)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, position])
+  @@map("organization_contacts")
 }
 
 model OrganizationSettings {

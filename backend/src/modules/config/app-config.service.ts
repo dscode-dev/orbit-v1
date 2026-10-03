@@ -74,6 +74,11 @@ export class AppConfigService {
     return this.configService.get('LOG_LEVEL', { infer: true });
   }
 
+  /** Usuário do Instagram (sem @) ou null quando a empresa não divulga. */
+  get organizationInstagram(): string | null {
+    return this.configService.get('ORGANIZATION_INSTAGRAM', { infer: true });
+  }
+
   get nodeEnv(): EnvironmentVariables['NODE_ENV'] {
     return this.configService.get('NODE_ENV', { infer: true });
   }

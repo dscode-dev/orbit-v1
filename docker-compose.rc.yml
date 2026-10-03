@@ -36,6 +36,7 @@ services:
       RATE_LIMIT_TTL_MS: ${RATE_LIMIT_TTL_MS:-60000}
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      ORGANIZATION_INSTAGRAM: ${ORGANIZATION_INSTAGRAM:-}
     volumes:
       - api-storage:/app/storage
     depends_on:

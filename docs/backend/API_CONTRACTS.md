@@ -2841,8 +2841,8 @@ Response 200:
       "timezone": "America/Recife",
       "currency": "BRL",
       "organization": {
-        "legalName": "Climatize Nordeste LTDA",
-        "tradeName": "Climatize Nordeste",
+        "legalName": "Minha Empresa LTDA",
+        "tradeName": "Minha Empresa",
         "cnpj": "00.000.000/0001-00",
         "email": "contato@example.com",
         "phone": "+55 81 99999-9999",
@@ -2855,11 +2855,11 @@ Response 200:
     "header": {
       "title": "Ordem de Serviço",
       "subtitle": "Operação 000001",
-      "organizationName": "Climatize Nordeste",
+      "organizationName": "Minha Empresa",
       "documentNumber": "OS-000001"
     },
     "footer": {
-      "content": "Gerado por Climatize Nordeste · contato@example.com",
+      "content": "Gerado por Minha Empresa · contato@example.com",
       "generatedAt": "2026-06-29T10:00:00.000Z"
     },
     "sections": []
@@ -2906,8 +2906,8 @@ Response 200:
       "timezone": "America/Recife",
       "currency": "BRL",
       "organization": {
-        "legalName": "Climatize Nordeste LTDA",
-        "tradeName": "Climatize Nordeste",
+        "legalName": "Minha Empresa LTDA",
+        "tradeName": "Minha Empresa",
         "cnpj": "00.000.000/0001-00",
         "email": "contato@example.com",
         "phone": "+55 81 99999-9999",
@@ -2920,7 +2920,7 @@ Response 200:
     "header": {
       "title": "OS padrão",
       "subtitle": "Pré-visualização de modelo",
-      "organizationName": "Climatize Nordeste",
+      "organizationName": "Minha Empresa",
       "documentNumber": "MODELO-WORK_ORDER"
     },
     "footer": {
@@ -3727,8 +3727,8 @@ Response 200:
         "observations": "PMOC anual",
         "organization": {
           "id": "d8996dbb-a64f-4e51-9a72-951f10c0f36d",
-          "legalName": "Climatize Refrigeração LTDA",
-          "tradeName": "Climatize"
+          "legalName": "Minha Empresa LTDA",
+          "tradeName": "Minha Empresa"
         },
         "customer": {
           "id": "20ebef96-bc68-4d3e-9272-7c9383df2232",

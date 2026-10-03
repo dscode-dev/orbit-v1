@@ -2,6 +2,7 @@ import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { BrandAssetType, Prisma, SignatureMode, type DocumentTemplateType } from '@prisma/client';
 import { extname } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { AppConfigService } from '../config/app-config.service';
 import { PrismaService } from '../database/prisma.service';
 import {
   ALLOWED_BRAND_ASSET_EXTENSIONS,
@@ -27,11 +28,32 @@ import type {
 } from './dto/document-template.dto';
 import type { UploadedAssetFile } from './types/uploaded-file.type';
 
+/** wa.me exige só dígitos com DDI; assume Brasil (55) quando o número não o inclui. */
+function toWhatsappNumber(phone: string | null | undefined): string | null {
+  const digits = phone?.replace(/\D/g, '') ?? '';
+  if (!digits) return null;
+  return digits.length > 11 ? digits : `55${digits}`;
+}
+
 export interface RequestAuditContext {
   requestId: string;
   ip: string | null;
   userAgent: string | null;
 }
+
+const CONTACT_SELECT = {
+  id: true,
+  name: true,
+  role: true,
+  phone: true,
+  isWhatsapp: true,
+  position: true,
+} satisfies Prisma.OrganizationContactSelect;
+
+const CONTACTS_INCLUDE = {
+  orderBy: { position: 'asc' as const },
+  select: CONTACT_SELECT,
+};
 
 const ORGANIZATION_SELECT = {
   id: true,
@@ -54,6 +76,7 @@ const ORGANIZATION_SELECT = {
   secondaryColor: true,
   segment: true,
   isActive: true,
+  contacts: CONTACTS_INCLUDE,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.OrganizationSelect;
@@ -74,6 +97,7 @@ const PUBLIC_ORGANIZATION_SELECT = {
   state: true,
   primaryColor: true,
   secondaryColor: true,
+  contacts: CONTACTS_INCLUDE,
 } satisfies Prisma.OrganizationSelect;
 
 const SETTINGS_SELECT = {
@@ -140,13 +164,26 @@ export interface AssetContentResponse extends AssetResponse {
   contentBase64: string;
 }
 
+/** Responsável de contato na vitrine pública. */
+export interface PublicOrganizationContact {
+  name: string;
+  role: string | null;
+  phone: string;
+  /** Número no formato do wa.me (só dígitos, com DDI) ou null se não usa WhatsApp. */
+  whatsapp: string | null;
+}
+
 /** Perfil público (landing page) — somente vitrine e contato. */
 export interface PublicOrganizationProfile {
   name: string;
   segment: string | null;
   email: string;
   phones: string[];
+  /** WhatsApp principal: do primeiro responsável que usa, senão o telefone geral. */
   whatsapp: string | null;
+  contacts: PublicOrganizationContact[];
+  /** Perfil do Instagram (ORGANIZATION_INSTAGRAM) ou null quando não configurado. */
+  instagram: { handle: string; url: string } | null;
   website: string | null;
   city: string;
   state: string;
@@ -160,6 +197,7 @@ export class OrganizationService {
     private readonly prisma: PrismaService,
     @Inject(STORAGE_PROVIDER_TOKEN)
     private readonly storage: StorageProviderContract,
+    private readonly config: AppConfigService,
   ) {}
 
   async getOrganization(): Promise<OrganizationResponse> {
@@ -183,23 +221,27 @@ export class OrganizationService {
         HttpStatus.NOT_FOUND,
       );
     }
-    const phones = [org.phone, ...org.phoneNumbers]
+    const contacts: PublicOrganizationContact[] = org.contacts.map((contact) => ({
+      name: contact.name,
+      role: contact.role ?? null,
+      phone: contact.phone,
+      whatsapp: contact.isWhatsapp ? toWhatsappNumber(contact.phone) : null,
+    }));
+    const phones = [org.phone, ...org.phoneNumbers, ...org.contacts.map((contact) => contact.phone)]
       .map((value) => value?.trim())
       .filter((value): value is string => Boolean(value));
     const uniquePhones = Array.from(new Set(phones));
-    const primaryDigits = uniquePhones[0]?.replace(/\D/g, '') ?? '';
-    // wa.me exige DDI; assume Brasil (55) quando o número não o inclui.
-    const whatsapp = primaryDigits
-      ? primaryDigits.length > 11
-        ? primaryDigits
-        : `55${primaryDigits}`
-      : null;
+    const whatsapp =
+      contacts.find((contact) => contact.whatsapp)?.whatsapp ??
+      (contacts.length === 0 ? toWhatsappNumber(uniquePhones[0]) : null);
     return {
       name: org.tradeName,
       segment: org.segment ?? null,
       email: org.email,
       phones: uniquePhones,
       whatsapp,
+      contacts,
+      instagram: this.instagramProfile(),
       website: org.website ?? null,
       city: org.city,
       state: org.state,
@@ -214,10 +256,28 @@ export class OrganizationService {
     context: RequestAuditContext,
   ): Promise<OrganizationResponse> {
     const organization = await this.getSingleOrganizationOrThrow();
+    const { contacts, ...organizationData } = dto;
     return this.prisma.$transaction(async (transaction) => {
       const updated = await transaction.organization.update({
         where: { id: organization.id },
-        data: dto,
+        data: {
+          ...organizationData,
+          // A lista é substituída inteira: a ordem recebida vira `position`.
+          ...(contacts === undefined
+            ? {}
+            : {
+                contacts: {
+                  deleteMany: {},
+                  create: contacts.map((contact, position) => ({
+                    name: contact.name,
+                    role: contact.role || null,
+                    phone: contact.phone,
+                    isWhatsapp: contact.isWhatsapp ?? true,
+                    position,
+                  })),
+                },
+              }),
+        },
         select: ORGANIZATION_SELECT,
       });
       await transaction.auditLog.create({
@@ -534,6 +594,11 @@ export class OrganizationService {
     ]);
     await this.storage.delete(asset.storageKey);
     return { deleted: true };
+  }
+
+  private instagramProfile(): PublicOrganizationProfile['instagram'] {
+    const handle = this.config.organizationInstagram;
+    return handle ? { handle, url: `https://www.instagram.com/${handle}/` } : null;
   }
 
   private async getSingleOrganizationOrThrow(): Promise<OrganizationResponse> {
