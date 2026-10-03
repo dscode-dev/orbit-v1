@@ -49,7 +49,17 @@ const GOOGLE_CONVERSION = [
   "https://googleads.g.doubleclick.net",
 ];
 
-function buildCsp(nonce: string): string {
+/**
+ * Se a requisição chegou por HTTPS. Atrás de proxy reverso o protocolo real
+ * vem no `x-forwarded-proto`; sem proxy, basta a própria URL.
+ */
+function isHttps(request: NextRequest): boolean {
+  const forwarded = request.headers.get("x-forwarded-proto");
+  if (forwarded) return forwarded.split(",")[0].trim() === "https";
+  return request.nextUrl.protocol === "https:";
+}
+
+function buildCsp(nonce: string, https: boolean): string {
   const directives: Record<string, string[]> = {
     "default-src": ["'self'"],
     // `strict-dynamic` faz o browser ignorar a allowlist de hosts e confiar
@@ -95,14 +105,18 @@ function buildCsp(nonce: string): string {
     .map(([directive, values]) => `${directive} ${values.join(" ")}`)
     .join("; ");
 
-  return IS_DEV ? serialized : `${serialized}; upgrade-insecure-requests`;
+  // `upgrade-insecure-requests` só faz sentido numa página servida por HTTPS.
+  // Numa página HTTP ele promoveria as chamadas à API para https:// — e um
+  // deploy sem TLS (laboratório na LAN, acesso por IP) quebraria inteiro, com
+  // cara de erro de rede/CORS.
+  return https ? `${serialized}; upgrade-insecure-requests` : serialized;
 }
 
 export function middleware(request: NextRequest) {
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
   const nonce = btoa(String.fromCharCode(...bytes));
-  const csp = buildCsp(nonce);
+  const csp = buildCsp(nonce, isHttps(request));
 
   // O Next lê o nonce do cabeçalho de REQUISIÇÃO para assinar seus scripts
   // inline — por isso ele vai sempre como `content-security-policy`, mesmo
