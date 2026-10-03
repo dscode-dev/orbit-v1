@@ -30,7 +30,7 @@ services:
       - .env
     environment:
       NODE_ENV: ${NODE_ENV:-production}
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${POSTGRES_DB}?schema=public
       STORAGE_PATH: /app/storage
     ports:
       - '${APP_PORT:-6060}:${APP_PORT:-6060}'
