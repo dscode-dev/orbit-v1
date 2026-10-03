@@ -37,7 +37,7 @@ services:
     volumes:
       - api_storage:/app/storage
     depends_on:
-      postgres:
+      postgres_climacerto:
         condition: service_healthy
     healthcheck:
       test:
