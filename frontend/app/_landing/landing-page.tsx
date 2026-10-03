@@ -61,6 +61,10 @@ const SERVICES = [
   {
     icon: Wind,
     title: "Instalação",
+    request: {
+      ask: "solicitar um orçamento de *instalação de ar-condicionado*.",
+      fields: ["Tipo e capacidade do aparelho (BTUs)", "Já tenho o aparelho? (sim/não)", "Bairro/cidade"],
+    },
     image: "/servicos/instalacao.webp",
     focus: "center 40%",
     text: "Instalação e troca de aparelhos seguindo as normas técnicas e as recomendações do fabricante, com acabamento limpo e teste de funcionamento na entrega.",
@@ -69,6 +73,10 @@ const SERVICES = [
   {
     icon: ShieldCheck,
     title: "Manutenção Preventiva",
+    request: {
+      ask: "*agendar uma manutenção preventiva*.",
+      fields: ["Quantidade de aparelhos", "Tipo (split, cassete, piso-teto…)", "Bairro/cidade"],
+    },
     image: "/servicos/manutencao-preventiva.webp",
     focus: "30% 0%",
     text: "Limpeza, inspeção e ajustes programados para o equipamento gastar menos energia, durar mais e não parar quando você mais precisa.",
@@ -77,6 +85,10 @@ const SERVICES = [
   {
     icon: Wrench,
     title: "Manutenção Corretiva",
+    request: {
+      ask: "solicitar uma *manutenção corretiva* — meu ar-condicionado está com problema.",
+      fields: ["O que está acontecendo (não gela, pingando, desligando…)", "Marca/modelo (se souber)", "Bairro/cidade"],
+    },
     image: "/servicos/manutencao-corretiva.webp",
     focus: "center 22%",
     text: "Aparelho pingando, sem gelar ou desligando sozinho? Diagnosticamos a causa e resolvemos com peças e procedimentos registrados.",
@@ -85,6 +97,10 @@ const SERVICES = [
   {
     icon: ClipboardCheck,
     title: "PMOC",
+    request: {
+      ask: "informações sobre o *PMOC* (Plano de Manutenção, Operação e Controle).",
+      fields: ["Tipo de estabelecimento", "Quantidade de aparelhos", "Bairro/cidade"],
+    },
     image: "/servicos/pmoc.webp",
     focus: "center 42%",
     text: "Elaboração e execução do Plano de Manutenção, Operação e Controle exigido por lei, com relatórios que comprovam a conformidade do ambiente.",
@@ -93,6 +109,10 @@ const SERVICES = [
   {
     icon: Gauge,
     title: "Cálculo de Carga Térmica",
+    request: {
+      ask: "solicitar um *cálculo de carga térmica* para saber os BTUs ideais.",
+      fields: ["Tipo de ambiente (quarto, sala, escritório…)", "Tamanho aproximado (m²)", "Bairro/cidade"],
+    },
     image: "/servicos/calculo-carga-termica.webp",
     focus: "82% center",
     text: "Dimensionamento técnico dos BTUs certos para o seu espaço — nem aparelho fraco que não dá conta, nem potência sobrando na conta de luz.",
@@ -101,6 +121,10 @@ const SERVICES = [
   {
     icon: Settings2,
     title: "Projetos",
+    request: {
+      ask: "conversar sobre um *projeto de climatização*.",
+      fields: ["Tipo de imóvel (residencial, comercial, industrial)", "Quantidade de ambientes", "Bairro/cidade"],
+    },
     image: "/servicos/projetos.webp",
     focus: "center 62%",
     text: "Projetos de climatização para residências, comércios e indústrias, pensados para o uso real de cada ambiente e assinados por responsável técnico.",
@@ -132,6 +156,13 @@ const CLIENTS = [
 ];
 
 /**
+ * Esteira automática das logos. Desligada: com poucos clientes ela precisa
+ * repetir as mesmas logos para preencher a tela. Com a lista maior, basta
+ * ligar aqui; desligada, as logos ficam fixas e centralizadas.
+ */
+const CLIENTS_MARQUEE = false;
+
+/**
  * Quantas vezes a lista se repete em cada metade da esteira: com poucos
  * clientes, uma volta só não preenche a largura da tela e a emenda apareceria.
  */
@@ -154,6 +185,16 @@ const REPORTS = [
     text: "Escopo, execução e materiais registrados numa OS clara, fácil de conferir e de auditar.",
   },
 ];
+
+/**
+ * Mensagem pré-preenchida do WhatsApp ao clicar no botão de um serviço: já vem
+ * como pedido, com as informações que o técnico precisa para responder rápido.
+ * O *texto* fica em negrito no WhatsApp; o cliente só completa os campos.
+ */
+function serviceRequestMessage(company: string, request: { ask: string; fields: string[] }) {
+  const fields = request.fields.map((field) => `• ${field}: `).join("\n");
+  return `Olá! Vim pelo site da ${company} e gostaria de ${request.ask}\n\n${fields}`;
+}
 
 /**
  * Arte do topo do hero: "logo" (logomarca como marca-d'água) ou "split"
@@ -481,9 +522,9 @@ export function LandingPage() {
             </p>
           </header>
           <div className="lp-svc-grid">
-            {SERVICES.map(({ icon: Icon, title, text, image, focus, cta }, i) => {
+            {SERVICES.map(({ icon: Icon, title, text, image, focus, cta, request }, i) => {
               const ctaUrl = company?.whatsapp
-                ? waLink(company.whatsapp, `Olá! Tenho interesse em ${title}.`)
+                ? waLink(company.whatsapp, serviceRequestMessage(name, request))
                 : null;
               return (
                 <article key={title} className="lp-svc" data-reveal style={{ transitionDelay: `${i * 60}ms` }}>
@@ -616,8 +657,8 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* ---------- Clientes (esteira de logos) ---------- */}
-      {/* A trilha tem duas metades idênticas e anda -50%: quando a primeira
+      {/* ---------- Clientes (logos fixas; esteira opcional) ---------- */}
+      {/* Esteira (CLIENTS_MARQUEE): a trilha tem duas metades idênticas e anda -50%: quando a primeira
           sai da tela, a segunda está exatamente no lugar dela (loop sem emenda).
           A segunda metade é decorativa (aria-hidden) para leitores de tela. */}
       <section id="clientes" className="lp-section lp-clients" aria-labelledby="lp-clients-title">
@@ -629,30 +670,42 @@ export function LandingPage() {
             </h2>
           </header>
         </div>
-        <div className="lp-marquee" data-reveal>
-          <div className="lp-marquee__track">
-            {[0, 1].map((half) => (
-              <ul key={half} className="lp-marquee__group" aria-hidden={half === 1 || undefined}>
-                {Array.from({ length: CLIENT_REPEAT }).flatMap((_, round) =>
-                  CLIENTS.map((client) => (
-                    <li
-                      key={`${round}-${client.name}`}
-                      className={`lp-client ${round > 0 ? "lp-client--copy" : ""}`}
-                    >
-                      <img
-                        src={client.logo}
-                        alt={half === 0 && round === 0 ? client.name : ""}
-                        width={400}
-                        height={400}
-                        loading="lazy"
-                      />
-                    </li>
-                  )),
-                )}
-              </ul>
-            ))}
+        {CLIENTS_MARQUEE ? (
+          <div className="lp-marquee" data-reveal>
+            <div className="lp-marquee__track">
+              {[0, 1].map((half) => (
+                <ul key={half} className="lp-marquee__group" aria-hidden={half === 1 || undefined}>
+                  {Array.from({ length: CLIENT_REPEAT }).flatMap((_, round) =>
+                    CLIENTS.map((client) => (
+                      <li
+                        key={`${round}-${client.name}`}
+                        className={`lp-client ${round > 0 ? "lp-client--copy" : ""}`}
+                      >
+                        <img
+                          src={client.logo}
+                          alt={half === 0 && round === 0 ? client.name : ""}
+                          width={400}
+                          height={400}
+                          loading="lazy"
+                        />
+                      </li>
+                    )),
+                  )}
+                </ul>
+              ))}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="lp-container">
+            <ul className="lp-clients__grid" data-reveal>
+              {CLIENTS.map((client) => (
+                <li key={client.name} className="lp-client" title={client.name}>
+                  <img src={client.logo} alt={client.name} width={400} height={400} loading="lazy" />
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </section>
 
       {/* ---------- Benefícios da manutenção preventiva (carrossel) ---------- */}
@@ -1129,8 +1182,13 @@ html { scroll-behavior: smooth; }
   .lp-marquee__group[aria-hidden] { display: none; }
   .lp-client--copy { display: none; }
 }
+/* Logos fixas: uma vez cada, centralizadas, quebrando linha se faltar espaço. */
+.lp-clients__grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 48px; margin: 0; padding: 8px 0 12px; list-style: none; }
+.lp-clients__grid .lp-client { width: 168px; height: 168px; }
 @media (max-width: 720px) {
   .lp-client { width: 116px; height: 116px; border-radius: 22px; }
+  .lp-clients__grid { gap: 14px; }
+  .lp-clients__grid .lp-client { width: 96px; height: 96px; border-radius: 20px; }
   .lp-marquee__group { gap: 18px; }
 }
 
