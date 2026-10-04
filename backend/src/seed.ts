@@ -187,6 +187,9 @@ function organizationBootstrapInput(): OrganizationBootstrapInput {
   if (input.cnpj.length < 14 || input.cnpj.length > 18) {
     throw new Error('ORGANIZATION_CNPJ must contain between 14 and 18 characters');
   }
+  if (!/^\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}$/.test(input.cnpj)) {
+    throw new Error('ORGANIZATION_CNPJ must contain 14 digits, with or without the 00.000.000/0000-00 mask');
+  }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email) || input.email.length > 254) {
     throw new Error('ORGANIZATION_EMAIL must be a valid email address with at most 254 characters');
   }

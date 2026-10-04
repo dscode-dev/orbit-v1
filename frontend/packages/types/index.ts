@@ -638,7 +638,7 @@ export type UpdateOrganizationPayload = Partial<{
   email: string;
   phone: string;
   phoneNumbers: string[];
-  website: string;
+  website: string | null;
   zipCode: string;
   street: string;
   number: string;

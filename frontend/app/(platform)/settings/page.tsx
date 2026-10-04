@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { PageHeader } from '@platform/components/page-header';
+import { maskCnpj } from '@erp/utils';
 import { Drawer } from '@erp/ui/drawer';
 import { DrawerTabs } from '@erp/ui/drawer-tabs';
 import { ConfirmDialog } from '@erp/ui/confirm-dialog';
@@ -268,7 +269,10 @@ function OrganizationSection({
     setError(null);
     setSaved(false);
     try {
-      await organizationApi.updateOrganization({
+      if (form.cnpj !== org.cnpj && !/^\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}$/.test(form.cnpj.trim())) {
+        throw new Error('CNPJ deve conter 14 dígitos, com ou sem a máscara 00.000.000/0000-00.');
+      }
+      const payload = {
         legalName: form.legalName,
         tradeName: form.tradeName,
         cnpj: form.cnpj,
@@ -278,7 +282,7 @@ function OrganizationSection({
         phoneNumbers: form.phoneNumbers,
         city: form.city,
         state: form.state,
-        website: form.website ?? undefined,
+        website: form.website?.trim() || null,
         zipCode: form.zipCode ?? undefined,
         street: form.street ?? undefined,
         number: form.number ?? undefined,
@@ -286,7 +290,13 @@ function OrganizationSection({
         district: form.district ?? undefined,
         primaryColor: form.primaryColor,
         secondaryColor: form.secondaryColor,
-      });
+      };
+      const changes = Object.fromEntries(
+        Object.entries(payload).filter(([key, value]) =>
+          value !== undefined && JSON.stringify(value) !== JSON.stringify(org[key as keyof Organization]),
+        ),
+      );
+      await organizationApi.updateOrganization(changes);
       applyBranding(form.primaryColor, form.secondaryColor);
       onSaved();
       // Re-bootstrap the session so the persisted colors apply app-wide.
@@ -294,7 +304,10 @@ function OrganizationSection({
       setSaved(true);
       setTimeout(() => setSaved(false), 1500);
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : 'Falha ao salvar.');
+      const violations = err instanceof ApiClientError ? err.details.violations : undefined;
+      setError(Array.isArray(violations)
+        ? violations.filter((value): value is string => typeof value === 'string').join(' ')
+        : err instanceof Error ? err.message : 'Falha ao salvar.');
     } finally {
       setSaving(false);
     }
@@ -323,7 +336,7 @@ function OrganizationSection({
           <div className="grid gap-3 sm:grid-cols-2">
             <Input label="Razão social" value={form.legalName} onChange={(v) => set('legalName', v)} disabled={!canEdit} />
             <Input label="Nome fantasia" value={form.tradeName} onChange={(v) => set('tradeName', v)} disabled={!canEdit} />
-            <Input label="CNPJ" value={form.cnpj} onChange={(v) => set('cnpj', v)} disabled={!canEdit} />
+            <Input label="CNPJ (00.000.000/0000-00)" value={form.cnpj} onChange={(v) => set('cnpj', maskCnpj(v))} disabled={!canEdit} />
             <Input
               label="Inscrição estadual"
               value={form.stateRegistration ?? ''}
@@ -331,7 +344,7 @@ function OrganizationSection({
               disabled={!canEdit}
             />
             <Input label="E-mail" value={form.email} onChange={(v) => set('email', v)} disabled={!canEdit} />
-            <Input label="Website" value={form.website ?? ''} onChange={(v) => set('website', v)} disabled={!canEdit} />
+            <Input label="Website (empresa.com.br ou https://empresa.com.br)" value={form.website ?? ''} onChange={(v) => set('website', v)} disabled={!canEdit} />
             <Input label="Telefone principal" value={form.phone} onChange={(v) => set('phone', v)} disabled={!canEdit} />
             <Input
               label="Telefones adicionais (separados por vírgula)"

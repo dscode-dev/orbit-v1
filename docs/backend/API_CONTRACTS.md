@@ -1475,6 +1475,11 @@ Role: `OWNER`.
 
 Request: todos os campos são opcionais; campos extras são rejeitados.
 
+O CNPJ deve conter 14 dígitos, com ou sem máscara (`12.345.678/0001-90`). O website aceita
+endereços HTTP/HTTPS; quando informado sem protocolo, recebe `https://`. Website vazio ou `null`
+remove o valor cadastrado. Campos omitidos permanecem inalterados. O formulário de Configurações
+envia apenas os campos alterados e apresenta as mensagens de validação dos campos.
+
 ```json
 {
   "legalName": "Empresa Exemplo LTDA",

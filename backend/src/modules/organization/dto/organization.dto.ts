@@ -28,6 +28,13 @@ function lowercase(value: unknown): unknown {
   return typeof value === 'string' ? value.trim().toLowerCase() : value;
 }
 
+function website(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return /^[a-z][a-z\d+.-]*:/i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
 function normalizedStringArray(value: unknown): unknown {
   if (!Array.isArray(value)) {
     return value;
@@ -117,7 +124,9 @@ export class UpdateOrganizationDto {
   @IsOptional()
   @Transform(({ value }) => trim(value))
   @IsString()
-  @Matches(/^\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}$/)
+  @Matches(/^\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}$/, {
+    message: 'CNPJ deve conter 14 dígitos, com ou sem a máscara 00.000.000/0000-00',
+  })
   cnpj?: string;
 
   @IsOptional()
@@ -147,10 +156,12 @@ export class UpdateOrganizationDto {
   phoneNumbers?: string[];
 
   @IsOptional()
-  @Transform(({ value }) => lowercase(value))
-  @IsUrl({ require_protocol: true })
+  @Transform(({ value }) => website(value))
+  @IsUrl({ require_protocol: true, protocols: ['http', 'https'] }, {
+    message: 'Website deve ser um endereço válido, como https://empresa.com.br',
+  })
   @MaxLength(255)
-  website?: string;
+  website?: string | null;
 
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(10) zipCode?: string;
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(180) street?: string;
