@@ -11,62 +11,18 @@ import {
 } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { ARGON2_OPTIONS } from './infra/security/argon2.constants';
-import { MIN_PASSWORD_LENGTH } from './shared/constants/users.constants';
+import { loadBootstrapEnvironment, ownerBootstrapInput, requiredEnvironment } from './seed-environment';
 import { SYSTEM_SERVICE_TYPE_SEED } from './shared/constants/service-types.constants';
 
-const prisma = new PrismaClient();
-
-type OwnerBootstrapInput = {
-  email: string;
-  username: string;
-  name: string;
-  password: string;
-};
-
-function requiredEnvironment(name: string): string {
-  const value = process.env[name]?.trim();
-  if (!value) throw new Error(`${name} is required to bootstrap the initial OWNER`);
-  return value;
-}
-
-function ownerBootstrapInput(): OwnerBootstrapInput {
-  const input = {
-    email: requiredEnvironment('OWNER_EMAIL').toLowerCase(),
-    username: requiredEnvironment('OWNER_USERNAME').toLowerCase(),
-    name: requiredEnvironment('OWNER_NAME'),
-    password: requiredEnvironment('OWNER_PASSWORD'),
-  };
-
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email) || input.email.length > 254) {
-    throw new Error('OWNER_EMAIL must be a valid email address with at most 254 characters');
-  }
-  if (!/^[a-z0-9._-]{3,50}$/.test(input.username)) {
-    throw new Error(
-      'OWNER_USERNAME must contain 3 to 50 lowercase letters, numbers, dots, underscores or hyphens',
-    );
-  }
-  if (input.name.length < 2 || input.name.length > 150) {
-    throw new Error('OWNER_NAME must contain between 2 and 150 characters');
-  }
-  if (input.password.length < MIN_PASSWORD_LENGTH || input.password.length > 128) {
-    throw new Error(
-      `OWNER_PASSWORD must contain between ${MIN_PASSWORD_LENGTH} and 128 characters`,
-    );
-  }
-  const normalizedPassword = input.password.toLowerCase();
-  if (
-    ['replace_with', 'change_me', 'changeme', 'example', 'password'].some((fragment) =>
-      normalizedPassword.includes(fragment),
-    )
-  ) {
-    throw new Error('OWNER_PASSWORD must not use a placeholder or example value');
-  }
-
-  return input;
-}
+let prisma: PrismaClient;
 
 async function main(): Promise<void> {
+  const envFile = loadBootstrapEnvironment();
+  process.stdout.write(
+    `${JSON.stringify({ event: 'owner_bootstrap_environment', source: envFile ?? 'process.env' })}\n`,
+  );
   const input = ownerBootstrapInput();
+  prisma = new PrismaClient();
   // The whole application assumes a single Organization exists (profile, settings,
   // templates all resolve `findFirst`). Guarantee one so first login works.
   await ensureDefaultOrganization();
@@ -89,6 +45,12 @@ async function main(): Promise<void> {
     }
     if (!emailUser.isActive || emailUser.disabledAt) {
       throw new Error('The configured bootstrap OWNER is disabled');
+    }
+
+    if (!(await argon2.verify(emailUser.passwordHash, input.password))) {
+      throw new Error(
+        'OWNER_PASSWORD does not match the existing OWNER password. The seed does not reset existing credentials; an authorized password reset is required',
+      );
     }
 
     await ensureOwnerFoundation(emailUser.id);
@@ -561,5 +523,5 @@ main()
     process.exitCode = 1;
   })
   .finally(async () => {
-    await prisma.$disconnect();
+    await prisma?.$disconnect();
   });

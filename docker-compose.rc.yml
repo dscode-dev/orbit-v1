@@ -18,6 +18,8 @@ services:
   api:
     build:
       context: ./backend
+    env_file:
+      - .env
     environment:
       NODE_ENV: production
       APP_NAME: ${APP_NAME:-Orbit API}

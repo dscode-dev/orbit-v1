@@ -1027,7 +1027,7 @@ operação pertinente. Senhas temporárias e nomes de senha nunca são incluído
 
 ## Initial seed
 
-Configurar:
+Configurar no `.env` da raiz do projeto (a quarta variável é `OWNER_NAME`):
 
 ```text
 OWNER_EMAIL=owner@example.com
@@ -1036,11 +1036,30 @@ OWNER_NAME=Proprietário da instalação
 OWNER_PASSWORD=<senha forte com no mínimo 12 caracteres>
 ```
 
-Após subir a stack:
+Em execução direta, o seed carrega o `.env` da raiz antes de instanciar o Prisma, independentemente
+do diretório atual. As quatro variáveis `OWNER_*` do arquivo têm precedência sobre as herdadas do
+shell. Overrides de infraestrutura, como `DATABASE_URL`, são preservados. A senha é usada sem
+remover espaços; valores com `#` ou espaços nas extremidades devem estar entre aspas.
 
 ```bash
+npm --prefix backend run build
+npm --prefix backend run prisma:seed
+```
+
+No Docker, o arquivo não é copiado para a imagem: os arquivos Compose injetam o `.env` da raiz por
+`env_file`. Alterar o arquivo e apenas reiniciar o container não atualiza suas variáveis; recrie a
+API. Após disponibilizar esta versão no servidor, execute na raiz do projeto:
+
+```bash
+docker compose up -d --build --force-recreate api
 docker compose exec api npm run prisma:seed
 ```
+
+Se estiver usando `docker-compose.rc.yml`, utilize `docker compose -f docker-compose.rc.yml` nos
+dois comandos. No Compose, use aspas simples na senha quando `$` precisar ser literal.
+
+O evento `owner_bootstrap_environment` informa o caminho do arquivo carregado, ou `process.env`
+quando as variáveis são injetadas pelo container, sem registrar credenciais.
 
 O seed:
 
@@ -1051,9 +1070,12 @@ O seed:
 - rejeita placeholders comuns de senha presentes em arquivos de exemplo;
 - obriga a troca da senha no primeiro acesso;
 - nunca imprime senha, hash ou segredo no log;
-- não cria organização, templates ou qualquer dado operacional.
+- também garante a organização inicial, contatos configurados e os catálogos/modelos padrão ausentes.
 
-Reexecutar o seed para o mesmo OWNER é idempotente e não redefine credenciais. Se o banco já possuir
+Reexecutar o seed para o mesmo OWNER é idempotente e não redefine credenciais. Se `OWNER_PASSWORD`
+não corresponder à senha armazenada, o seed falha com uma mensagem explícita indicando a necessidade
+de uma redefinição autorizada. Alterar o `.env` não altera a senha de um usuário existente.
+Se o banco já possuir
 usuários e as credenciais configuradas não identificarem o OWNER existente, o bootstrap falha em vez
 de criar outro usuário privilegiado.
 
