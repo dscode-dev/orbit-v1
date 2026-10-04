@@ -10,7 +10,7 @@
  *
  * O botão "Gestão" leva à tela de login da plataforma (/login).
  */
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -66,7 +66,7 @@ const SERVICES = [
       fields: ["Tipo e capacidade do aparelho (BTUs)", "Já tenho o aparelho? (sim/não)", "Bairro/cidade"],
     },
     image: "/servicos/instalacao.webp",
-    focus: "center 40%",
+    focus: "center 32%",
     text: "Instalação e troca de aparelhos seguindo as normas técnicas e as recomendações do fabricante, com acabamento limpo e teste de funcionamento na entrega.",
     cta: "Quero instalar",
   },
@@ -78,7 +78,7 @@ const SERVICES = [
       fields: ["Quantidade de aparelhos", "Tipo (split, cassete, piso-teto…)", "Bairro/cidade"],
     },
     image: "/servicos/manutencao-preventiva.webp",
-    focus: "30% 0%",
+    focus: "center 58%",
     text: "Limpeza, inspeção e ajustes programados para o equipamento gastar menos energia, durar mais e não parar quando você mais precisa.",
     cta: "Agendar preventiva",
   },
@@ -90,7 +90,7 @@ const SERVICES = [
       fields: ["O que está acontecendo (não gela, pingando, desligando…)", "Marca/modelo (se souber)", "Bairro/cidade"],
     },
     image: "/servicos/manutencao-corretiva.webp",
-    focus: "center 22%",
+    focus: "center 28%",
     text: "Aparelho pingando, sem gelar ou desligando sozinho? Diagnosticamos a causa e resolvemos com peças e procedimentos registrados.",
     cta: "Solicitar reparo",
   },
@@ -102,7 +102,7 @@ const SERVICES = [
       fields: ["Tipo de estabelecimento", "Quantidade de aparelhos", "Bairro/cidade"],
     },
     image: "/servicos/pmoc.webp",
-    focus: "center 42%",
+    focus: "center 34%",
     text: "Elaboração e execução do Plano de Manutenção, Operação e Controle exigido por lei, com relatórios que comprovam a conformidade do ambiente.",
     cta: "Regularizar meu PMOC",
   },
@@ -138,10 +138,10 @@ const SERVICES = [
  * público em vez de ficar aqui.
  */
 const COMPANY_METRICS = [
-  { icon: Wind, value: "+1.250", label: "Equipamentos instalados" },
-  { icon: Wrench, value: "+2.000", label: "Atendimentos concluídos" },
-  { icon: Building2, value: "+90", label: "Empresas atendidas" },
-  { icon: Award, value: "+2 anos", label: "De mercado" },
+  { icon: Wind, value: "+2.500", label: "Equipamentos instalados" },
+  { icon: Wrench, value: "+4.000", label: "Atendimentos concluídos" },
+  { icon: Building2, value: "+180", label: "Empresas atendidas" },
+  { icon: Award, value: "+7 anos", label: "De experiência" },
 ];
 
 /**
@@ -282,6 +282,9 @@ export function LandingPage() {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [fabOpen, setFabOpen] = useState(false);
+  // Seletor de contato do WhatsApp aberto por um botão da página: guarda a
+  // mensagem daquele botão (null = fechado).
+  const [chooser, setChooser] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useReveal([company]);
@@ -312,34 +315,77 @@ export function LandingPage() {
     return company.state ? `${company.city} · ${company.state}` : company.city;
   }, [company]);
 
-  // Botões gerais (hero, serviços, resultados) falam com o contato principal;
-  // a seção de contato e o botão flutuante mostram cada responsável.
   const whatsappUrl = company?.whatsapp ? waLink(company.whatsapp, WHATSAPP_MESSAGE) : null;
   const contacts: PublicCompanyContact[] = company?.contacts ?? [];
-  // Números exibidos em "Fale com a gente": um por responsável (nome e função
-  // como legenda) ou, sem responsáveis cadastrados, o WhatsApp/telefones gerais.
-  const caption = (c: PublicCompanyContact) => [c.name, c.role].filter(Boolean).join(" · ");
-  const whatsappLines =
-    contacts.length > 0
-      ? contacts
-          .filter((c) => c.whatsapp)
-          .map((c) => ({
-            phone: c.phone,
-            caption: caption(c),
-            href: waLink(c.whatsapp as string, WHATSAPP_MESSAGE),
-          }))
-      : whatsappUrl
-        ? [{ phone: phone ?? "Enviar mensagem", caption: "", href: whatsappUrl }]
-        : [];
-  const phoneLines =
-    contacts.length > 0
-      ? contacts.map((c) => ({ phone: c.phone, caption: caption(c) }))
-      : (company?.phones ?? []).slice(0, 2).map((p) => ({ phone: p, caption: "" }));
   // Opcional por empresa: sem ORGANIZATION_INSTAGRAM na API, nada aparece.
   const instagram = company?.instagram ?? null;
   const whatsappContacts = contacts.filter((c): c is PublicCompanyContact & { whatsapp: string } =>
     Boolean(c.whatsapp),
   );
+  // Quem aparece em "Fale com a gente": os contatos escolhidos para a landing
+  // ou, sem nenhum, a central com o telefone principal da empresa.
+  const people: PublicCompanyContact[] =
+    contacts.length > 0
+      ? contacts
+      : phone
+        ? [{ name: "Central de atendimento", role: name, phone, whatsapp: company?.whatsapp ?? null }]
+        : [];
+
+  /**
+   * Todo botão de WhatsApp da página passa por aqui. Com mais de um contato de
+   * WhatsApp, abre o seletor (o mesmo do botão flutuante) já com a mensagem
+   * daquele botão; com um só, vai direto para a conversa; sem WhatsApp, leva
+   * à seção de contato.
+   */
+  function waButton(message: string, className: string, label: ReactNode, fallbackLabel: ReactNode = label) {
+    if (whatsappContacts.length > 1) {
+      return (
+        <button type="button" className={className} aria-haspopup="dialog" onClick={() => setChooser(message)}>
+          {label}
+        </button>
+      );
+    }
+    if (company?.whatsapp) {
+      return (
+        <WhatsAppLink href={waLink(company.whatsapp, message)} className={className}>
+          {label}
+        </WhatsAppLink>
+      );
+    }
+    return (
+      <a href="#contato" className={className}>
+        {fallbackLabel}
+      </a>
+    );
+  }
+
+  /** Opções do seletor: um item por contato de WhatsApp, com a mensagem dada. */
+  function waChoices(message: string) {
+    return whatsappContacts.map((contact) => (
+      <WhatsAppLink
+        key={`${contact.name}-${contact.whatsapp}`}
+        href={waLink(contact.whatsapp, message)}
+        className="lp-fab-menu__item"
+        role="menuitem"
+      >
+        <span className="lp-person__avatar lp-person__avatar--sm" aria-hidden>
+          {initials(contact.name)}
+        </span>
+        <span className="lp-fab-menu__text">
+          <strong>{contact.name}</strong>
+          <span>{contact.role ?? contact.phone}</span>
+        </span>
+      </WhatsAppLink>
+    ));
+  }
+
+  // Esc fecha o seletor.
+  useEffect(() => {
+    if (chooser === null) return;
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && setChooser(null);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [chooser]);
 
   const accentStyle = company
     ? ({
@@ -480,14 +526,15 @@ export function LandingPage() {
               <strong>100% digitais</strong>, assinados por responsável técnico credenciado.
             </p>
             <div className="lp-hero__cta">
-              {whatsappUrl ? (
-                <WhatsAppLink href={whatsappUrl} className="lp-btn lp-btn--primary lp-btn--lg">
+              {waButton(
+                WHATSAPP_MESSAGE,
+                "lp-btn lp-btn--primary lp-btn--lg",
+                <>
                   <MessageCircle size={18} /> Falar no WhatsApp
-                </WhatsAppLink>
-              ) : (
-                <a href="#contato" className="lp-btn lp-btn--primary lp-btn--lg">
+                </>,
+                <>
                   <MessageCircle size={18} /> Fale com a gente
-                </a>
+                </>,
               )}
               <a href="#servicos" className="lp-btn lp-btn--outline lp-btn--lg">
                 Ver serviços <ArrowRight size={18} />
@@ -524,9 +571,6 @@ export function LandingPage() {
           </header>
           <div className="lp-svc-grid">
             {SERVICES.map(({ icon: Icon, title, text, image, focus, cta, request }, i) => {
-              const ctaUrl = company?.whatsapp
-                ? waLink(company.whatsapp, serviceRequestMessage(name, request))
-                : null;
               return (
                 <article key={title} className="lp-svc" data-reveal style={{ transitionDelay: `${i * 60}ms` }}>
                   <div className="lp-svc__media">
@@ -549,15 +593,16 @@ export function LandingPage() {
                     </span>
                     <h3 className="lp-svc__title">{title}</h3>
                     <p className="lp-svc__text">{text}</p>
-                    {/* Sem WhatsApp disponível, o botão leva ao contato em vez de sumir. */}
-                    {ctaUrl ? (
-                      <WhatsAppLink href={ctaUrl} className="lp-svc__cta">
+                    {/* Mensagem pronta do serviço; sem WhatsApp, leva ao contato. */}
+                    {waButton(
+                      serviceRequestMessage(name, request),
+                      "lp-svc__cta",
+                      <>
                         <MessageCircle size={16} /> {cta}
-                      </WhatsAppLink>
-                    ) : (
-                      <a href="#contato" className="lp-svc__cta">
+                      </>,
+                      <>
                         {cta} <ArrowRight size={16} />
-                      </a>
+                      </>,
                     )}
                   </div>
                 </article>
@@ -583,17 +628,17 @@ export function LandingPage() {
       {/* ---------- Resultados (prova social / números) ---------- */}
       <section id="resultados" className="lp-section lp-section--muted">
         <div className="lp-container lp-results lp-results--reverse">
-          {/* Colagem com fotos verticais da equipe: corretiva e projeto ao fundo,
-              a equipe em destaque ao centro. */}
+          {/* Colagem com fotos verticais da equipe em campo: corretiva e
+              preventiva ao fundo, a instalação em destaque ao centro. */}
           <div className="lp-collage" data-reveal>
             <figure className="lp-collage__item lp-collage__item--back-left">
-              <img src="/servicos/manutencao-corretiva.webp" alt="Técnico em manutenção corretiva" loading="lazy" style={{ objectPosition: "8% 22%" }} />
+              <img src="/servicos/manutencao-corretiva.webp" alt="Técnico em manutenção corretiva" loading="lazy" style={{ objectPosition: "30% 25%" }} />
             </figure>
             <figure className="lp-collage__item lp-collage__item--back-right">
-              <img src="/servicos/projetos.webp" alt="Equipe executando projeto de climatização" loading="lazy" style={{ objectPosition: "center 65%" }} />
+              <img src="/servicos/manutencao-preventiva.webp" alt="Técnico em manutenção preventiva" loading="lazy" style={{ objectPosition: "center 55%" }} />
             </figure>
             <figure className="lp-collage__item lp-collage__item--front">
-              <img src="/servicos/pmoc.webp" alt={`Equipe ${name}`} loading="lazy" style={{ objectPosition: "center 45%" }} />
+              <img src="/servicos/instalacao.webp" alt="Instalação de ar-condicionado" loading="lazy" style={{ objectPosition: "center 30%" }} />
             </figure>
             <div className="lp-collage__seal" aria-label="Garantia e qualidade">
               <ShieldCheck size={22} />
@@ -634,14 +679,12 @@ export function LandingPage() {
             </div>
 
             <div className="lp-hero__cta">
-              {whatsappUrl ? (
-                <WhatsAppLink href={whatsappUrl} className="lp-btn lp-btn--primary lp-btn--lg">
+              {waButton(
+                WHATSAPP_MESSAGE,
+                "lp-btn lp-btn--primary lp-btn--lg",
+                <>
                   <MessageCircle size={18} /> Solicitar orçamento
-                </WhatsAppLink>
-              ) : (
-                <a href="#contato" className="lp-btn lp-btn--primary lp-btn--lg">
-                  <MessageCircle size={18} /> Solicitar orçamento
-                </a>
+                </>,
               )}
               {instagram && (
                 <a
@@ -797,104 +840,114 @@ export function LandingPage() {
             </p>
           </header>
 
-          {/* Uma linha de cards compactos. WhatsApp e Telefone listam um ou mais
-              números (um por responsável, quando cadastrados). */}
-          <div className="lp-grid lp-grid--contact">
-            {whatsappLines.length > 0 && (
-              <div className="lp-contact lp-contact--primary" data-reveal>
-                <span className="lp-contact__icon">
+          {/* Equipe à esquerda (uma linha por contato, com WhatsApp e ligação) e
+              os demais canais à direita, em lista. */}
+          <div className="lp-reach">
+            <div className="lp-reach__team" data-reveal>
+              <div className="lp-reach__head">
+                <span className="lp-reach__head-icon" aria-hidden>
                   <MessageCircle size={20} />
                 </span>
-                <span className="lp-contact__label">WhatsApp</span>
-                <div className="lp-contact__lines">
-                  {whatsappLines.map((line) => (
-                    <WhatsAppLink key={line.href} href={line.href} className="lp-contact__line">
-                      <span className="lp-contact__line-main">
-                        <strong>{line.phone}</strong>
-                        {line.caption && <small>{line.caption}</small>}
-                      </span>
-                      <ArrowRight size={15} />
-                    </WhatsAppLink>
-                  ))}
+                <div>
+                  <h3>Atendimento direto</h3>
+                  <p>Fale com quem cuida do seu serviço.</p>
                 </div>
               </div>
-            )}
-
-            {phoneLines.length > 0 && (
-              <div className="lp-contact" data-reveal>
-                <span className="lp-contact__icon">
-                  <Phone size={20} />
-                </span>
-                <span className="lp-contact__label">Telefone</span>
-                <div className="lp-contact__lines">
-                  {phoneLines.map((line) => (
-                    <a key={line.phone} href={telLink(line.phone)} className="lp-contact__line">
-                      <span className="lp-contact__line-main">
-                        <strong>{line.phone}</strong>
-                        {line.caption && <small>{line.caption}</small>}
+              {people.length > 0 ? (
+                <ul className="lp-reach__people">
+                  {people.map((person) => (
+                    <li key={`${person.name}-${person.phone}`} className="lp-person-row">
+                      <span className="lp-person__avatar lp-person__avatar--sm" aria-hidden>
+                        {initials(person.name)}
                       </span>
-                      <ArrowRight size={15} />
-                    </a>
+                      <div className="lp-person-row__info">
+                        <strong>{person.name}</strong>
+                        {person.role && <span>{person.role}</span>}
+                        <span className="lp-person-row__phone">{person.phone}</span>
+                      </div>
+                      <div className="lp-person-row__actions">
+                        {person.whatsapp && (
+                          <WhatsAppLink
+                            href={waLink(person.whatsapp, WHATSAPP_MESSAGE)}
+                            className="lp-chip-btn lp-chip-btn--wa"
+                            aria-label={`WhatsApp de ${person.name}`}
+                          >
+                            <MessageCircle size={16} /> WhatsApp
+                          </WhatsAppLink>
+                        )}
+                        <a href={telLink(person.phone)} className="lp-chip-btn" aria-label={`Ligar para ${person.name}`}>
+                          <Phone size={16} /> Ligar
+                        </a>
+                      </div>
+                    </li>
                   ))}
-                </div>
-              </div>
-            )}
+                </ul>
+              ) : (
+                <p className="lp-reach__empty">Envie um e-mail ou fale com a gente pelo Instagram.</p>
+              )}
+            </div>
 
-            {email && (
-              <a href={`mailto:${email}`} className="lp-contact" data-reveal>
-                <span className="lp-contact__icon">
-                  <Mail size={20} />
-                </span>
-                <span className="lp-contact__label">E-mail</span>
-                {/* Quebra o endereço no @ em vez de no meio de uma palavra. */}
-                <span className="lp-contact__value lp-contact__value--email">
-                  {email.split("@")[0]}@<wbr />
-                  {email.split("@").slice(1).join("@")}
-                </span>
-                <span className="lp-contact__cta">
-                  Enviar e-mail <ArrowRight size={15} />
-                </span>
-              </a>
-            )}
-
-            {instagram && (
-              <a
-                href={instagram.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="lp-contact lp-contact--instagram"
-                data-reveal
-              >
-                <span className="lp-contact__icon">
-                  <Instagram size={20} />
-                </span>
-                <span className="lp-contact__label">Instagram</span>
-                {/* Usuários longos quebram só depois de "_" ou ".", nunca no meio da palavra. */}
-                <span className="lp-contact__value lp-contact__value--handle">
-                  @
-                  {instagram.handle.split(/(?<=[._])/).map((part, i) => (
-                    <Fragment key={i}>
-                      {i > 0 && <wbr />}
-                      {part}
-                    </Fragment>
-                  ))}
-                </span>
-                <span className="lp-contact__cta">
-                  Seguir perfil <ArrowRight size={15} />
-                </span>
-              </a>
-            )}
-
-            {location && (
-              <div className="lp-contact" data-reveal>
-                <span className="lp-contact__icon">
-                  <MapPin size={20} />
-                </span>
-                <span className="lp-contact__label">Localização</span>
-                <span className="lp-contact__value">{location}</span>
-                <span className="lp-contact__cta lp-contact__cta--static">Atendemos a região</span>
-              </div>
-            )}
+            <ul className="lp-reach__channels" data-reveal>
+              {email && (
+                <li>
+                  <a href={`mailto:${email}`} className="lp-channel">
+                    <span className="lp-channel__icon">
+                      <Mail size={18} />
+                    </span>
+                    <span className="lp-channel__text">
+                      <small>E-mail</small>
+                      {/* Quebra no @ em vez de no meio de uma palavra. */}
+                      <strong>
+                        {email.split("@")[0]}@<wbr />
+                        {email.split("@").slice(1).join("@")}
+                      </strong>
+                    </span>
+                    <ArrowRight size={16} className="lp-channel__go" />
+                  </a>
+                </li>
+              )}
+              {instagram && (
+                <li>
+                  <a
+                    href={instagram.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="lp-channel lp-channel--instagram"
+                  >
+                    <span className="lp-channel__icon">
+                      <Instagram size={18} />
+                    </span>
+                    <span className="lp-channel__text">
+                      <small>Instagram</small>
+                      {/* Usuários longos quebram só depois de "_" ou ".". */}
+                      <strong>
+                        @
+                        {instagram.handle.split(/(?<=[._])/).map((part, i) => (
+                          <Fragment key={i}>
+                            {i > 0 && <wbr />}
+                            {part}
+                          </Fragment>
+                        ))}
+                      </strong>
+                    </span>
+                    <ArrowRight size={16} className="lp-channel__go" />
+                  </a>
+                </li>
+              )}
+              {location && (
+                <li>
+                  <div className="lp-channel lp-channel--static">
+                    <span className="lp-channel__icon">
+                      <MapPin size={18} />
+                    </span>
+                    <span className="lp-channel__text">
+                      <small>Atendemos</small>
+                      <strong>{location} e região</strong>
+                    </span>
+                  </div>
+                </li>
+              )}
+            </ul>
           </div>
         </div>
       </section>
@@ -947,30 +1000,41 @@ export function LandingPage() {
         </div>
       </footer>
 
+      {/* ---------- Seletor de contato (botões da página) ---------- */}
+      {chooser !== null && (
+        <div
+          className="lp-wa-modal"
+          onClick={(event) => {
+            // Fecha ao clicar fora ou ao escolher um contato.
+            if (event.target === event.currentTarget || (event.target as HTMLElement).closest("a")) setChooser(null);
+          }}
+        >
+          <div className="lp-fab-menu lp-wa-modal__panel" role="dialog" aria-modal="true" aria-label="Falar no WhatsApp com">
+            <div className="lp-wa-modal__head">
+              <span className="lp-fab-menu__title">Falar no WhatsApp com</span>
+              <button type="button" className="lp-wa-modal__close" aria-label="Fechar" onClick={() => setChooser(null)}>
+                <X size={18} />
+              </button>
+            </div>
+            {waChoices(chooser)}
+          </div>
+        </div>
+      )}
+
       {/* ---------- WhatsApp flutuante ---------- */}
       {/* Com mais de um responsável no WhatsApp, o botão abre a escolha de
           com quem falar; com um só, vai direto para a conversa. */}
       {whatsappContacts.length > 1 ? (
         <div className="lp-fab-wrap">
           {fabOpen && (
-            <div className="lp-fab-menu" role="menu" aria-label="Falar no WhatsApp com">
+            <div
+              className="lp-fab-menu"
+              role="menu"
+              aria-label="Falar no WhatsApp com"
+              onClick={(event) => (event.target as HTMLElement).closest("a") && setFabOpen(false)}
+            >
               <span className="lp-fab-menu__title">Falar no WhatsApp com</span>
-              {whatsappContacts.map((contact) => (
-                <WhatsAppLink
-                  key={`${contact.name}-${contact.whatsapp}`}
-                  href={waLink(contact.whatsapp, WHATSAPP_MESSAGE)}
-                  className="lp-fab-menu__item"
-                  role="menuitem"
-                >
-                  <span className="lp-person__avatar lp-person__avatar--sm" aria-hidden>
-                    {initials(contact.name)}
-                  </span>
-                  <span className="lp-fab-menu__text">
-                    <strong>{contact.name}</strong>
-                    <span>{contact.role ?? contact.phone}</span>
-                  </span>
-                </WhatsAppLink>
-              ))}
+              {waChoices(WHATSAPP_MESSAGE)}
             </div>
           )}
           <button
@@ -1279,8 +1343,6 @@ html { scroll-behavior: smooth; }
 .lp-grid { display: grid; gap: 20px; }
 .lp-grid--4 { grid-template-columns: repeat(4, 1fr); }
 .lp-grid--3 { grid-template-columns: repeat(3, 1fr); }
-/* Até 5 cards numa linha; com menos canais, os cards se expandem. */
-.lp-grid--contact { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; }
 .lp-card { padding: 26px; border-radius: 18px; background: var(--color-background); border: 1px solid color-mix(in srgb, var(--color-foreground) 9%, transparent); transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
 .lp-card:hover { transform: translateY(-4px); box-shadow: 0 18px 40px color-mix(in srgb, var(--color-foreground) 10%, transparent); border-color: color-mix(in srgb, var(--lp-primary) 40%, transparent); }
 .lp-card--report { background: color-mix(in srgb, var(--color-background) 100%, transparent); }
@@ -1300,31 +1362,55 @@ html { scroll-behavior: smooth; }
 .lp-stat strong { display: block; font-size: 1.15rem; font-weight: 800; color: var(--lp-primary); }
 .lp-stat span { display: block; margin-top: 6px; font-size: .9rem; color: color-mix(in srgb, var(--lp-primary) 55%, var(--color-foreground)); }
 
-/* Contact */
-.lp-contact { display: flex; flex-direction: column; gap: 6px; padding: 20px; border-radius: 18px; min-width: 0; text-decoration: none; color: var(--color-foreground); background: var(--color-background); border: 1px solid color-mix(in srgb, var(--color-foreground) 10%, transparent); transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
-.lp-contact:is(a):hover { transform: translateY(-4px); box-shadow: 0 18px 40px color-mix(in srgb, var(--color-foreground) 10%, transparent); border-color: color-mix(in srgb, var(--lp-primary) 40%, transparent); }
-.lp-contact__icon { display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 12px; color: var(--lp-primary); background: color-mix(in srgb, var(--lp-primary) 12%, transparent); margin-bottom: 6px; }
-.lp-contact__label { font-size: 13px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: color-mix(in srgb, var(--color-foreground) 55%, transparent); }
-.lp-contact__value { font-size: .98rem; font-weight: 600; overflow-wrap: anywhere; }
-.lp-contact__value--email { font-size: .92rem; }
-.lp-contact__value--handle { overflow-wrap: normal; }
-/* Números (1 ou 2) dentro do card de WhatsApp/Telefone, cada um clicável. */
-.lp-contact__lines { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
-.lp-contact__line { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; margin: 0 -10px; border-radius: 10px;
-  color: inherit; text-decoration: none; transition: background .2s ease; }
-.lp-contact__line:hover { background: color-mix(in srgb, var(--lp-primary) 8%, transparent); }
-.lp-contact__line svg { flex: none; color: var(--lp-primary); }
-.lp-contact__line-main { display: flex; flex-direction: column; min-width: 0; }
-.lp-contact__line-main strong { font-size: .98rem; white-space: nowrap; }
-.lp-contact__line-main small { font-size: .78rem; color: color-mix(in srgb, var(--color-foreground) 58%, transparent); overflow-wrap: anywhere; }
-.lp-contact--primary .lp-contact__line:hover { background: rgba(255, 255, 255, .14); }
-.lp-contact--primary .lp-contact__line svg { color: #fff; }
-.lp-contact--primary .lp-contact__line-main small { color: rgba(255, 255, 255, .78); }
-.lp-contact__cta { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; font-size: .9rem; font-weight: 600; color: var(--lp-primary); }
-.lp-contact__cta--static { color: color-mix(in srgb, var(--color-foreground) 55%, transparent); }
-.lp-contact--primary { background: var(--lp-primary); border-color: var(--lp-primary); color: #fff; box-shadow: 0 14px 34px color-mix(in srgb, var(--lp-primary) 34%, transparent); }
-.lp-contact--primary .lp-contact__icon { background: rgba(255,255,255,.18); color: #fff; }
-.lp-contact--primary .lp-contact__label, .lp-contact--primary .lp-contact__cta { color: rgba(255,255,255,.9); }
+/* Contato: equipe à esquerda (uma linha por contato), canais à direita */
+.lp-reach { display: grid; grid-template-columns: 1.25fr .75fr; gap: 24px; max-width: 1000px; margin: 0 auto; align-items: start; }
+.lp-reach__team { padding: 24px; border-radius: 22px; background: var(--color-background);
+  border: 1px solid color-mix(in srgb, var(--color-foreground) 9%, transparent);
+  box-shadow: 0 18px 44px color-mix(in srgb, var(--lp-primary) 10%, transparent); }
+.lp-reach__head { display: flex; align-items: center; gap: 14px; padding-bottom: 18px; margin-bottom: 4px; border-bottom: 1px solid color-mix(in srgb, var(--color-foreground) 8%, transparent); }
+.lp-reach__head-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 14px; color: #fff;
+  background: linear-gradient(135deg, var(--lp-primary), color-mix(in srgb, var(--lp-primary) 55%, var(--lp-secondary))); }
+.lp-reach__head h3 { margin: 0; font-size: 1.1rem; font-weight: 700; }
+.lp-reach__head p { margin: 2px 0 0; font-size: .9rem; color: color-mix(in srgb, var(--color-foreground) 60%, transparent); }
+.lp-reach__people { list-style: none; margin: 0; padding: 0; }
+.lp-reach__empty { margin: 14px 0 0; font-size: .95rem; color: color-mix(in srgb, var(--color-foreground) 62%, transparent); }
+.lp-person-row { display: flex; align-items: center; gap: 14px; padding: 16px 0; border-bottom: 1px solid color-mix(in srgb, var(--color-foreground) 7%, transparent); }
+.lp-person-row:last-child { border-bottom: 0; padding-bottom: 2px; }
+.lp-person-row__info { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.lp-person-row__info strong { font-size: 1rem; }
+.lp-person-row__info span { font-size: .85rem; color: color-mix(in srgb, var(--color-foreground) 58%, transparent); }
+.lp-person-row__info .lp-person-row__phone { margin-top: 3px; font-size: .95rem; font-weight: 600; color: var(--color-foreground); font-variant-numeric: tabular-nums; }
+.lp-person-row__actions { flex: none; display: flex; gap: 8px; }
+.lp-chip-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 38px; padding: 0 14px; border-radius: 999px; font-size: 13.5px; font-weight: 600;
+  text-decoration: none; color: var(--color-foreground); background: transparent; border: 1px solid color-mix(in srgb, var(--color-foreground) 14%, transparent);
+  transition: border-color .2s ease, color .2s ease, background .2s ease, transform .15s ease; }
+.lp-chip-btn:hover { border-color: var(--lp-primary); color: var(--lp-primary); transform: translateY(-1px); }
+.lp-chip-btn--wa { color: #fff; background: #25d366; border-color: #25d366; }
+.lp-chip-btn--wa:hover { color: #fff; background: #1ebe5b; border-color: #1ebe5b; }
+.lp-reach__channels { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.lp-channel { display: flex; align-items: center; gap: 14px; min-width: 0; padding: 16px 18px; border-radius: 18px; text-decoration: none; color: var(--color-foreground);
+  background: var(--color-background); border: 1px solid color-mix(in srgb, var(--color-foreground) 9%, transparent);
+  transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease; }
+a.lp-channel:hover { transform: translateX(4px); border-color: color-mix(in srgb, var(--lp-primary) 40%, transparent); box-shadow: 0 12px 28px color-mix(in srgb, var(--lp-primary) 12%, transparent); }
+.lp-channel__icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 12px;
+  color: var(--lp-primary); background: color-mix(in srgb, var(--lp-primary) 12%, transparent); }
+.lp-channel--instagram .lp-channel__icon { color: #fff; background: radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285aeb 90%); }
+.lp-channel__text { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.lp-channel__text small { font-size: 11.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: color-mix(in srgb, var(--color-foreground) 55%, transparent); }
+.lp-channel__text strong { margin-top: 1px; font-size: .95rem; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.lp-channel__go { flex: none; color: var(--lp-primary); opacity: .7; }
+
+/* Seletor de contato do WhatsApp aberto pelos botões da página */
+.lp-wa-modal { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; padding: 16px;
+  background: rgba(8, 15, 30, .45); backdrop-filter: blur(3px); animation: lp-fab-in .2s ease both; }
+.lp-wa-modal__panel { width: min(360px, 100%); }
+.lp-wa-modal__head { display: flex; align-items: center; justify-content: space-between; }
+.lp-wa-modal__close { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 0; border-radius: 10px; cursor: pointer;
+  color: var(--color-foreground); background: transparent; }
+.lp-wa-modal__close:hover { background: color-mix(in srgb, var(--color-foreground) 8%, transparent); }
+/* Botões que abrem o seletor são <button>: herdam a fonte e sem borda padrão. */
+button.lp-btn, button.lp-svc__cta { font-family: inherit; }
+button.lp-svc__cta { border: 0; cursor: pointer; }
 
 /* Avatar com iniciais do responsável (menu do botão flutuante de WhatsApp) */
 .lp-person__avatar { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 52px; border-radius: 50%;
@@ -1338,7 +1424,6 @@ html { scroll-behavior: smooth; }
   box-shadow: 0 6px 16px rgba(214, 36, 159, .3); transition: transform .15s ease, box-shadow .2s ease; }
 .lp-ig-btn:hover { transform: translateY(-1px) scale(1.05); box-shadow: 0 10px 22px rgba(214, 36, 159, .4); }
 .lp-ig-btn--sm { width: 28px; height: 28px; box-shadow: none; }
-.lp-contact--instagram .lp-contact__icon { color: #fff; background: radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285aeb 90%); }
 .lp-results__content .lp-hero__cta { margin-top: 0; }
 .lp-footer__social { display: inline-flex; align-items: center; gap: 8px; margin-top: 10px; font-size: .9rem; font-weight: 600; color: var(--color-foreground); text-decoration: none; }
 .lp-footer__social:hover { color: var(--lp-primary); }
@@ -1384,7 +1469,7 @@ html { scroll-behavior: smooth; }
   .lp-results--reverse .lp-collage { order: -1; }
   .lp-docs { grid-template-columns: 1fr; gap: 32px; }
   .lp-grid--4 { grid-template-columns: repeat(2, 1fr); }
-  .lp-grid--contact { grid-template-columns: repeat(2, 1fr); }
+  .lp-reach { grid-template-columns: 1fr; }
   .lp-svc-grid { grid-template-columns: repeat(2, 1fr); }
   .lp-benefits { grid-template-columns: repeat(2, 1fr); }
   .lp-results { grid-template-columns: 1fr; gap: 40px; }
@@ -1407,7 +1492,11 @@ html { scroll-behavior: smooth; }
   .lp-mark { margin: 22px auto 22px; }
 }
 @media (max-width: 480px) {
-  .lp-grid--4, .lp-grid--contact { grid-template-columns: 1fr; }
+  .lp-grid--4 { grid-template-columns: 1fr; }
+  .lp-reach__team { padding: 20px; }
+  .lp-person-row { flex-wrap: wrap; }
+  .lp-person-row__actions { width: 100%; }
+  .lp-person-row__actions .lp-chip-btn { flex: 1; }
   .lp-benefits { grid-template-columns: 1fr; }
   .lp-metrics { grid-template-columns: 1fr; }
   .lp-collage { min-height: 320px; }
