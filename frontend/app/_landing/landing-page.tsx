@@ -55,7 +55,7 @@ const NAV = [
  * Serviços exibidos como cards com foto (estilo comercial). As fotos reais ficam
  * em `public/servicos/*.webp` (otimizadas). Se um arquivo faltar, o card cai num
  * degradê com o ícone do serviço, sem quebrar o layout. `focus` é o
- * object-position do recorte 4:3: aponta para onde estão as pessoas na foto.
+ * object-position do recorte: aponta para onde estão as pessoas na foto.
  */
 const SERVICES = [
   {
@@ -102,7 +102,7 @@ const SERVICES = [
       fields: ["Tipo de estabelecimento", "Quantidade de aparelhos", "Bairro/cidade"],
     },
     image: "/servicos/pmoc.webp",
-    focus: "center 34%",
+    focus: "center 30%",
     text: "Elaboração e execução do Plano de Manutenção, Operação e Controle exigido por lei, com relatórios que comprovam a conformidade do ambiente.",
     cta: "Regularizar meu PMOC",
   },
@@ -628,8 +628,8 @@ export function LandingPage() {
       {/* ---------- Resultados (prova social / números) ---------- */}
       <section id="resultados" className="lp-section lp-section--muted">
         <div className="lp-container lp-results lp-results--reverse">
-          {/* Colagem com fotos verticais da equipe em campo: corretiva e
-              preventiva ao fundo, a instalação em destaque ao centro. */}
+          {/* Colagem com fotos verticais da equipe: corretiva e preventiva ao
+              fundo, o PMOC (documentação do serviço) em destaque ao centro. */}
           <div className="lp-collage" data-reveal>
             <figure className="lp-collage__item lp-collage__item--back-left">
               <img src="/servicos/manutencao-corretiva.webp" alt="Técnico em manutenção corretiva" loading="lazy" style={{ objectPosition: "30% 25%" }} />
@@ -638,7 +638,7 @@ export function LandingPage() {
               <img src="/servicos/manutencao-preventiva.webp" alt="Técnico em manutenção preventiva" loading="lazy" style={{ objectPosition: "center 55%" }} />
             </figure>
             <figure className="lp-collage__item lp-collage__item--front">
-              <img src="/servicos/instalacao.webp" alt="Instalação de ar-condicionado" loading="lazy" style={{ objectPosition: "center 30%" }} />
+              <img src="/servicos/pmoc.webp" alt="Elaboração do PMOC pela equipe" loading="lazy" style={{ objectPosition: "center 40%" }} />
             </figure>
             <div className="lp-collage__seal" aria-label="Garantia e qualidade">
               <ShieldCheck size={22} />
@@ -1171,7 +1171,9 @@ html { scroll-behavior: smooth; }
   transition: transform .3s cubic-bezier(.2,.7,.2,1), box-shadow .3s ease, border-color .3s ease; }
 .lp-svc:hover { transform: translateY(-6px); border-color: color-mix(in srgb, var(--lp-primary) 38%, transparent);
   box-shadow: 0 24px 54px color-mix(in srgb, var(--lp-primary) 20%, transparent); }
-.lp-svc__media { position: relative; aspect-ratio: 16 / 11; overflow: hidden;
+/* Quadrada: as fotos de campo são verticais (celular); uma área mais alta
+   preenche o card com bem menos zoom do que um recorte horizontal. */
+.lp-svc__media { position: relative; aspect-ratio: 1 / 1; overflow: hidden;
   background: linear-gradient(135deg, color-mix(in srgb, var(--lp-primary) 22%, transparent), color-mix(in srgb, var(--lp-secondary) 12%, transparent)); }
 .lp-svc__media img { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; object-fit: cover; object-position: center 35%; transition: transform .6s cubic-bezier(.2,.7,.2,1); }
 .lp-svc:hover .lp-svc__media img { transform: scale(1.06); }
