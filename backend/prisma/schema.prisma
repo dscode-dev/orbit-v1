@@ -651,9 +651,10 @@ model Organization {
   @@map("organizations")
 }
 
-/// Responsáveis/canais de contato exibidos na landing (ex.: dois sócios, cada
-/// um com o próprio telefone/WhatsApp). A ordem (`position`) define o contato
-/// principal: o primeiro com WhatsApp recebe os botões gerais da página.
+/// Contatos da organização (responsáveis, setores…), mantidos em Configurações.
+/// Até dois são marcados para a landing (`showOnLanding`); entre eles, a ordem
+/// (`position`) define o principal: o primeiro com WhatsApp recebe os botões
+/// gerais da página.
 model OrganizationContact {
   id             String       @id @default(uuid()) @db.Uuid
   organizationId String       @map("organization_id") @db.Uuid
@@ -661,6 +662,7 @@ model OrganizationContact {
   role           String?      @db.VarChar(80)
   phone          String       @db.VarChar(30)
   isWhatsapp     Boolean      @default(true) @map("is_whatsapp")
+  showOnLanding  Boolean      @default(false) @map("show_on_landing")
   position       Int          @default(0)
   createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)

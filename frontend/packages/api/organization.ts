@@ -2,14 +2,17 @@
 import { api } from "./client";
 import type {
   AssetWithContent,
+  CreateOrganizationContactPayload,
   BrandAsset,
   BrandAssetType,
   CreateDocumentTemplatePayload,
   DocumentTemplate,
   Organization,
+  OrganizationContact,
   OrganizationSettings,
   PublicCompanyProfile,
   UpdateDocumentTemplatePayload,
+  UpdateOrganizationContactPayload,
   UpdateOrganizationPayload,
   UpdateOrganizationSettingsPayload,
 } from "@erp/types";
@@ -25,6 +28,27 @@ export function getPublicCompany(opts?: { signal?: AbortSignal }): Promise<Publi
 
 export function updateOrganization(payload: UpdateOrganizationPayload): Promise<Organization> {
   return api.patch<Organization>("/organization", payload);
+}
+
+/* ---------- Contacts (até dois aparecem na landing) ---------- */
+
+export function listContacts(opts?: { signal?: AbortSignal }): Promise<OrganizationContact[]> {
+  return api.get<OrganizationContact[]>("/organization/contacts", opts);
+}
+
+export function createContact(payload: CreateOrganizationContactPayload): Promise<OrganizationContact> {
+  return api.post<OrganizationContact>("/organization/contacts", payload);
+}
+
+export function updateContact(
+  id: string,
+  payload: UpdateOrganizationContactPayload,
+): Promise<OrganizationContact> {
+  return api.patch<OrganizationContact>(`/organization/contacts/${id}`, payload);
+}
+
+export function deleteContact(id: string): Promise<{ deleted: boolean }> {
+  return api.delete<{ deleted: boolean }>(`/organization/contacts/${id}`);
 }
 
 /* ---------- Settings ---------- */

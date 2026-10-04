@@ -383,15 +383,30 @@ export type DocumentTemplateType =
 
 export type SignatureMode = 'NONE' | 'FIXED' | 'COLLECTED' | 'HYBRID';
 
-/** Responsável de contato da organização (exibido na landing). */
+/** Contato da organização (Configurações → Organização → Contatos). */
 export type OrganizationContact = {
   id: string;
   name: string;
   role: string | null;
   phone: string;
+  /** Atende pelo WhatsApp: a landing gera o link wa.me para ele. */
   isWhatsapp: boolean;
+  /** Aparece na landing page (no máximo dois ao mesmo tempo). */
+  showOnLanding: boolean;
   position: number;
+  createdAt: string;
+  updatedAt: string;
 };
+
+export type CreateOrganizationContactPayload = {
+  name: string;
+  role?: string;
+  phone: string;
+  isWhatsapp?: boolean;
+  showOnLanding?: boolean;
+};
+
+export type UpdateOrganizationContactPayload = Partial<CreateOrganizationContactPayload>;
 
 export type Organization = {
   id: string;
@@ -414,7 +429,7 @@ export type Organization = {
   secondaryColor: string;
   segment: string | null;
   isActive: boolean;
-  /** Ordenados por `position`; o primeiro com WhatsApp é o contato principal. */
+  /** Todos os contatos, ordenados por `position`. */
   contacts: OrganizationContact[];
   createdAt: string;
   updatedAt: string;
@@ -623,8 +638,6 @@ export type UpdateOrganizationPayload = Partial<{
   email: string;
   phone: string;
   phoneNumbers: string[];
-  /** Substitui a lista inteira, na ordem enviada. */
-  contacts: Array<{ name: string; role?: string; phone: string; isWhatsapp?: boolean }>;
   website: string;
   zipCode: string;
   street: string;

@@ -15,11 +15,13 @@ import {
   Trash2,
   Download,
   Plus,
-  UserRound,
+  Globe,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { PageHeader } from '@platform/components/page-header';
 import { Drawer } from '@erp/ui/drawer';
+import { DrawerTabs } from '@erp/ui/drawer-tabs';
+import { ConfirmDialog } from '@erp/ui/confirm-dialog';
 import { SectionCard } from '@erp/ui/section-card';
 import { StatusChip } from '@erp/ui/status-chip';
 import { SkeletonCard } from '@erp/ui/skeletons';
@@ -228,6 +230,9 @@ function AssetUploader({
 
 /* ---------- Organization ---------- */
 
+const ORG_TABS = ['Dados da empresa', 'Endereço', 'Contatos', 'Cores'] as const;
+type OrgTab = (typeof ORG_TABS)[number];
+
 function OrganizationSection({
   org,
   canEdit,
@@ -238,6 +243,7 @@ function OrganizationSection({
   onSaved: () => void;
 }) {
   const { refresh } = useAuth();
+  const [tab, setTab] = useState<OrgTab>('Dados da empresa');
   const [form, setForm] = useState(org);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -270,14 +276,6 @@ function OrganizationSection({
         email: form.email,
         phone: form.phone,
         phoneNumbers: form.phoneNumbers,
-        contacts: form.contacts
-          .map((contact) => ({
-            name: contact.name.trim(),
-            role: contact.role?.trim() || undefined,
-            phone: contact.phone.trim(),
-            isWhatsapp: contact.isWhatsapp,
-          }))
-          .filter((contact) => contact.name || contact.phone),
         city: form.city,
         state: form.state,
         website: form.website ?? undefined,
@@ -302,136 +300,102 @@ function OrganizationSection({
     }
   }
 
+  // Contatos salvam item a item (cadastro próprio); as demais abas dividem o
+  // mesmo formulário e o botão Salvar.
+  const usesForm = tab !== 'Contatos';
+
   return (
     <SectionCard
       title="Organização"
       icon={Building2}
-      action={canEdit ? <SaveButton saving={saving} saved={saved} onClick={save} /> : undefined}
+      action={canEdit && usesForm ? <SaveButton saving={saving} saved={saved} onClick={save} /> : undefined}
     >
-      {error && (
-        <div className="mb-3 rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">
-          {error}
-        </div>
-      )}
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Input
-          label="Razão social"
-          value={form.legalName}
-          onChange={(v) => set('legalName', v)}
-          disabled={!canEdit}
-        />
-        <Input
-          label="Nome fantasia"
-          value={form.tradeName}
-          onChange={(v) => set('tradeName', v)}
-          disabled={!canEdit}
-        />
-        <Input
-          label="CNPJ"
-          value={form.cnpj}
-          onChange={(v) => set('cnpj', v)}
-          disabled={!canEdit}
-        />
-        <Input
-          label="Inscrição estadual"
-          value={form.stateRegistration ?? ''}
-          onChange={(v) => set('stateRegistration', v)}
-          disabled={!canEdit}
-        />
-        <Input
-          label="E-mail"
-          value={form.email}
-          onChange={(v) => set('email', v)}
-          disabled={!canEdit}
-        />
-        <Input
-          label="Telefone"
-          value={form.phone}
-          onChange={(v) => set('phone', v)}
-          disabled={!canEdit}
-        />
-        <Input
-          label="Telefones adicionais (separados por vírgula)"
-          value={form.phoneNumbers.join(', ')}
-          onChange={(v) =>
-            set(
-              'phoneNumbers',
-              v
-                .split(',')
-                .map((item) => item.trim())
-                .filter(Boolean),
-            )
-          }
-          disabled={!canEdit}
-        />
-        <Input
-          label="Website"
-          value={form.website ?? ''}
-          onChange={(v) => set('website', v)}
-          disabled={!canEdit}
-        />
-        <Input
-          label="CEP"
-          value={form.zipCode ?? ''}
-          onChange={(v) => set('zipCode', v)}
-          disabled={!canEdit}
-        />
-        <Input
-          label="Logradouro"
-          value={form.street ?? ''}
-          onChange={(v) => set('street', v)}
-          disabled={!canEdit}
-        />
-        <Input
-          label="Número"
-          value={form.number ?? ''}
-          onChange={(v) => set('number', v)}
-          disabled={!canEdit}
-        />
-        <Input
-          label="Complemento"
-          value={form.complement ?? ''}
-          onChange={(v) => set('complement', v)}
-          disabled={!canEdit}
-        />
-        <Input
-          label="Bairro"
-          value={form.district ?? ''}
-          onChange={(v) => set('district', v)}
-          disabled={!canEdit}
-        />
-        <div className="grid grid-cols-2 gap-3">
-          <Input
-            label="Cidade"
-            value={form.city}
-            onChange={(v) => set('city', v)}
-            disabled={!canEdit}
-          />
-          <Input
-            label="UF"
-            value={form.state}
-            onChange={(v) => set('state', v)}
-            disabled={!canEdit}
-          />
-        </div>
-        <ColorInput
-          label="Cor primária"
-          value={form.primaryColor}
-          onChange={(v) => setColor('primaryColor', v)}
-          disabled={!canEdit}
-        />
-        <ColorInput
-          label="Cor secundária"
-          value={form.secondaryColor}
-          onChange={(v) => setColor('secondaryColor', v)}
-          disabled={!canEdit}
-        />
+      <DrawerTabs tabs={ORG_TABS} active={tab} onChange={setTab} />
+
+      <div className="pt-5">
+        {error && usesForm && (
+          <div className="mb-3 rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">
+            {error}
+          </div>
+        )}
+
+        {tab === 'Dados da empresa' && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Input label="Razão social" value={form.legalName} onChange={(v) => set('legalName', v)} disabled={!canEdit} />
+            <Input label="Nome fantasia" value={form.tradeName} onChange={(v) => set('tradeName', v)} disabled={!canEdit} />
+            <Input label="CNPJ" value={form.cnpj} onChange={(v) => set('cnpj', v)} disabled={!canEdit} />
+            <Input
+              label="Inscrição estadual"
+              value={form.stateRegistration ?? ''}
+              onChange={(v) => set('stateRegistration', v)}
+              disabled={!canEdit}
+            />
+            <Input label="E-mail" value={form.email} onChange={(v) => set('email', v)} disabled={!canEdit} />
+            <Input label="Website" value={form.website ?? ''} onChange={(v) => set('website', v)} disabled={!canEdit} />
+            <Input label="Telefone principal" value={form.phone} onChange={(v) => set('phone', v)} disabled={!canEdit} />
+            <Input
+              label="Telefones adicionais (separados por vírgula)"
+              value={form.phoneNumbers.join(', ')}
+              onChange={(v) =>
+                set(
+                  'phoneNumbers',
+                  v
+                    .split(',')
+                    .map((item) => item.trim())
+                    .filter(Boolean),
+                )
+              }
+              disabled={!canEdit}
+            />
+            <p className="sm:col-span-2 text-xs text-[var(--color-muted-foreground)]">
+              Os telefones da empresa saem nos documentos. Os contatos exibidos na página inicial
+              ficam na aba <strong>Contatos</strong>.
+            </p>
+          </div>
+        )}
+
+        {tab === 'Endereço' && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Input label="CEP" value={form.zipCode ?? ''} onChange={(v) => set('zipCode', v)} disabled={!canEdit} />
+            <Input label="Logradouro" value={form.street ?? ''} onChange={(v) => set('street', v)} disabled={!canEdit} />
+            <Input label="Número" value={form.number ?? ''} onChange={(v) => set('number', v)} disabled={!canEdit} />
+            <Input
+              label="Complemento"
+              value={form.complement ?? ''}
+              onChange={(v) => set('complement', v)}
+              disabled={!canEdit}
+            />
+            <Input label="Bairro" value={form.district ?? ''} onChange={(v) => set('district', v)} disabled={!canEdit} />
+            <div className="grid grid-cols-[1fr_88px] gap-3">
+              <Input label="Cidade" value={form.city} onChange={(v) => set('city', v)} disabled={!canEdit} />
+              <Input label="UF" value={form.state} onChange={(v) => set('state', v)} disabled={!canEdit} />
+            </div>
+          </div>
+        )}
+
+        {tab === 'Contatos' && <ContactsTab canEdit={canEdit} />}
+
+        {tab === 'Cores' && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <ColorInput
+              label="Cor primária"
+              value={form.primaryColor}
+              onChange={(v) => setColor('primaryColor', v)}
+              disabled={!canEdit}
+            />
+            <ColorInput
+              label="Cor secundária"
+              value={form.secondaryColor}
+              onChange={(v) => setColor('secondaryColor', v)}
+              disabled={!canEdit}
+            />
+            <p className="sm:col-span-2 text-xs text-[var(--color-muted-foreground)]">
+              A pré-visualização é aplicada na hora; salve para manter as cores em todo o sistema e
+              na página inicial.
+            </p>
+          </div>
+        )}
       </div>
-      <ContactsEditor
-        contacts={form.contacts}
-        onChange={(contacts) => set('contacts', contacts)}
-        disabled={!canEdit}
-      />
     </SectionCard>
   );
 }
@@ -1204,125 +1168,310 @@ function hasCanvasInk(canvas: HTMLCanvasElement): boolean {
   return false;
 }
 
-/* ---------- Inputs ---------- */
+/* ---------- Contatos ---------- */
 
-const MAX_CONTACTS = 5;
+/** Quantos contatos a página inicial exibe ao mesmo tempo (regra também validada na API). */
+const MAX_LANDING_CONTACTS = 2;
+
+type ContactDraft = { name: string; role: string; phone: string; isWhatsapp: boolean; showOnLanding: boolean };
+
+const EMPTY_CONTACT: ContactDraft = { name: '', role: '', phone: '', isWhatsapp: true, showOnLanding: false };
 
 /**
- * Responsáveis de contato exibidos na landing (nome, função e telefone de cada
- * um). A ordem importa: o primeiro com WhatsApp recebe os botões gerais da página.
+ * Cadastro de contatos da organização. O OWNER escolhe até dois para a página
+ * inicial; os marcados como WhatsApp ganham o botão de conversa (wa.me) lá.
  */
-function ContactsEditor({
-  contacts,
-  onChange,
-  disabled,
-}: {
-  contacts: OrganizationContact[];
-  onChange: (contacts: OrganizationContact[]) => void;
-  disabled?: boolean;
-}) {
-  function update(index: number, patch: Partial<OrganizationContact>) {
-    onChange(contacts.map((contact, i) => (i === index ? { ...contact, ...patch } : contact)));
+function ContactsTab({ canEdit }: { canEdit: boolean }) {
+  const contacts = useQuery<OrganizationContact[]>((signal) => organizationApi.listContacts({ signal }), []);
+  // null = formulário fechado; 'new' = novo contato; id = editando.
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState<ContactDraft>(EMPTY_CONTACT);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [toDelete, setToDelete] = useState<OrganizationContact | null>(null);
+
+  const list = contacts.data ?? [];
+  const onLanding = list.filter((c) => c.showOnLanding).length;
+  const landingFull = onLanding >= MAX_LANDING_CONTACTS;
+
+  function startNew() {
+    setError(null);
+    setDraft({ ...EMPTY_CONTACT, showOnLanding: !landingFull });
+    setEditing('new');
   }
-  function add() {
-    onChange([
-      ...contacts,
-      {
-        id: `new-${Date.now()}`,
-        name: '',
-        role: null,
-        phone: '',
-        isWhatsapp: true,
-        position: contacts.length,
-      },
-    ]);
+  function startEdit(contact: OrganizationContact) {
+    setError(null);
+    setDraft({
+      name: contact.name,
+      role: contact.role ?? '',
+      phone: contact.phone,
+      isWhatsapp: contact.isWhatsapp,
+      showOnLanding: contact.showOnLanding,
+    });
+    setEditing(contact.id);
   }
+
+  async function run(key: string, action: () => Promise<unknown>) {
+    setBusy(key);
+    setError(null);
+    try {
+      await action();
+      contacts.refetch();
+      return true;
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : 'Não foi possível salvar o contato.');
+      return false;
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function submit() {
+    if (draft.name.trim().length < 2 || !draft.phone.trim()) {
+      setError('Informe o nome e o telefone do contato.');
+      return;
+    }
+    const payload = {
+      name: draft.name.trim(),
+      role: draft.role.trim(),
+      phone: draft.phone.trim(),
+      isWhatsapp: draft.isWhatsapp,
+      showOnLanding: draft.showOnLanding,
+    };
+    const ok = await run('form', () =>
+      editing === 'new'
+        ? organizationApi.createContact(payload)
+        : organizationApi.updateContact(editing as string, payload),
+    );
+    if (ok) setEditing(null);
+  }
+
+  const editingContact = list.find((c) => c.id === editing);
+  // No formulário, só deixa marcar "página inicial" se houver vaga (ou se o
+  // contato editado já estiver lá).
+  const canPickLanding = !landingFull || Boolean(editingContact?.showOnLanding);
 
   return (
-    <div className="mt-6 border-t border-[var(--color-border)] pt-5">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold">Responsáveis de contato</h3>
+          <h3 className="text-sm font-semibold">Contatos da empresa</h3>
           <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
-            Aparecem na página inicial, cada um com seu telefone e WhatsApp. O primeiro com
-            WhatsApp é o contato principal dos botões da página.
+            Escolha até {MAX_LANDING_CONTACTS} para aparecer na página inicial. Os marcados como
+            WhatsApp ganham o botão de conversa automaticamente.
           </p>
         </div>
-        {!disabled && contacts.length < MAX_CONTACTS && (
-          <button
-            type="button"
-            onClick={add}
-            className="inline-flex items-center gap-1.5 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 h-9 text-sm hover:bg-[var(--color-muted)]"
+        <div className="flex items-center gap-2">
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 h-7 text-xs font-medium ${
+              landingFull
+                ? 'bg-[var(--color-primary)]/12 text-[var(--color-primary)]'
+                : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
+            }`}
           >
-            <Plus className="h-4 w-4" /> Adicionar responsável
-          </button>
-        )}
+            <Globe className="h-3.5 w-3.5" /> Na página inicial: {onLanding}/{MAX_LANDING_CONTACTS}
+          </span>
+          {canEdit && editing === null && (
+            <button
+              type="button"
+              onClick={startNew}
+              className="inline-flex items-center gap-1.5 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] px-3 h-9 text-sm font-medium"
+            >
+              <Plus className="h-4 w-4" /> Novo contato
+            </button>
+          )}
+        </div>
       </div>
 
-      {contacts.length === 0 ? (
-        <p className="mt-3 rounded-[var(--radius-md)] border border-dashed border-[var(--color-border)] px-3 py-4 text-center text-sm text-[var(--color-muted-foreground)]">
-          Nenhum responsável cadastrado — a página inicial usa o telefone da organização.
-        </p>
-      ) : (
-        <ul className="mt-3 space-y-3">
-          {contacts.map((contact, index) => (
-            <li
-              key={contact.id}
-              className="rounded-[var(--radius-md)] border border-[var(--color-border)] p-3"
-            >
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--color-muted-foreground)]">
-                  <UserRound className="h-3.5 w-3.5" /> Responsável {index + 1}
-                  {index === 0 && ' · principal'}
-                </span>
-                {!disabled && (
-                  <button
-                    type="button"
-                    onClick={() => onChange(contacts.filter((_, i) => i !== index))}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10"
-                    aria-label={`Remover responsável ${index + 1}`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                )}
-              </div>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <Input
-                  label="Nome"
-                  value={contact.name}
-                  onChange={(v) => update(index, { name: v })}
-                  disabled={disabled}
-                />
-                <Input
-                  label="Função (opcional)"
-                  value={contact.role ?? ''}
-                  onChange={(v) => update(index, { role: v })}
-                  disabled={disabled}
-                />
-                <Input
-                  label="Telefone"
-                  value={contact.phone}
-                  onChange={(v) => update(index, { phone: v })}
-                  disabled={disabled}
-                />
-              </div>
-              <label className="mt-2 inline-flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={contact.isWhatsapp}
-                  onChange={(e) => update(index, { isWhatsapp: e.target.checked })}
-                  disabled={disabled}
-                  className="h-4 w-4 accent-[var(--color-primary)]"
-                />
-                Este número atende pelo WhatsApp
-              </label>
-            </li>
-          ))}
-        </ul>
+      {error && (
+        <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">
+          {error}
+        </div>
       )}
+
+      {editing !== null && (
+        <div className="rounded-[var(--radius-lg)] border border-[var(--color-primary)]/40 bg-[var(--color-primary)]/[0.04] p-4">
+          <p className="mb-3 text-sm font-semibold">{editing === 'new' ? 'Novo contato' : 'Editar contato'}</p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Input label="Nome" value={draft.name} onChange={(v) => setDraft((d) => ({ ...d, name: v }))} />
+            <Input
+              label="Função (opcional)"
+              value={draft.role}
+              onChange={(v) => setDraft((d) => ({ ...d, role: v }))}
+            />
+            <Input label="Telefone" value={draft.phone} onChange={(v) => setDraft((d) => ({ ...d, phone: v }))} />
+          </div>
+          <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2">
+            <label className="inline-flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={draft.isWhatsapp}
+                onChange={(e) => setDraft((d) => ({ ...d, isWhatsapp: e.target.checked }))}
+                className="h-4 w-4 accent-[var(--color-primary)]"
+              />
+              Este número é WhatsApp
+            </label>
+            <label
+              className={`inline-flex items-center gap-2 text-sm ${canPickLanding ? '' : 'opacity-60'}`}
+              title={canPickLanding ? undefined : 'Já há 2 contatos na página inicial'}
+            >
+              <input
+                type="checkbox"
+                checked={draft.showOnLanding}
+                disabled={!canPickLanding}
+                onChange={(e) => setDraft((d) => ({ ...d, showOnLanding: e.target.checked }))}
+                className="h-4 w-4 accent-[var(--color-primary)]"
+              />
+              Exibir na página inicial
+              {!canPickLanding && (
+                <span className="text-xs text-[var(--color-muted-foreground)]">(limite de 2 atingido)</span>
+              )}
+            </label>
+          </div>
+          <div className="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setEditing(null)}
+              disabled={busy === 'form'}
+              className="rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 h-9 text-sm hover:bg-[var(--color-muted)] disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => void submit()}
+              disabled={busy === 'form'}
+              className="inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] px-3 h-9 text-sm font-medium disabled:opacity-50"
+            >
+              {busy === 'form' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+              {editing === 'new' ? 'Adicionar' : 'Salvar'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <AsyncBoundary
+        loading={contacts.loading}
+        error={contacts.error}
+        data={contacts.data}
+        onRetry={contacts.refetch}
+        skeleton={<SkeletonCard />}
+      >
+        {(items) =>
+          items.length === 0 ? (
+            <p className="rounded-[var(--radius-md)] border border-dashed border-[var(--color-border)] px-3 py-6 text-center text-sm text-[var(--color-muted-foreground)]">
+              Nenhum contato cadastrado — a página inicial usa o telefone principal da empresa.
+            </p>
+          ) : (
+            <ul className="divide-y divide-[var(--color-border)] rounded-[var(--radius-lg)] border border-[var(--color-border)]">
+              {items.map((contact) => {
+                const landingLocked = !contact.showOnLanding && landingFull;
+                return (
+                  <li key={contact.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                    <span className="inline-flex h-10 w-10 flex-none items-center justify-center rounded-full bg-[var(--color-primary)]/12 text-sm font-semibold text-[var(--color-primary)]">
+                      {contactInitials(contact.name)}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">
+                        {contact.name}
+                        {contact.role && (
+                          <span className="font-normal text-[var(--color-muted-foreground)]"> · {contact.role}</span>
+                        )}
+                      </p>
+                      <p className="flex flex-wrap items-center gap-2 text-sm text-[var(--color-muted-foreground)]">
+                        {contact.phone}
+                        {contact.isWhatsapp ? (
+                          <StatusChip tone="success">WhatsApp</StatusChip>
+                        ) : (
+                          <StatusChip tone="neutral">Só ligação</StatusChip>
+                        )}
+                      </p>
+                    </div>
+
+                    {/* Atalho: liga/desliga a exibição na página inicial. */}
+                    <label
+                      className={`inline-flex items-center gap-2 text-sm ${landingLocked ? 'opacity-60' : ''}`}
+                      title={landingLocked ? 'Já há 2 contatos na página inicial' : undefined}
+                    >
+                      <input
+                        type="checkbox"
+                        role="switch"
+                        checked={contact.showOnLanding}
+                        disabled={!canEdit || landingLocked || busy !== null}
+                        onChange={(e) =>
+                          void run(contact.id, () =>
+                            organizationApi.updateContact(contact.id, { showOnLanding: e.target.checked }),
+                          )
+                        }
+                        className="h-4 w-4 accent-[var(--color-primary)]"
+                      />
+                      Página inicial
+                      {busy === contact.id && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                    </label>
+
+                    {canEdit && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => startEdit(contact)}
+                          disabled={busy !== null}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] hover:bg-[var(--color-muted)] disabled:opacity-50"
+                          aria-label={`Editar ${contact.name}`}
+                        >
+                          <PenLine className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setToDelete(contact)}
+                          disabled={busy !== null}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 disabled:opacity-50"
+                          aria-label={`Excluir ${contact.name}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )
+        }
+      </AsyncBoundary>
+
+      <ConfirmDialog
+        open={toDelete !== null}
+        title="Excluir contato"
+        description={
+          toDelete ? (
+            <>
+              <strong>{toDelete.name}</strong> será removido do cadastro
+              {toDelete.showOnLanding ? ' e deixará de aparecer na página inicial' : ''}.
+            </>
+          ) : undefined
+        }
+        confirmLabel="Excluir"
+        danger
+        onClose={() => setToDelete(null)}
+        onConfirm={async () => {
+          if (!toDelete) return;
+          const target = toDelete;
+          await run(target.id, () => organizationApi.deleteContact(target.id));
+          if (editing === target.id) setEditing(null);
+          setToDelete(null);
+        }}
+      />
     </div>
   );
 }
+
+/** Iniciais para o avatar ("Ana Souza" → "AS"). */
+function contactInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return ((parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+}
+
+/* ---------- Inputs ---------- */
 
 function SaveButton({
   saving,

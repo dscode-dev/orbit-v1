@@ -10,7 +10,10 @@ import {
   BRAND_ASSET_RESOURCE,
   DOCUMENT_TEMPLATE_RESOURCE,
   MAX_BRAND_ASSET_SIZE_BYTES,
+  MAX_LANDING_CONTACTS,
+  MAX_ORGANIZATION_CONTACTS,
   ORGANIZATION_AUDIT_ACTIONS,
+  ORGANIZATION_CONTACT_RESOURCE,
   ORGANIZATION_RESOURCE,
   ORGANIZATION_SETTINGS_RESOURCE,
 } from '../../shared/constants/organization.constants';
@@ -21,7 +24,12 @@ import {
   type StorageProviderContract,
 } from '../../infra/storage/storage-provider.type';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
-import type { UpdateOrganizationDto, UpdateOrganizationSettingsDto } from './dto/organization.dto';
+import type {
+  CreateOrganizationContactDto,
+  UpdateOrganizationContactDto,
+  UpdateOrganizationDto,
+  UpdateOrganizationSettingsDto,
+} from './dto/organization.dto';
 import type {
   CreateDocumentTemplateDto,
   UpdateDocumentTemplateDto,
@@ -47,12 +55,23 @@ const CONTACT_SELECT = {
   role: true,
   phone: true,
   isWhatsapp: true,
+  showOnLanding: true,
   position: true,
+  createdAt: true,
+  updatedAt: true,
 } satisfies Prisma.OrganizationContactSelect;
 
 const CONTACTS_INCLUDE = {
-  orderBy: { position: 'asc' as const },
+  orderBy: [{ position: 'asc' as const }, { createdAt: 'asc' as const }],
   select: CONTACT_SELECT,
+};
+
+/** Só os contatos marcados para a landing (no máximo dois), na ordem de exibição. */
+const LANDING_CONTACTS_INCLUDE = {
+  where: { showOnLanding: true },
+  orderBy: [{ position: 'asc' as const }, { createdAt: 'asc' as const }],
+  take: MAX_LANDING_CONTACTS,
+  select: { name: true, role: true, phone: true, isWhatsapp: true },
 };
 
 const ORGANIZATION_SELECT = {
@@ -97,7 +116,7 @@ const PUBLIC_ORGANIZATION_SELECT = {
   state: true,
   primaryColor: true,
   secondaryColor: true,
-  contacts: CONTACTS_INCLUDE,
+  contacts: LANDING_CONTACTS_INCLUDE,
 } satisfies Prisma.OrganizationSelect;
 
 const SETTINGS_SELECT = {
@@ -159,6 +178,9 @@ export type TemplateResponse = Prisma.DocumentTemplateGetPayload<{
   select: typeof TEMPLATE_SELECT;
 }>;
 export type AssetResponse = Prisma.BrandAssetGetPayload<{ select: typeof ASSET_SELECT }>;
+export type ContactResponse = Prisma.OrganizationContactGetPayload<{
+  select: typeof CONTACT_SELECT;
+}>;
 
 export interface AssetContentResponse extends AssetResponse {
   contentBase64: string;
@@ -256,28 +278,10 @@ export class OrganizationService {
     context: RequestAuditContext,
   ): Promise<OrganizationResponse> {
     const organization = await this.getSingleOrganizationOrThrow();
-    const { contacts, ...organizationData } = dto;
     return this.prisma.$transaction(async (transaction) => {
       const updated = await transaction.organization.update({
         where: { id: organization.id },
-        data: {
-          ...organizationData,
-          // A lista é substituída inteira: a ordem recebida vira `position`.
-          ...(contacts === undefined
-            ? {}
-            : {
-                contacts: {
-                  deleteMany: {},
-                  create: contacts.map((contact, position) => ({
-                    name: contact.name,
-                    role: contact.role || null,
-                    phone: contact.phone,
-                    isWhatsapp: contact.isWhatsapp ?? true,
-                    position,
-                  })),
-                },
-              }),
-        },
+        data: dto,
         select: ORGANIZATION_SELECT,
       });
       await transaction.auditLog.create({
@@ -291,6 +295,132 @@ export class OrganizationService {
       });
       return updated;
     });
+  }
+
+  /* ---------- Contatos (Configurações → Organização → Contatos) ---------- */
+
+  async listContacts(): Promise<ContactResponse[]> {
+    return (await this.getSingleOrganizationOrThrow()).contacts;
+  }
+
+  async createContact(
+    dto: CreateOrganizationContactDto,
+    user: AuthenticatedUser,
+    context: RequestAuditContext,
+  ): Promise<ContactResponse> {
+    const organization = await this.getSingleOrganizationOrThrow();
+    if (organization.contacts.length >= MAX_ORGANIZATION_CONTACTS) {
+      throw new ApplicationException(
+        ERROR_CODES.ORGANIZATION_CONTACT_LIMIT,
+        `É possível cadastrar no máximo ${MAX_ORGANIZATION_CONTACTS} contatos.`,
+        HttpStatus.CONFLICT,
+      );
+    }
+    const showOnLanding = dto.showOnLanding ?? false;
+    if (showOnLanding) this.assertLandingSlot(organization.contacts);
+    const lastPosition = organization.contacts.at(-1)?.position ?? -1;
+    return this.prisma.$transaction(async (transaction) => {
+      const created = await transaction.organizationContact.create({
+        data: {
+          organizationId: organization.id,
+          name: dto.name,
+          role: dto.role || null,
+          phone: dto.phone,
+          isWhatsapp: dto.isWhatsapp ?? true,
+          showOnLanding,
+          position: lastPosition + 1,
+        },
+        select: CONTACT_SELECT,
+      });
+      await transaction.auditLog.create({
+        data: this.auditData(
+          ORGANIZATION_AUDIT_ACTIONS.CONTACT_CREATED,
+          ORGANIZATION_CONTACT_RESOURCE,
+          user,
+          context,
+          { organizationId: organization.id, contactId: created.id, showOnLanding },
+        ),
+      });
+      return created;
+    });
+  }
+
+  async updateContact(
+    id: string,
+    dto: UpdateOrganizationContactDto,
+    user: AuthenticatedUser,
+    context: RequestAuditContext,
+  ): Promise<ContactResponse> {
+    const organization = await this.getSingleOrganizationOrThrow();
+    const existing = this.findContactOrThrow(organization.contacts, id);
+    if (dto.showOnLanding === true && !existing.showOnLanding) {
+      this.assertLandingSlot(organization.contacts);
+    }
+    return this.prisma.$transaction(async (transaction) => {
+      const updated = await transaction.organizationContact.update({
+        where: { id: existing.id },
+        data: {
+          ...dto,
+          ...(dto.role !== undefined ? { role: dto.role || null } : {}),
+        },
+        select: CONTACT_SELECT,
+      });
+      await transaction.auditLog.create({
+        data: this.auditData(
+          ORGANIZATION_AUDIT_ACTIONS.CONTACT_UPDATED,
+          ORGANIZATION_CONTACT_RESOURCE,
+          user,
+          context,
+          { organizationId: organization.id, contactId: id, changedFields: Object.keys(dto) },
+        ),
+      });
+      return updated;
+    });
+  }
+
+  async deleteContact(
+    id: string,
+    user: AuthenticatedUser,
+    context: RequestAuditContext,
+  ): Promise<{ deleted: true }> {
+    const organization = await this.getSingleOrganizationOrThrow();
+    const existing = this.findContactOrThrow(organization.contacts, id);
+    await this.prisma.$transaction([
+      this.prisma.organizationContact.delete({ where: { id: existing.id } }),
+      this.prisma.auditLog.create({
+        data: this.auditData(
+          ORGANIZATION_AUDIT_ACTIONS.CONTACT_DELETED,
+          ORGANIZATION_CONTACT_RESOURCE,
+          user,
+          context,
+          { organizationId: organization.id, contactId: existing.id },
+        ),
+      }),
+    ]);
+    return { deleted: true };
+  }
+
+  private findContactOrThrow(contacts: ContactResponse[], id: string): ContactResponse {
+    const contact = contacts.find((item) => item.id === id);
+    if (!contact) {
+      throw new ApplicationException(
+        ERROR_CODES.ORGANIZATION_CONTACT_NOT_FOUND,
+        'Contato não encontrado',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    return contact;
+  }
+
+  /** A landing exibe no máximo dois contatos: recusa marcar um terceiro. */
+  private assertLandingSlot(contacts: ContactResponse[]): void {
+    if (contacts.filter((contact) => contact.showOnLanding).length >= MAX_LANDING_CONTACTS) {
+      throw new ApplicationException(
+        ERROR_CODES.ORGANIZATION_LANDING_CONTACT_LIMIT,
+        `A página inicial exibe no máximo ${MAX_LANDING_CONTACTS} contatos. Desmarque um deles antes.`,
+        HttpStatus.CONFLICT,
+      );
+    }
   }
 
   async getSettings(): Promise<SettingsResponse> {

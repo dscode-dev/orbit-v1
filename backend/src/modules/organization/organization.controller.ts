@@ -24,11 +24,17 @@ import type { RequestWithId } from '../../shared/types/request-with-id.type';
 import { MAX_BRAND_ASSET_SIZE_BYTES } from '../../shared/constants/organization.constants';
 import { UploadBrandAssetDto } from './dto/brand-asset.dto';
 import { CreateDocumentTemplateDto, UpdateDocumentTemplateDto } from './dto/document-template.dto';
-import { UpdateOrganizationDto, UpdateOrganizationSettingsDto } from './dto/organization.dto';
+import {
+  CreateOrganizationContactDto,
+  UpdateOrganizationContactDto,
+  UpdateOrganizationDto,
+  UpdateOrganizationSettingsDto,
+} from './dto/organization.dto';
 import {
   OrganizationService,
   type AssetContentResponse,
   type AssetResponse,
+  type ContactResponse,
   type OrganizationResponse,
   type PublicOrganizationProfile,
   type RequestAuditContext,
@@ -62,6 +68,46 @@ export class OrganizationController {
     @Req() request: RequestWithId,
   ): Promise<OrganizationResponse> {
     return this.organization.updateOrganization(body, user, this.context(request));
+  }
+
+  /* ---------- Contatos (até dois aparecem na landing) ---------- */
+
+  @Roles(Role.OWNER, Role.MANAGER)
+  @Get('contacts')
+  listContacts(): Promise<ContactResponse[]> {
+    return this.organization.listContacts();
+  }
+
+  @Roles(Role.OWNER)
+  @Post('contacts')
+  createContact(
+    @Body() body: CreateOrganizationContactDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: RequestWithId,
+  ): Promise<ContactResponse> {
+    return this.organization.createContact(body, user, this.context(request));
+  }
+
+  @Roles(Role.OWNER)
+  @Patch('contacts/:id')
+  updateContact(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() body: UpdateOrganizationContactDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: RequestWithId,
+  ): Promise<ContactResponse> {
+    return this.organization.updateContact(id, body, user, this.context(request));
+  }
+
+  @Roles(Role.OWNER)
+  @HttpCode(HttpStatus.OK)
+  @Delete('contacts/:id')
+  deleteContact(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: RequestWithId,
+  ): Promise<{ deleted: true }> {
+    return this.organization.deleteContact(id, user, this.context(request));
   }
 
   @Roles(Role.OWNER, Role.MANAGER)

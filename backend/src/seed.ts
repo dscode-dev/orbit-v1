@@ -340,7 +340,7 @@ function organizationContactsInput(): OrganizationContactInput[] {
         isWhatsapp: !/^(n|nao|não|no|false|0)$/i.test(whatsapp),
       };
     });
-  if (contacts.length > 5) throw new Error('ORGANIZATION_CONTACTS accepts at most 5 contacts');
+  if (contacts.length > 20) throw new Error('ORGANIZATION_CONTACTS accepts at most 20 contacts');
   return contacts;
 }
 
@@ -361,6 +361,8 @@ async function ensureOrganizationContacts(): Promise<void> {
     data: contacts.map((contact, position) => ({
       organizationId: organization.id,
       ...contact,
+      // Os dois primeiros aparecem na landing; os demais ficam só no cadastro.
+      showOnLanding: position < 2,
       position,
     })),
   });

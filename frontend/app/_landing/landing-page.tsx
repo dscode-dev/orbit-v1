@@ -153,6 +153,7 @@ const CLIENTS = [
   { name: "Beleza Cão & Gato", logo: "/clientes/beleza-cao-e-gato.webp" },
   { name: "IEADALPE", logo: "/clientes/ieadalpe.webp" },
   { name: "AmorSaúde", logo: "/clientes/amor-saude.webp" },
+  { name: "Cia. do Sorriso — Clínica Odontológica", logo: "/clientes/clinica-cia-do-sorriso.webp" },
 ];
 
 /**
@@ -1187,8 +1188,9 @@ html { scroll-behavior: smooth; }
 .lp-clients__grid .lp-client { width: 168px; height: 168px; }
 @media (max-width: 720px) {
   .lp-client { width: 116px; height: 116px; border-radius: 22px; }
-  .lp-clients__grid { gap: 14px; }
-  .lp-clients__grid .lp-client { width: 96px; height: 96px; border-radius: 20px; }
+  /* No celular, 2 por linha: com 4 clientes forma uma grade 2×2 equilibrada. */
+  .lp-clients__grid { gap: 16px; max-width: 280px; margin: 0 auto; }
+  .lp-clients__grid .lp-client { width: 120px; height: 120px; border-radius: 22px; }
   .lp-marquee__group { gap: 18px; }
 }
 
