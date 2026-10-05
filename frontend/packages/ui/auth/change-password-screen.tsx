@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, ArrowRight, KeyRound, Loader2, PenLine, ShieldCheck } from 'lucide-react';
 import { useAuth } from './auth-provider';
 import { usersApi, ApiClientError } from '@erp/api';
+import { dataUrlToFile } from '@erp/utils';
 import { SignaturePad } from '../documents/signature-pad';
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -14,6 +15,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   UPLOAD_INVALID_MIME_TYPE: 'A imagem gerada para a assinatura é inválida.',
   UPLOAD_FILE_TOO_LARGE: 'A assinatura excedeu o limite permitido.',
   VALIDATION_ERROR: 'Revise a senha e os dados profissionais informados.',
+  AUTH_INVALID_TOKEN: 'Sua sessão expirou. Entre novamente com a senha temporária.',
 };
 
 export function ChangePasswordScreen({ variant }: { variant: 'platform' | 'operator' }) {
@@ -63,7 +65,7 @@ export function ChangePasswordScreen({ variant }: { variant: 'platform' | 'opera
             registrationNumber: registrationNumber.trim() || undefined,
             department: department.trim() || undefined,
           },
-          await dataUrlToFile(signature),
+          dataUrlToFile(signature, 'assinatura.png'),
         );
       } else {
         await usersApi.changePassword({ currentPassword, newPassword });
@@ -71,13 +73,7 @@ export function ChangePasswordScreen({ variant }: { variant: 'platform' | 'opera
       await logout();
       router.replace(loginPath);
     } catch (cause) {
-      const code =
-        cause instanceof ApiClientError
-          ? cause.code
-          : cause instanceof Error && cause.message === 'SIGNATURE_REQUIRED'
-            ? 'SIGNATURE_IMAGE_REQUIRED'
-            : 'UNKNOWN_ERROR';
-      setError(ERROR_MESSAGES[code] ?? 'Não foi possível concluir o primeiro acesso.');
+      setError(firstAccessErrorMessage(cause));
       setSubmitting(false);
     }
   }
@@ -151,9 +147,27 @@ export function ChangePasswordScreen({ variant }: { variant: 'platform' | 'opera
   );
 }
 
-async function dataUrlToFile(dataUrl: string): Promise<File> {
-  const blob = await fetch(dataUrl).then((response) => response.blob());
-  return new File([blob], 'assinatura.png', { type: 'image/png' });
+/**
+ * Mensagem para o usuário: códigos conhecidos têm texto próprio; erro da API
+ * sem mapeamento mostra a mensagem da própria API (com o id da requisição);
+ * falha antes de chegar à API (rede, navegador) é registrada no console para
+ * diagnóstico — a API não tem como logar o que nunca recebeu.
+ */
+function firstAccessErrorMessage(cause: unknown): string {
+  if (cause instanceof ApiClientError) {
+    const known = ERROR_MESSAGES[cause.code];
+    if (known) return known;
+    const reference = cause.requestId ? ` (ref. ${cause.requestId})` : '';
+    return `${cause.message || 'Não foi possível concluir o primeiro acesso.'}${reference}`;
+  }
+  if (cause instanceof Error && cause.message === 'SIGNATURE_REQUIRED') {
+    return ERROR_MESSAGES.SIGNATURE_IMAGE_REQUIRED;
+  }
+  console.error('[primeiro acesso] falha antes de chegar à API', cause);
+  if (cause instanceof TypeError) {
+    return 'Não foi possível conectar ao servidor. Verifique sua internet e tente novamente.';
+  }
+  return 'Não foi possível concluir o primeiro acesso.';
 }
 
 function PwInput({ label, value, onChange, autoComplete }: { label: string; value: string; onChange: (value: string) => void; autoComplete: string }) {

@@ -6,5 +6,6 @@ export { cn } from "./cn";
 export * from "./format";
 export * from "./export";
 export * from "./currency-words";
+export { dataUrlToFile } from "./data-url";
 export { useDebounce } from "./use-debounce";
 export { useLocalDraft, type LocalDraft, type StoredDraft } from "./use-local-draft";
