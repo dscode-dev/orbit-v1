@@ -84,6 +84,8 @@ function buildCsp(nonce: string, https: boolean): string {
       ...(API_ORIGIN ? [API_ORIGIN] : []),
       // Busca de endereço por CEP.
       "https://viacep.com.br",
+      // Busca de dados da empresa por CNPJ (cadastro de clientes).
+      "https://brasilapi.com.br",
       GOOGLE_TAG,
       ...GOOGLE_CONVERSION,
       // HMR do Next em desenvolvimento.

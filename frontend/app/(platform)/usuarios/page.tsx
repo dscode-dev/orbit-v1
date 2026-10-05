@@ -43,6 +43,8 @@ export default function UsuariosPage() {
   const [detail, setDetail] = useState<TeamUser | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<TeamUser | null>(null);
+  // Resultado da última exclusão (apagado de vez × mantido inativo para auditoria).
+  const [notice, setNotice] = useState<string | null>(null);
 
   const list = useQuery(
     (signal) => usersApi.listUsers({ page, limit, search: debounced || undefined, signal }),
@@ -171,6 +173,22 @@ export default function UsuariosPage() {
         }
       />
 
+      {notice && (
+        <div
+          role="status"
+          className="flex items-start justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--color-success)]/30 bg-[var(--color-success)]/10 px-3 py-2 text-sm"
+        >
+          <span>{notice}</span>
+          <button
+            type="button"
+            onClick={() => setNotice(null)}
+            className="shrink-0 text-xs font-medium text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
+          >
+            Fechar
+          </button>
+        </div>
+      )}
+
       <div className="inline-flex rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-1 shadow-[var(--shadow-card)]">
         <button
           type="button"
@@ -267,6 +285,14 @@ export default function UsuariosPage() {
         open={detail !== null}
         onClose={() => setDetail(null)}
         onChanged={() => { list.refetch(); }}
+        onDeleted={(mode, name) => {
+          setDetail(null);
+          setNotice(
+            mode === "deleted"
+              ? `${name} foi excluído, junto com a assinatura e os acessos.`
+              : `${name} tinha atendimentos ou documentos no histórico: foi mantido como inativo apenas para auditoria e saiu da lista de usuários.`,
+          );
+        }}
         onEdit={(u) => { setDetail(null); setEditing(u); setFormOpen(true); }}
       />
       <UserFormDrawer

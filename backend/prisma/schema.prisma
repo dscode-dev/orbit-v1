@@ -536,6 +536,9 @@ model User {
   mustChangePassword              Boolean                 @default(false) @map("must_change_password")
   isActive                        Boolean                 @default(true) @map("is_active")
   disabledAt                      DateTime?               @map("disabled_at") @db.Timestamptz(3)
+  /// Excluído com histórico (atendimentos, documentos…): fica inativo só para
+  /// auditoria e some da lista de usuários. Sem histórico, a exclusão é física.
+  deletedAt                       DateTime?               @map("deleted_at") @db.Timestamptz(3)
   lastLoginAt                     DateTime?               @map("last_login_at") @db.Timestamptz(3)
   /// Tentativas de senha erradas seguidas. Zera em todo login bem-sucedido.
   failedLoginAttempts             Int                     @default(0) @map("failed_login_attempts")
@@ -587,6 +590,7 @@ model User {
   rvtDefaultOperatorFor           RvtPlan[]               @relation("RvtDefaultOperator")
   rvtExecutionsAssigned           RvtExecution[]          @relation("RvtExecutionOperator")
 
+  @@index([deletedAt])
   @@map("users")
 }
 

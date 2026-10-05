@@ -3,13 +3,15 @@
 /**
  * CustomerFormDrawer — create / edit a customer against the production API.
  * PERSON shows CPF; COMPANY shows tradeName + CNPJ. Documents stay optional.
+ * Em Empresa, o CNPJ completo consulta a Receita (BrasilAPI) e preenche os
+ * campos ainda vazios — nunca sobrescreve o que o usuário já digitou.
  */
-import { useEffect, useState } from "react";
-import { Building2, Loader2, MapPin, Plus, User } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { AlertTriangle, BadgeCheck, Building2, Loader2, MapPin, Plus, Search, User } from "lucide-react";
 import { Drawer } from "@erp/ui/drawer";
-import { customersApi, cepApi, ApiClientError } from "@erp/api";
+import { customersApi, cepApi, cnpjApi, ApiClientError } from "@erp/api";
 import type { Customer, CustomerAddress, CustomerType, CreateCustomerPayload } from "@erp/api";
-import { maskCpf, maskCnpj, maskCep } from "@erp/utils";
+import { maskCpf, maskCnpj, maskCep, cnpjDigits, isValidCnpj } from "@erp/utils";
 import { AddressFormDrawer } from "./address-form-drawer";
 
 type FormState = {
@@ -85,6 +87,22 @@ export function CustomerFormDrawer({
   const [address, setAddress] = useState<AddressState>(blankAddress);
   const [createdCustomerId, setCreatedCustomerId] = useState<string | null>(null);
   const [cepLoading, setCepLoading] = useState(false);
+  // Consulta de CNPJ: carregando, resultado (situação/atividade) ou erro.
+  const [cnpjLookup, setCnpjLookup] = useState<{
+    loading: boolean;
+    status?: string;
+    activity?: string;
+    filled?: number;
+    error?: string;
+  }>({ loading: false });
+  // Último CNPJ consultado: não repete a consulta para o mesmo número.
+  const lastCnpjLookup = useRef<string | null>(null);
+  // Valores mais recentes do formulário para quando a resposta do CNPJ chegar
+  // (o usuário pode ter digitado algo enquanto a consulta rodava).
+  const formRef = useRef(form);
+  formRef.current = form;
+  const addressRef = useRef(address);
+  addressRef.current = address;
   // Endereços cadastrados (modo edição): permite escolher um para editar/adicionar.
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
   const [addrDrawer, setAddrDrawer] = useState<{ address: CustomerAddress | null } | null>(null);
@@ -103,6 +121,9 @@ export function CustomerFormDrawer({
       setAddress(blankAddress);
       setCreatedCustomerId(null);
       setCepLoading(false);
+      setCnpjLookup({ loading: false });
+      // Na edição, o CNPJ já salvo não dispara consulta ao abrir.
+      lastCnpjLookup.current = customer?.cnpj ? cnpjDigits(customer.cnpj) : null;
       setAddrDrawer(null);
       setAddresses([]);
       if (customer) customersApi.getCustomer(customer.id).then((c) => setAddresses(c.addresses ?? [])).catch(() => undefined);
@@ -115,6 +136,69 @@ export function CustomerFormDrawer({
 
   function setAddressField<K extends keyof AddressState>(key: K, value: AddressState[K]) {
     setAddress((current) => ({ ...current, [key]: value }));
+  }
+
+  /**
+   * Consulta o CNPJ e preenche só os campos vazios (cliente e, num cadastro
+   * novo, o endereço inicial). `force` refaz a consulta do mesmo número.
+   */
+  async function lookupCnpj(value: string, force = false) {
+    const digits = cnpjDigits(value);
+    if (!isValidCnpj(digits)) {
+      setCnpjLookup({ loading: false, error: digits.length === 14 ? "CNPJ inválido. Confira os números digitados." : undefined });
+      return;
+    }
+    if (!force && lastCnpjLookup.current === digits) return;
+    lastCnpjLookup.current = digits;
+    setCnpjLookup({ loading: true });
+    try {
+      const result = await cnpjApi.lookupCnpj(digits);
+      // Só preenche o que ainda está vazio.
+      const current = formRef.current;
+      const next = { ...current };
+      let filled = 0;
+      const fill = (key: "name" | "tradeName" | "email" | "phone" | "secondaryPhone", value: string) => {
+        if (value && !current[key].trim()) {
+          next[key] = value;
+          filled += 1;
+        }
+      };
+      fill("name", result.legalName);
+      fill("tradeName", result.tradeName);
+      fill("email", result.email);
+      fill("phone", result.phone);
+      fill("secondaryPhone", result.secondaryPhone);
+      setForm(next);
+      // Endereço inicial (só no cadastro novo) é sugerido se ainda estiver em branco.
+      const currentAddress = addressRef.current;
+      if (!isEdit && result.address.street && !currentAddress.zipCode.trim() && !currentAddress.street.trim()) {
+        filled += 1;
+        setAddress({
+          ...currentAddress,
+          enabled: true,
+          zipCode: result.address.zipCode,
+          street: result.address.street,
+          number: result.address.number,
+          complement: result.address.complement,
+          district: result.address.district,
+          city: result.address.city,
+          state: result.address.state,
+        });
+      }
+      setCnpjLookup({ loading: false, status: result.status, activity: result.activity, filled });
+    } catch (err) {
+      setCnpjLookup({ loading: false, error: err instanceof Error ? err.message : "Não foi possível consultar o CNPJ." });
+    }
+  }
+
+  function onCnpjChange(value: string) {
+    const masked = maskCnpj(value);
+    set("cnpj", masked);
+    setFieldError(null);
+    const digits = cnpjDigits(masked);
+    // Consulta automática ao completar os 14 dígitos (como no CEP).
+    if (digits.length === 14) void lookupCnpj(digits);
+    else setCnpjLookup({ loading: false });
   }
 
   async function lookupCep() {
@@ -257,6 +341,48 @@ export function CustomerFormDrawer({
           })}
         </div>
 
+        {form.type === "COMPANY" && (
+          <div className="space-y-1.5">
+            <div className="grid gap-2 grid-cols-[1fr_auto] items-end">
+              <Field label="CNPJ" error={fieldError ?? undefined}>
+                <input value={form.cnpj} onChange={(e) => onCnpjChange(e.target.value)} className={inputCls} placeholder="00.000.000/0000-00" inputMode="numeric" />
+              </Field>
+              <button
+                type="button"
+                onClick={() => void lookupCnpj(form.cnpj, true)}
+                disabled={cnpjLookup.loading || cnpjDigits(form.cnpj).length !== 14}
+                className="inline-flex h-9 items-center justify-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 text-sm hover:bg-[var(--color-muted)] disabled:opacity-50"
+                title="Buscar dados na Receita Federal"
+              >
+                {cnpjLookup.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                Buscar
+              </button>
+            </div>
+            {cnpjLookup.loading && (
+              <p className="text-[11px] text-[var(--color-muted-foreground)]">Consultando a Receita Federal…</p>
+            )}
+            {cnpjLookup.error && <p className="text-[11px] text-[var(--color-danger)]">{cnpjLookup.error}</p>}
+            {cnpjLookup.status && cnpjLookup.status.toUpperCase() !== "ATIVA" && (
+              <p className="flex items-start gap-1.5 rounded-[var(--radius-md)] border border-[var(--color-warning)]/40 bg-[var(--color-warning)]/10 px-2.5 py-1.5 text-[12px] text-[var(--color-warning)]">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                Atenção: este CNPJ está com situação <strong>{cnpjLookup.status}</strong> na Receita Federal.
+              </p>
+            )}
+            {cnpjLookup.status && cnpjLookup.status.toUpperCase() === "ATIVA" && (
+              <p className="flex items-start gap-1.5 text-[11px] text-[var(--color-success)]">
+                <BadgeCheck className="mt-px h-3.5 w-3.5 shrink-0" />
+                <span>
+                  Empresa ativa na Receita Federal
+                  {cnpjLookup.activity ? ` · ${cnpjLookup.activity}` : ""}.{" "}
+                  {cnpjLookup.filled
+                    ? "Campos em branco preenchidos — revise antes de salvar."
+                    : "Os campos já estavam preenchidos e foram mantidos."}
+                </span>
+              </p>
+            )}
+          </div>
+        )}
+
         <Field label={form.type === "COMPANY" ? "Razão social" : "Nome completo"} required>
           <input value={form.name} onChange={(e) => set("name", e.target.value)} className={inputCls} placeholder={form.type === "COMPANY" ? "Empresa LTDA" : "Nome do cliente"} />
         </Field>
@@ -267,13 +393,9 @@ export function CustomerFormDrawer({
           </Field>
         )}
 
-        {form.type === "PERSON" ? (
+        {form.type === "PERSON" && (
           <Field label="CPF" error={fieldError ?? undefined}>
             <input value={form.cpf} onChange={(e) => set("cpf", maskCpf(e.target.value))} className={inputCls} placeholder="000.000.000-00" inputMode="numeric" />
-          </Field>
-        ) : (
-          <Field label="CNPJ" error={fieldError ?? undefined}>
-            <input value={form.cnpj} onChange={(e) => set("cnpj", maskCnpj(e.target.value))} className={inputCls} placeholder="00.000.000/0000-00" inputMode="numeric" />
           </Field>
         )}
 

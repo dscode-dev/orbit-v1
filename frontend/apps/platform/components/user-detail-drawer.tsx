@@ -24,12 +24,15 @@ export function UserDetailDrawer({
   open,
   onClose,
   onChanged,
+  onDeleted,
   onEdit,
 }: {
   user: TeamUser | null;
   open: boolean;
   onClose: () => void;
   onChanged: () => void;
+  /** Depois da exclusão: o drawer deve fechar (o usuário pode ter saído da lista). */
+  onDeleted?: (mode: "deleted" | "archived", name: string) => void;
   onEdit: (user: TeamUser) => void;
 }) {
   const { session, hasRole } = useAuth();
@@ -178,10 +181,22 @@ export function UserDetailDrawer({
       <ConfirmDialog
         open={confirm === "delete"}
         title="Excluir usuário"
-        description={<>Exclusão lógica de <strong>{user.name}</strong>. O registro permanece inativo no histórico.</>}
+        description={
+          <>
+            <strong>{user.name}</strong> será excluído junto com a assinatura e os acessos. Se já
+            tiver atendimentos, documentos ou outros registros, ficará apenas inativo para auditoria
+            e sairá da lista de usuários. Para só suspender o acesso e manter na lista, use{" "}
+            <strong>Desativar</strong>.
+          </>
+        }
         confirmLabel="Excluir"
         danger
-        onConfirm={() => usersApi.deleteUser(user.id).then(onChanged)}
+        onConfirm={() =>
+          usersApi.deleteUser(user.id).then((result) => {
+            onChanged();
+            onDeleted?.(result.mode, user.name);
+          })
+        }
         onClose={() => setConfirm(null)}
       />
     </>

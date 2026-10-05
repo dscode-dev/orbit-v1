@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, ArrowRight, KeyRound, Loader2, PenLine, ShieldCheck } from 'lucide-react';
 import { useAuth } from './auth-provider';
 import { usersApi, ApiClientError } from '@erp/api';
-import { dataUrlToFile } from '@erp/utils';
+import { dataUrlToFile, MIN_PASSWORD_LENGTH } from '@erp/utils';
 import { SignaturePad } from '../documents/signature-pad';
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -44,9 +44,9 @@ export function ChangePasswordScreen({ variant }: { variant: 'platform' | 'opera
     if (!title && session?.user.jobTitle) setTitle(session.user.jobTitle);
   }, [session, title]);
 
-  const tooShort = newPassword.length > 0 && newPassword.length < 12;
+  const tooShort = newPassword.length > 0 && newPassword.length < MIN_PASSWORD_LENGTH;
   const mismatch = confirm.length > 0 && confirm !== newPassword;
-  const passwordReady = currentPassword.length > 0 && newPassword.length >= 12 && confirm === newPassword;
+  const passwordReady = currentPassword.length > 0 && newPassword.length >= MIN_PASSWORD_LENGTH && confirm === newPassword;
   const signatureReady = title.trim().length >= 2 && Boolean(signature);
 
   async function finish(): Promise<void> {
@@ -119,7 +119,7 @@ export function ChangePasswordScreen({ variant }: { variant: 'platform' | 'opera
           {step === 0 ? (
             <>
               <PwInput label="Senha temporária" value={currentPassword} onChange={setCurrentPassword} autoComplete="current-password" />
-              <div><PwInput label="Nova senha" value={newPassword} onChange={setNewPassword} autoComplete="new-password" /><p className={`mt-1 text-[11px] ${tooShort ? 'text-[var(--color-danger)]' : 'text-[var(--color-muted-foreground)]'}`}>Mínimo de 12 caracteres.</p></div>
+              <div><PwInput label="Nova senha" value={newPassword} onChange={setNewPassword} autoComplete="new-password" /><p className={`mt-1 text-[11px] ${tooShort ? 'text-[var(--color-danger)]' : 'text-[var(--color-muted-foreground)]'}`}>Mínimo de {MIN_PASSWORD_LENGTH} caracteres.</p></div>
               <div><PwInput label="Confirmar nova senha" value={confirm} onChange={setConfirm} autoComplete="new-password" />{mismatch && <p className="mt-1 text-[11px] text-[var(--color-danger)]">As senhas não coincidem.</p>}</div>
             </>
           ) : (

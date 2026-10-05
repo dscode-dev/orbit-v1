@@ -24,6 +24,7 @@ import { PasswordService } from '../auth/password.service';
 import { PrismaService } from '../database/prisma.service';
 import { SIGNATURE_AUDIT_ACTIONS, SIGNATURE_RESOURCE } from '../../shared/constants/signatures.constants';
 import { SignaturesService } from '../signatures/signatures.service';
+import { USER_FOOTPRINT_SELECT, userHistory } from './user-history';
 import type {
   ChangePasswordDto,
   CompleteFirstAccessDto,
@@ -118,8 +119,11 @@ export class UsersService {
   ) {}
 
   async list(query: ListUsersQueryDto): Promise<PaginatedResponse<NormalizedUserResponse>> {
+    // Usuários excluídos com histórico (arquivados) não aparecem na lista;
+    // os apenas desativados continuam, com status inativo.
     const where: Prisma.UserWhereInput = query.search
       ? {
+          deletedAt: null,
           OR: [
             { name: { contains: query.search, mode: 'insensitive' } },
             { email: { contains: query.search, mode: 'insensitive' } },
@@ -128,7 +132,7 @@ export class UsersService {
             { jobTitle: { contains: query.search, mode: 'insensitive' } },
           ],
         }
-      : {};
+      : { deletedAt: null };
     const skip = (query.page - 1) * query.limit;
     const [items, total] = await this.prisma.$transaction([
       this.prisma.user.findMany({
@@ -253,34 +257,92 @@ export class UsersService {
     return this.setActive(id, true, actor, context, USER_AUDIT_ACTIONS.USER_ENABLED);
   }
 
+  /**
+   * Exclusão de usuário.
+   * - Sem histórico: apaga de vez o usuário, a assinatura (com a imagem), a foto
+   *   de perfil, sessões, preferências e notificações.
+   * - Com histórico (atendimentos, documentos, financeiro…) ou assinatura já
+   *   usada em documentos/modelos: arquiva — inativo, fora da lista, sessões
+   *   revogadas e assinatura desativada — para manter a auditoria íntegra.
+   *   E-mail e usuário são liberados para um novo cadastro.
+   */
   async remove(
     id: string,
     actor: AuthenticatedUser,
     context: UserAuditContext,
-  ): Promise<{ deleted: true }> {
+  ): Promise<{ deleted: true; mode: 'deleted' | 'archived' }> {
     this.ensureNotSelf(id, actor.id);
     const existing = await this.getUserOrThrow(id);
     if (existing.role === Role.OWNER && existing.isActive) {
       await this.ensureAnotherActiveOwner(id);
     }
+    const footprint = await this.prisma.user.findUniqueOrThrow({
+      where: { id },
+      select: USER_FOOTPRINT_SELECT,
+    });
+    const history = userHistory(footprint);
     const now = new Date();
+    const signature = footprint.institutionalSignature;
+    const avatar = footprint.avatarAsset;
+
+    if (Object.keys(history).length === 0) {
+      await this.prisma.$transaction(async (tx) => {
+        if (signature) await tx.signature.delete({ where: { id: signature.id } });
+        // Sessões, preferências, permissões e notificações saem em cascata.
+        await tx.user.delete({ where: { id } });
+        if (avatar) await tx.userAvatarAsset.delete({ where: { id: avatar.id } });
+        await tx.auditLog.create({
+          data: this.auditData(USER_AUDIT_ACTIONS.USER_DELETED, USER_RESOURCE, actor.id, context, {
+            targetUserId: id,
+            mode: 'deleted',
+            name: existing.name,
+            email: existing.email,
+            username: existing.username,
+            role: existing.role,
+            signatureId: signature?.id ?? null,
+          }),
+        });
+      });
+      // Arquivos só depois do commit; falha aqui não desfaz a exclusão.
+      for (const key of [signature?.imageStorageKey, avatar?.storageKey]) {
+        if (key) await this.storage.delete(key).catch(() => undefined);
+      }
+      return { deleted: true, mode: 'deleted' };
+    }
+
+    const suffix = id.slice(0, 8);
     await this.prisma.$transaction([
       this.prisma.user.update({
         where: { id },
-        data: { isActive: false, disabledAt: now },
+        data: {
+          isActive: false,
+          disabledAt: existing.disabledAt ?? now,
+          deletedAt: now,
+          // Libera e-mail e usuário para um novo cadastro; os originais ficam na auditoria.
+          email: `${existing.email.slice(0, 200)}#excluido-${suffix}`,
+          username: `excluido-${suffix}-${existing.username}`.slice(0, 50),
+        },
       }),
       this.prisma.refreshToken.updateMany({
         where: { userId: id, revokedAt: null },
         data: { revokedAt: now },
       }),
+      // A assinatura sai de uso, mas continua nos documentos já emitidos.
+      this.prisma.signature.updateMany({
+        where: { userId: id, deletedAt: null },
+        data: { active: false, deletedAt: now },
+      }),
       this.prisma.auditLog.create({
         data: this.auditData(USER_AUDIT_ACTIONS.USER_DELETED, USER_RESOURCE, actor.id, context, {
           targetUserId: id,
-          softDelete: true,
+          mode: 'archived',
+          email: existing.email,
+          username: existing.username,
+          history,
         }),
       }),
     ]);
-    return { deleted: true };
+    return { deleted: true, mode: 'archived' };
   }
 
   async resetPassword(
@@ -729,8 +791,9 @@ export class UsersService {
     return this.get(id);
   }
 
+  /** Usuário ativo ou desativado; arquivados (excluídos com histórico) não existem mais aqui. */
   private async getUserOrThrow(id: string): Promise<UserResponse> {
-    const user = await this.prisma.user.findUnique({ where: { id }, select: USER_SELECT });
+    const user = await this.prisma.user.findFirst({ where: { id, deletedAt: null }, select: USER_SELECT });
     if (!user) {
       throw this.userNotFound();
     }

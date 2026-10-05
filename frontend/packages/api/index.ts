@@ -50,6 +50,7 @@ export * as inventoryApi from './inventory';
 export * as pricingApi from './pricing';
 export * as budgetsApi from './budgets';
 export * as cepApi from './cep';
+export * as cnpjApi from './cnpj';
 export * as notificationsApi from './notifications';
 export * as maintenanceRemindersApi from './maintenance-reminders';
 export type {

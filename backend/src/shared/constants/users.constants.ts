@@ -21,4 +21,9 @@ export const MAX_AVATAR_SIZE_BYTES = 2 * 1024 * 1024;
 export const ALLOWED_AVATAR_EXTENSIONS = ['png', 'jpg', 'jpeg'] as const;
 export const ALLOWED_AVATAR_MIME_TYPES = ['image/png', 'image/jpeg'] as const;
 export const GENERATED_PASSWORD_BYTES = 24;
-export const MIN_PASSWORD_LENGTH = 12;
+/**
+ * Tamanho mínimo de senha (plataforma, app do operador e portal do cliente).
+ * Definido pelo OWNER; espelhado em `frontend/packages/utils/password.ts`.
+ * Senhas existentes mais longas continuam válidas.
+ */
+export const MIN_PASSWORD_LENGTH = 8;

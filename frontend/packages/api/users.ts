@@ -115,8 +115,12 @@ export function enableUser(id: string): Promise<TeamUser> {
   return api.patch<TeamUser>(`/users/${id}/enable`);
 }
 
-export function deleteUser(id: string): Promise<{ deleted: boolean }> {
-  return api.delete<{ deleted: boolean }>(`/users/${id}`);
+/**
+ * Exclui o usuário. `mode`: "deleted" = apagado de vez (sem histórico);
+ * "archived" = tinha histórico, ficou inativo só para auditoria e saiu da lista.
+ */
+export function deleteUser(id: string): Promise<{ deleted: boolean; mode: "deleted" | "archived" }> {
+  return api.delete<{ deleted: boolean; mode: "deleted" | "archived" }>(`/users/${id}`);
 }
 
 export function resetPassword(id: string): Promise<ResetPasswordResult> {

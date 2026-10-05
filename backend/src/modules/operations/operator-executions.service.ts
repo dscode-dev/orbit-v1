@@ -52,6 +52,8 @@ export class OperatorExecutionsService {
     const period = await this.period(query);
     const userWhere: Prisma.UserWhereInput = {
       role: Role.OPERATOR,
+      // Operador excluído (arquivado só para auditoria) sai da lista; desativado continua.
+      deletedAt: null,
       ...(query.search
         ? {
             OR: [

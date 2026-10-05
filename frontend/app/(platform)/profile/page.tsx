@@ -11,6 +11,7 @@ import { StatusChip } from "@erp/ui/status-chip";
 import { UserAvatar } from "@erp/ui/user-avatar";
 import { useAuth } from "@erp/ui/auth/auth-provider";
 import { usersApi, ApiClientError, type UserTheme } from "@erp/api";
+import { MIN_PASSWORD_LENGTH } from "@erp/utils";
 import { ROLE_LABEL, ROLE_TONE, PERMISSION_KEYS, PERMISSION_LABEL } from "@platform/user-display";
 
 const THEME_OPTIONS: { value: UserTheme; label: string }[] = [
@@ -350,7 +351,7 @@ function ChangePasswordCard() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const canSubmit = current && next.length >= 12 && next === confirm && !saving;
+  const canSubmit = current && next.length >= MIN_PASSWORD_LENGTH && next === confirm && !saving;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -365,7 +366,7 @@ function ChangePasswordCard() {
       setError(
         code === "PASSWORD_CURRENT_INVALID" ? "Senha atual incorreta." :
         code === "PASSWORD_REUSE_NOT_ALLOWED" ? "A nova senha deve ser diferente da atual." :
-        code === "VALIDATION_ERROR" ? "A nova senha precisa ter ao menos 12 caracteres." :
+        code === "VALIDATION_ERROR" ? `A nova senha precisa ter ao menos ${MIN_PASSWORD_LENGTH} caracteres.` :
         "Não foi possível alterar a senha.",
       );
       setSaving(false);

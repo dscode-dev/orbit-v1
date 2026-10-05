@@ -1,5 +1,6 @@
 import { DocumentTemplateType, CustomerPortalTicketStatus } from '@prisma/client';
 import type { OperationType } from '../../../shared/constants/service-types.constants';
+import { MIN_PASSWORD_LENGTH } from '../../../shared/constants/users.constants';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -49,7 +50,7 @@ export class CustomerPortalChangePasswordDto {
   currentPassword!: string;
 
   @IsString()
-  @MinLength(12)
+  @MinLength(MIN_PASSWORD_LENGTH)
   @MaxLength(128)
   @Matches(/[a-z]/, { message: 'A senha deve conter letra minúscula' })
   @Matches(/[A-Z]/, { message: 'A senha deve conter letra maiúscula' })
