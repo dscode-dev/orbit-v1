@@ -12,6 +12,7 @@ import { UserAvatar } from "@erp/ui/user-avatar";
 import { useAuth } from "@erp/ui/auth/auth-provider";
 import { usersApi, ApiClientError, type UserTheme } from "@erp/api";
 import { MIN_PASSWORD_LENGTH } from "@erp/utils";
+import { BiometricDevices } from "@erp/ui/auth/biometric-devices";
 import { ROLE_LABEL, ROLE_TONE, PERMISSION_KEYS, PERMISSION_LABEL } from "@platform/user-display";
 
 const THEME_OPTIONS: { value: UserTheme; label: string }[] = [
@@ -378,13 +379,16 @@ function ChangePasswordCard() {
       <form onSubmit={onSubmit} className="space-y-3">
         {error && <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{error}</div>}
         <Input label="Senha atual" value={current} onChange={setCurrent} />
-        <Input label="Nova senha (mín. 12)" value={next} onChange={setNext} />
+        <Input label={`Nova senha (mín. ${MIN_PASSWORD_LENGTH})`} value={next} onChange={setNext} />
         <Input label="Confirmar nova senha" value={confirm} onChange={setConfirm} />
         <p className="text-[11px] text-[var(--color-muted-foreground)]">Ao alterar a senha, todas as sessões serão encerradas e será necessário entrar novamente.</p>
         <button type="submit" disabled={!canSubmit} className="inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] px-3 h-9 text-sm font-medium disabled:opacity-50">
           {saving && <Loader2 className="h-4 w-4 animate-spin" />} Alterar senha
         </button>
       </form>
+      <div className="mt-5 border-t border-[var(--color-border)] pt-4">
+        <BiometricDevices />
+      </div>
     </SectionCard>
   );
 }

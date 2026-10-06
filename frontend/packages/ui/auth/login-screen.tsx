@@ -8,15 +8,17 @@
  */
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2, LogIn } from "lucide-react";
+import { Fingerprint, Loader2, LogIn } from "lucide-react";
 import { useAuth } from "./auth-provider";
+import { InsecureHint, useBiometricAvailability } from "./biometric-devices";
 import { BrandLogo } from "../brand";
-import { ApiClientError } from "@erp/api";
+import { ApiClientError, webauthnApi } from "@erp/api";
 
 const ERROR_MESSAGES: Record<string, string> = {
   AUTH_INVALID_CREDENTIALS: "E-mail ou senha incorretos.",
   AUTH_USER_INACTIVE: "Usuário desativado. Procure um administrador.",
   AUTH_LOGIN_CHANNEL_FORBIDDEN: "Este usuário deve acessar o ambiente correspondente ao seu perfil.",
+  AUTH_ACCOUNT_LOCKED: "Conta bloqueada temporariamente por tentativas sem sucesso. Tente mais tarde.",
   RATE_LIMIT_EXCEEDED: "Muitas tentativas. Aguarde alguns instantes.",
   VALIDATION_ERROR: "Informe um e-mail e uma senha válidos.",
 };
@@ -39,7 +41,9 @@ const COPY: Record<Variant, { title: string; subtitle: string; home: string; cha
 };
 
 function LoginForm({ variant }: { variant: Variant }) {
-  const { login, status } = useAuth();
+  const { login, loginWithBiometrics, status } = useAuth();
+  const biometrics = useBiometricAvailability();
+  const [biometricBusy, setBiometricBusy] = useState(false);
   const router = useRouter();
   const params = useSearchParams();
   const copy = COPY[variant];
@@ -65,6 +69,21 @@ function LoginForm({ variant }: { variant: Variant }) {
       const code = err instanceof ApiClientError ? err.code : "UNKNOWN_ERROR";
       setError(ERROR_MESSAGES[code] ?? "Não foi possível entrar. Tente novamente.");
       setSubmitting(false);
+    }
+  }
+
+  async function onBiometricLogin() {
+    setBiometricBusy(true);
+    setError(null);
+    try {
+      await loginWithBiometrics();
+    } catch (err) {
+      setError(
+        err instanceof ApiClientError
+          ? (ERROR_MESSAGES[err.code] && err.code !== "AUTH_INVALID_CREDENTIALS" ? ERROR_MESSAGES[err.code] : err.message)
+          : webauthnApi.biometricErrorMessage(err, "Não foi possível entrar com biometria."),
+      );
+      setBiometricBusy(false);
     }
   }
 
@@ -95,6 +114,23 @@ function LoginForm({ variant }: { variant: Variant }) {
             {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />}
             Entrar
           </button>
+          {biometrics === "insecure" && <InsecureHint />}
+          {biometrics === "available" && (
+            <>
+              <div className="flex items-center gap-3 text-[11px] uppercase tracking-wider text-[var(--color-muted-foreground)]">
+                <span className="h-px flex-1 bg-[var(--color-border)]" /> ou <span className="h-px flex-1 bg-[var(--color-border)]" />
+              </div>
+              <button
+                type="button"
+                onClick={() => void onBiometricLogin()}
+                disabled={biometricBusy || submitting}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] h-11 text-sm font-semibold hover:bg-[var(--color-muted)] disabled:opacity-50 active:scale-[0.99]"
+              >
+                {biometricBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Fingerprint className="h-4 w-4" />}
+                Entrar com biometria
+              </button>
+            </>
+          )}
         </form>
 
         <p className="text-center text-[11px] text-[var(--color-muted-foreground)] mt-6">

@@ -7,11 +7,13 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RoleGuard } from './guards/role.guard';
 import { AppConfigModule } from '../config/app-config.module';
 import { PasswordChangeRequiredGuard } from './guards/password-change-required.guard';
+import { WebAuthnController } from './webauthn.controller';
+import { WebAuthnService } from './webauthn.service';
 
 @Module({
   imports: [AppConfigModule, JwtModule.register({})],
-  controllers: [AuthController],
-  providers: [AuthService, PasswordService, JwtAuthGuard, RoleGuard, PasswordChangeRequiredGuard],
+  controllers: [AuthController, WebAuthnController],
+  providers: [AuthService, WebAuthnService, PasswordService, JwtAuthGuard, RoleGuard, PasswordChangeRequiredGuard],
   exports: [AuthService, PasswordService, JwtAuthGuard, RoleGuard, PasswordChangeRequiredGuard],
 })
 export class AuthModule {}

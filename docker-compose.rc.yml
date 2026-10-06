@@ -39,6 +39,9 @@ services:
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       ORGANIZATION_INSTAGRAM: ${ORGANIZATION_INSTAGRAM:-}
+      WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:-}
+      WEBAUTHN_ORIGINS: ${WEBAUTHN_ORIGINS:-}
+      WEBAUTHN_RP_NAME: ${WEBAUTHN_RP_NAME:-}
     volumes:
       - api-storage:/app/storage
     depends_on:

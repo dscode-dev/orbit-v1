@@ -589,9 +589,46 @@ model User {
   rvtResponsibleFor               RvtPlan[]               @relation("RvtResponsibleTechnician")
   rvtDefaultOperatorFor           RvtPlan[]               @relation("RvtDefaultOperator")
   rvtExecutionsAssigned           RvtExecution[]          @relation("RvtExecutionOperator")
+  webauthnCredentials             WebAuthnCredential[]
 
   @@index([deletedAt])
   @@map("users")
+}
+
+/// Passkey (biometria do aparelho via WebAuthn). Guarda só a chave PÚBLICA;
+/// a biometria nunca sai do aparelho. Um usuário pode ter vários aparelhos.
+model WebAuthnCredential {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  /// Id da credencial (base64url) devolvido pelo autenticador.
+  credentialId String    @unique @map("credential_id") @db.VarChar(512)
+  publicKey    Bytes     @map("public_key")
+  /// Contador de assinaturas do autenticador (detecta clonagem quando suportado).
+  counter      BigInt    @default(0)
+  transports   String[]  @default([])
+  deviceName   String    @map("device_name") @db.VarChar(120)
+  /// Sincronizada na nuvem do sistema (iCloud/Google), não presa ao aparelho.
+  backedUp     Boolean   @default(false) @map("backed_up")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastUsedAt   DateTime? @map("last_used_at") @db.Timestamptz(3)
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("webauthn_credentials")
+}
+
+/// Desafio de uso único (cadastro ou login por biometria), com validade curta.
+model WebAuthnChallenge {
+  id        String   @id @default(uuid()) @db.Uuid
+  /// Só no cadastro: o desafio pertence ao usuário logado que está registrando.
+  userId    String?  @map("user_id") @db.Uuid
+  purpose   String   @db.VarChar(20)
+  challenge String   @db.VarChar(255)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([expiresAt])
+  @@map("webauthn_challenges")
 }
 
 model RefreshToken {
@@ -677,21 +714,21 @@ model OrganizationContact {
 }
 
 model OrganizationSettings {
-  id             String       @id @default(uuid()) @db.Uuid
-  organizationId String       @unique @map("organization_id") @db.Uuid
-  language       String       @db.VarChar(10)
-  timezone       String       @db.VarChar(80)
-  currency       String       @db.VarChar(3)
-  documentPrefix String       @map("document_prefix") @db.VarChar(20)
+  id               String           @id @default(uuid()) @db.Uuid
+  organizationId   String           @unique @map("organization_id") @db.Uuid
+  language         String           @db.VarChar(10)
+  timezone         String           @db.VarChar(80)
+  currency         String           @db.VarChar(3)
+  documentPrefix   String           @map("document_prefix") @db.VarChar(20)
   /// Janela de apuração das comissões dos técnicos (sugere o intervalo padrão
   /// nos filtros e no fechamento). Configurada no modal de Comissões.
   commissionPeriod CommissionPeriod @default(MONTHLY) @map("commission_period")
   /// Como a comissão é calculada: valor fixo por atendimento (padrão) ou
   /// percentual sobre o valor do serviço. Configurado no modal de Comissões.
   commissionMode   CommissionMode   @default(FIXED) @map("commission_mode")
-  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@map("organization_settings")
 }
@@ -746,17 +783,17 @@ model CommissionEntry {
 /// operação fica em CommissionEntry, que é o que remove o valor do pendente
 /// (não recalcula o que já foi pago).
 model CommissionPayment {
-  id             String      @id @default(uuid()) @db.Uuid
-  organizationId String      @map("organization_id") @db.Uuid
-  operatorId     String      @map("operator_id") @db.Uuid
-  periodStart    DateTime    @map("period_start") @db.Date
-  periodEnd      DateTime    @map("period_end") @db.Date
-  amount         Decimal     @db.Decimal(14, 2)
-  operationCount Int         @default(0) @map("operation_count")
-  notes          String?     @db.VarChar(500)
-  paidAt         DateTime    @default(now()) @map("paid_at") @db.Timestamptz(3)
-  paidById       String?     @map("paid_by_id") @db.Uuid
-  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  id             String            @id @default(uuid()) @db.Uuid
+  organizationId String            @map("organization_id") @db.Uuid
+  operatorId     String            @map("operator_id") @db.Uuid
+  periodStart    DateTime          @map("period_start") @db.Date
+  periodEnd      DateTime          @map("period_end") @db.Date
+  amount         Decimal           @db.Decimal(14, 2)
+  operationCount Int               @default(0) @map("operation_count")
+  notes          String?           @db.VarChar(500)
+  paidAt         DateTime          @default(now()) @map("paid_at") @db.Timestamptz(3)
+  paidById       String?           @map("paid_by_id") @db.Uuid
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
   operator       User              @relation("CommissionOperator", fields: [operatorId], references: [id], onDelete: Restrict)
   paidBy         User?             @relation("CommissionPaidBy", fields: [paidById], references: [id], onDelete: SetNull)
   entries        CommissionEntry[]
@@ -1191,87 +1228,87 @@ model EquipmentMetric {
 /// reused by every produced document (OS, PMOC, Laudo, Relatório, Orçamento,
 /// Recibo). Each Work Order goes through exactly one Operation.
 model Operation {
-  id                              String                              @id @default(uuid()) @db.Uuid
-  number                          Int                                 @unique @default(autoincrement())
-  customerId                      String                              @map("customer_id") @db.Uuid
-  addressId                       String?                             @map("address_id") @db.Uuid
-  equipmentId                     String?                             @map("equipment_id") @db.Uuid
-  operatorId                      String                              @map("operator_id") @db.Uuid
-  type                            String
-  requestedDocumentType           DocumentTemplateType                @default(WORK_ORDER) @map("requested_document_type")
-  serviceTypes                    String[]                            @default([]) @map("service_types")
-  status                          OperationStatus                     @default(DRAFT)
-  scheduledFor                    DateTime?                           @map("scheduled_for") @db.Timestamptz(3)
-  startedAt                       DateTime?                           @map("started_at") @db.Timestamptz(3)
-  completedAt                     DateTime?                           @map("completed_at") @db.Timestamptz(3)
-  checklist                       Json                                @default("[]")
-  observations                    String?                             @db.Text
-  reportedIssue                   String?                             @map("reported_issue") @db.Text
-  serviceDescription              String?                             @map("service_description") @db.Text
+  id                                String                              @id @default(uuid()) @db.Uuid
+  number                            Int                                 @unique @default(autoincrement())
+  customerId                        String                              @map("customer_id") @db.Uuid
+  addressId                         String?                             @map("address_id") @db.Uuid
+  equipmentId                       String?                             @map("equipment_id") @db.Uuid
+  operatorId                        String                              @map("operator_id") @db.Uuid
+  type                              String
+  requestedDocumentType             DocumentTemplateType                @default(WORK_ORDER) @map("requested_document_type")
+  serviceTypes                      String[]                            @default([]) @map("service_types")
+  status                            OperationStatus                     @default(DRAFT)
+  scheduledFor                      DateTime?                           @map("scheduled_for") @db.Timestamptz(3)
+  startedAt                         DateTime?                           @map("started_at") @db.Timestamptz(3)
+  completedAt                       DateTime?                           @map("completed_at") @db.Timestamptz(3)
+  checklist                         Json                                @default("[]")
+  observations                      String?                             @db.Text
+  reportedIssue                     String?                             @map("reported_issue") @db.Text
+  serviceDescription                String?                             @map("service_description") @db.Text
   /// Valor operacional informado pela gestão ao técnico responsável. Não
   /// integra o Financial Core nem o Document Engine.
-  serviceValue                    Decimal?                            @map("service_value") @db.Decimal(15, 2)
+  serviceValue                      Decimal?                            @map("service_value") @db.Decimal(15, 2)
   /// Legado: fechamento que incluiu esta operação quando só havia um
   /// beneficiário. Continua preenchido para o técnico primário, mas quem manda
   /// no "já pago" (primário + auxiliares) é CommissionEntry.
-  commissionPaymentId             String?                             @map("commission_payment_id") @db.Uuid
+  commissionPaymentId               String?                             @map("commission_payment_id") @db.Uuid
   /// Legado, idem: valor da comissão do primário congelado no fechamento.
-  commissionAmount                Decimal?                            @map("commission_amount") @db.Decimal(14, 2)
-  commissionPayment               CommissionPayment?                  @relation(fields: [commissionPaymentId], references: [id], onDelete: SetNull)
-  commissionEntries               CommissionEntry[]
-  maintenanceReminderIntervalMonths Int?                             @map("maintenance_reminder_interval_months") @db.SmallInt
-  receiptNumber                   String?                             @map("receipt_number") @db.VarChar(40)
-  receiptIssuedAt                 DateTime?                           @map("receipt_issued_at") @db.Date
-  receiptAmount                   Decimal?                            @map("receipt_amount") @db.Decimal(15, 2)
-  receiptAmountInWords            String?                             @map("receipt_amount_in_words") @db.VarChar(500)
-  receiptService                  String?                             @map("receipt_service") @db.VarChar(500)
-  receiptDescription              String?                             @map("receipt_description") @db.Text
-  receiptWarrantyDays             Int?                                @map("receipt_warranty_days")
-  receiptDeclaration              String?                             @map("receipt_declaration") @db.Text
-  technicalDiagnosis              String?                             @map("technical_diagnosis") @db.Text
-  technicalRecommendations        String?                             @map("technical_recommendations") @db.Text
-  technicalOpinionObjective       String?                             @map("technical_opinion_objective") @db.Text
-  technicalOpinionObjectiveItems  String[]                            @default([]) @map("technical_opinion_objective_items")
-  technicalOpinionConditions      String?                             @map("technical_opinion_conditions") @db.Text
-  technicalOpinionAnalysis        String?                             @map("technical_opinion_analysis") @db.Text
-  technicalOpinionConclusion      String?                             @map("technical_opinion_conclusion") @db.Text
-  technicalOpinionConclusionItems String[]                            @default([]) @map("technical_opinion_conclusion_items")
-  technicalOpinionRecommendations String?                             @map("technical_opinion_recommendations") @db.Text
-  technicalOpinionResponsible     String?                             @map("technical_opinion_responsible") @db.VarChar(180)
-  technicalOpinionCrea            String?                             @map("technical_opinion_crea") @db.VarChar(100)
-  referenceMonth                  Int?                                @map("reference_month") @db.SmallInt
-  referenceYear                   Int?                                @map("reference_year") @db.SmallInt
-  maintenanceType                 OperationMaintenanceType?           @map("maintenance_type")
-  signatureData                   String?                             @map("signature_data") @db.Text
-  customerSignerName              String?                             @map("customer_signer_name") @db.VarChar(180)
-  customerSignerRole              String?                             @map("customer_signer_role") @db.VarChar(120)
-  signedAt                        DateTime?                           @map("signed_at") @db.Timestamptz(3)
-  createdAt                       DateTime                            @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt                       DateTime                            @updatedAt @map("updated_at") @db.Timestamptz(3)
-  customer                        Customer                            @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  address                         CustomerAddress?                    @relation(fields: [addressId], references: [id], onDelete: SetNull)
-  equipment                       Equipment?                          @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
-  operator                        User                                @relation(fields: [operatorId], references: [id], onDelete: Restrict)
-  photos                          OperationPhoto[]
-  documents                       OperationDocument[]
-  assignments                     Assignment[]
-  assignmentHistory               AssignmentHistory[]
-  lifecycleEvents                 AssetLifecycleEvent[]
-  maintenanceExecution            MaintenanceExecution?
-  pmocExecutionRequest            PmocExecutionRequest?
-  generatedPmocExecutionRequest   PmocExecutionRequest?               @relation("PmocGeneratedOperation")
-  rvtExecution                    RvtExecution?
-  pmocHistoryEvents               PmocHistory[]
-  parts                           OperationPart[]
-  stockMovements                  StockMovement[]
-  budgets                         Budget[]
-  maintenanceChecklistItems       OperationMaintenanceChecklistItem[]
-  inspectedEquipments             OperationInspectedEquipment[]
-  maintenanceReminder             MaintenanceReminder?
-  sourceSaleId                    String?                             @map("source_sale_id") @db.Uuid
-  sourceSale                      Sale?                               @relation(fields: [sourceSaleId], references: [id], onDelete: SetNull)
-  cancellations                   OperationCancellation[]
-  customerServiceTicket           CustomerServiceTicket?
+  commissionAmount                  Decimal?                            @map("commission_amount") @db.Decimal(14, 2)
+  commissionPayment                 CommissionPayment?                  @relation(fields: [commissionPaymentId], references: [id], onDelete: SetNull)
+  commissionEntries                 CommissionEntry[]
+  maintenanceReminderIntervalMonths Int?                                @map("maintenance_reminder_interval_months") @db.SmallInt
+  receiptNumber                     String?                             @map("receipt_number") @db.VarChar(40)
+  receiptIssuedAt                   DateTime?                           @map("receipt_issued_at") @db.Date
+  receiptAmount                     Decimal?                            @map("receipt_amount") @db.Decimal(15, 2)
+  receiptAmountInWords              String?                             @map("receipt_amount_in_words") @db.VarChar(500)
+  receiptService                    String?                             @map("receipt_service") @db.VarChar(500)
+  receiptDescription                String?                             @map("receipt_description") @db.Text
+  receiptWarrantyDays               Int?                                @map("receipt_warranty_days")
+  receiptDeclaration                String?                             @map("receipt_declaration") @db.Text
+  technicalDiagnosis                String?                             @map("technical_diagnosis") @db.Text
+  technicalRecommendations          String?                             @map("technical_recommendations") @db.Text
+  technicalOpinionObjective         String?                             @map("technical_opinion_objective") @db.Text
+  technicalOpinionObjectiveItems    String[]                            @default([]) @map("technical_opinion_objective_items")
+  technicalOpinionConditions        String?                             @map("technical_opinion_conditions") @db.Text
+  technicalOpinionAnalysis          String?                             @map("technical_opinion_analysis") @db.Text
+  technicalOpinionConclusion        String?                             @map("technical_opinion_conclusion") @db.Text
+  technicalOpinionConclusionItems   String[]                            @default([]) @map("technical_opinion_conclusion_items")
+  technicalOpinionRecommendations   String?                             @map("technical_opinion_recommendations") @db.Text
+  technicalOpinionResponsible       String?                             @map("technical_opinion_responsible") @db.VarChar(180)
+  technicalOpinionCrea              String?                             @map("technical_opinion_crea") @db.VarChar(100)
+  referenceMonth                    Int?                                @map("reference_month") @db.SmallInt
+  referenceYear                     Int?                                @map("reference_year") @db.SmallInt
+  maintenanceType                   OperationMaintenanceType?           @map("maintenance_type")
+  signatureData                     String?                             @map("signature_data") @db.Text
+  customerSignerName                String?                             @map("customer_signer_name") @db.VarChar(180)
+  customerSignerRole                String?                             @map("customer_signer_role") @db.VarChar(120)
+  signedAt                          DateTime?                           @map("signed_at") @db.Timestamptz(3)
+  createdAt                         DateTime                            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                         DateTime                            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  customer                          Customer                            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  address                           CustomerAddress?                    @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  equipment                         Equipment?                          @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
+  operator                          User                                @relation(fields: [operatorId], references: [id], onDelete: Restrict)
+  photos                            OperationPhoto[]
+  documents                         OperationDocument[]
+  assignments                       Assignment[]
+  assignmentHistory                 AssignmentHistory[]
+  lifecycleEvents                   AssetLifecycleEvent[]
+  maintenanceExecution              MaintenanceExecution?
+  pmocExecutionRequest              PmocExecutionRequest?
+  generatedPmocExecutionRequest     PmocExecutionRequest?               @relation("PmocGeneratedOperation")
+  rvtExecution                      RvtExecution?
+  pmocHistoryEvents                 PmocHistory[]
+  parts                             OperationPart[]
+  stockMovements                    StockMovement[]
+  budgets                           Budget[]
+  maintenanceChecklistItems         OperationMaintenanceChecklistItem[]
+  inspectedEquipments               OperationInspectedEquipment[]
+  maintenanceReminder               MaintenanceReminder?
+  sourceSaleId                      String?                             @map("source_sale_id") @db.Uuid
+  sourceSale                        Sale?                               @relation(fields: [sourceSaleId], references: [id], onDelete: SetNull)
+  cancellations                     OperationCancellation[]
+  customerServiceTicket             CustomerServiceTicket?
 
   @@index([customerId, createdAt])
   @@index([equipmentId, createdAt])
@@ -1590,29 +1627,29 @@ model DocumentNumberSequence {
 /// `generatesReminder`/`reminderIntervalMonths` controlam o lembrete de
 /// manutenção por tipo (antes hardcoded em Preventiva/Instalação).
 model ServiceType {
-  id                     String    @id @default(uuid()) @db.Uuid
-  organizationId         String    @map("organization_id") @db.Uuid
-  key                    String    @db.VarChar(60)
-  label                  String    @db.VarChar(120)
-  active                 Boolean   @default(true)
-  isSystem               Boolean   @default(false) @map("is_system")
-  sortOrder              Int       @default(0) @map("sort_order")
-  generatesReminder      Boolean   @default(false) @map("generates_reminder")
-  reminderIntervalMonths Int?      @map("reminder_interval_months")
+  id                         String    @id @default(uuid()) @db.Uuid
+  organizationId             String    @map("organization_id") @db.Uuid
+  key                        String    @db.VarChar(60)
+  label                      String    @db.VarChar(120)
+  active                     Boolean   @default(true)
+  isSystem                   Boolean   @default(false) @map("is_system")
+  sortOrder                  Int       @default(0) @map("sort_order")
+  generatesReminder          Boolean   @default(false) @map("generates_reminder")
+  reminderIntervalMonths     Int?      @map("reminder_interval_months")
   // Comissão do técnico: elegibilidade + percentual aplicado sobre o valor do
   // serviço da operação concluída. Por padrão todo tipo é elegível a 0% (o owner
   // ajusta o percentual no modal em Financeiro).
-  commissionEligible     Boolean   @default(true) @map("commission_eligible")
-  commissionPercent      Decimal   @default(0) @map("commission_percent") @db.Decimal(5, 2)
+  commissionEligible         Boolean   @default(true) @map("commission_eligible")
+  commissionPercent          Decimal   @default(0) @map("commission_percent") @db.Decimal(5, 2)
   // Percentual do técnico auxiliar (assignment não primário). Nasce em 0: o
   // auxiliar só passa a receber quando o owner configurar o tipo.
-  commissionPercentAssistant Decimal @default(0) @map("commission_percent_assistant") @db.Decimal(5, 2)
+  commissionPercentAssistant Decimal   @default(0) @map("commission_percent_assistant") @db.Decimal(5, 2)
   // Valores fixos por atendimento, usados quando o modo é FIXED.
-  commissionFixed            Decimal @default(0) @map("commission_fixed") @db.Decimal(14, 2)
-  commissionFixedAssistant   Decimal @default(0) @map("commission_fixed_assistant") @db.Decimal(14, 2)
-  deletedAt              DateTime? @map("deleted_at") @db.Timestamptz(3)
-  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  commissionFixed            Decimal   @default(0) @map("commission_fixed") @db.Decimal(14, 2)
+  commissionFixedAssistant   Decimal   @default(0) @map("commission_fixed_assistant") @db.Decimal(14, 2)
+  deletedAt                  DateTime? @map("deleted_at") @db.Timestamptz(3)
+  createdAt                  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@unique([organizationId, key])
   @@index([organizationId, active, sortOrder], map: "service_type_lookup_idx")

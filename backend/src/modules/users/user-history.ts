@@ -61,6 +61,8 @@ export const USER_OWNED_RELATIONS = [
   'notifications',
   'avatarAsset',
   'institutionalSignature',
+  // Passkeys (biometria): saem em cascata na exclusão física; no arquivamento, são apagadas.
+  'webauthnCredentials',
 ] as const;
 
 /** Usos da assinatura que a tornam parte do histórico (documentos e modelos). */

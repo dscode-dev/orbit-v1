@@ -97,12 +97,30 @@ export class AuthService {
       );
     }
 
-    // Senha correta durante o bloqueio: aí sim vale explicar, porque quem
-    // chegou aqui já provou conhecer a senha.
+    return this.completeLogin(user, input.channel, context, { method: 'password', email: input.email });
+  }
+
+  /**
+   * Etapa comum a todo login, depois que a credencial (senha ou biometria) foi
+   * provada: bloqueio temporário, regra de canal por papel, emissão da sessão e
+   * auditoria. A biometria usa exatamente o mesmo caminho da senha.
+   */
+  async completeLogin(
+    user: User,
+    channel: LoginChannel | undefined,
+    context: AuthRequestContext,
+    meta: { method: 'password' | 'passkey'; email: string; credentialId?: string },
+  ): Promise<TokenPairResponseDto> {
+    const lockedUntil = user.lockedUntil;
+    const locked = Boolean(lockedUntil && lockedUntil.getTime() > Date.now());
+
+    // Credencial correta durante o bloqueio: aí sim vale explicar, porque quem
+    // chegou aqui já provou ser o dono da conta.
     if (locked) {
       const minutos = Math.max(1, Math.ceil((lockedUntil!.getTime() - Date.now()) / 60_000));
       await this.writeAudit(AUDIT_ACTIONS.LOGIN_FAILURE, user.id, context, {
-        email: input.email,
+        email: meta.email,
+        method: meta.method,
         reason: 'ACCOUNT_LOCKED',
       });
       throw new ApplicationException(
@@ -113,19 +131,20 @@ export class AuthService {
     }
 
     const allowed =
-      !input.channel ||
-      (input.channel === LoginChannel.PLATFORM
+      !channel ||
+      (channel === LoginChannel.PLATFORM
         ? user.role === Role.OWNER || user.role === Role.MANAGER
         : user.role === Role.OWNER || user.role === Role.OPERATOR);
     if (!allowed) {
       await this.writeAudit(AUDIT_ACTIONS.LOGIN_FAILURE, user.id, context, {
-        email: input.email,
-        channel: input.channel,
+        email: meta.email,
+        method: meta.method,
+        channel,
         reason: 'LOGIN_CHANNEL_FORBIDDEN',
       });
       throw new ApplicationException(
         ERROR_CODES.AUTH_LOGIN_CHANNEL_FORBIDDEN,
-        input.channel === LoginChannel.PLATFORM
+        channel === LoginChannel.PLATFORM
           ? 'Este usuário não possui acesso à plataforma de gestão'
           : 'Este usuário não possui acesso ao aplicativo de campo',
         HttpStatus.FORBIDDEN,
@@ -147,6 +166,8 @@ export class AuthService {
       this.prisma.auditLog.create({
         data: this.auditData(AUDIT_ACTIONS.LOGIN_SUCCESS, user.id, context, {
           sessionId: tokens.refreshTokenRecord.id,
+          method: meta.method,
+          ...(meta.credentialId ? { credentialId: meta.credentialId } : {}),
         }),
       }),
     ]);

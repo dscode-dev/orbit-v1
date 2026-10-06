@@ -26,6 +26,8 @@ export {
 } from './tokens';
 
 export * as authApi from './auth';
+export * as webauthnApi from './webauthn';
+export type { Passkey } from './webauthn';
 export * as usersApi from './users';
 export * as organizationApi from './organization';
 export * as customersApi from './customers';

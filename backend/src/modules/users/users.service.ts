@@ -327,6 +327,8 @@ export class UsersService {
         where: { userId: id, revokedAt: null },
         data: { revokedAt: now },
       }),
+      // Biometria cadastrada deixa de existir: o usuário não entra mais.
+      this.prisma.webAuthnCredential.deleteMany({ where: { userId: id } }),
       // A assinatura sai de uso, mas continua nos documentos já emitidos.
       this.prisma.signature.updateMany({
         where: { userId: id, deletedAt: null },

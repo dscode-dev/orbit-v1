@@ -6,6 +6,7 @@ import { useAuth } from "@erp/ui/auth/auth-provider";
 import { InstallButton } from "@erp/ui/pwa/install-button";
 import { initials } from "@erp/utils";
 import { OperatorSignatureSettings } from "@operator/components/operator-signature";
+import { BiometricDevices } from "@erp/ui/auth/biometric-devices";
 
 const ROLE_LABEL: Record<string, string> = {
   OWNER: "Proprietário",
@@ -69,6 +70,10 @@ export default function OperatorProfile() {
       </section>
 
       {user.role === "OPERATOR" && <OperatorSignatureSettings />}
+
+      <section className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 shadow-[var(--shadow-card)]">
+        <BiometricDevices />
+      </section>
 
       <section className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 shadow-[var(--shadow-card)] space-y-3">
         <div className="flex items-center gap-2 text-caption uppercase tracking-wider">

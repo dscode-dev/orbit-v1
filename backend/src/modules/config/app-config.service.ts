@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { EnvironmentVariables } from './configuration';
+import type { EnvironmentVariables, WebAuthnConfig } from './configuration';
 
 @Injectable()
 export class AppConfigService {
@@ -72,6 +72,11 @@ export class AppConfigService {
 
   get logLevel(): EnvironmentVariables['LOG_LEVEL'] {
     return this.configService.get('LOG_LEVEL', { infer: true });
+  }
+
+  /** Login por biometria (passkeys) ou null quando desligado. */
+  get webAuthn(): WebAuthnConfig | null {
+    return this.configService.get('WEBAUTHN', { infer: true });
   }
 
   /** Usuário do Instagram (sem @) ou null quando a empresa não divulga. */

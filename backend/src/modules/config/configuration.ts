@@ -28,6 +28,17 @@ export interface EnvironmentVariables {
   LOG_LEVEL: 'debug' | 'info' | 'warn' | 'error';
   /** Usuário do Instagram da empresa (sem @), exibido na landing. Opcional. */
   ORGANIZATION_INSTAGRAM: string | null;
+  /** Login por biometria (passkeys). null = recurso desligado. */
+  WEBAUTHN: WebAuthnConfig | null;
+}
+
+export interface WebAuthnConfig {
+  /** Domínio ao qual as passkeys ficam presas (ex.: climacerto-refrigeracao.com.br). */
+  rpId: string;
+  /** Nome exibido pelo sistema no pedido de biometria. */
+  rpName: string;
+  /** Endereços exatos de onde o app roda (https://…; http só em localhost). */
+  origins: string[];
 }
 
 const REQUIRED_VARIABLES = [
@@ -128,6 +139,42 @@ export function parseInstagramHandle(value: unknown): string | null {
     throw new Error('ORGANIZATION_INSTAGRAM must be a valid Instagram username (e.g. @minhaempresa)');
   }
   return handle;
+}
+
+/**
+ * WEBAUTHN_RP_ID vazio desliga a biometria. Preenchido, exige WEBAUTHN_ORIGINS
+ * com origens HTTPS (http só em localhost) pertencentes ao domínio — o
+ * navegador recusaria as demais, e o erro só apareceria no celular do usuário.
+ */
+export function parseWebAuthnConfig(config: Record<string, unknown>, appName: string): WebAuthnConfig | null {
+  const rpIdRaw = config.WEBAUTHN_RP_ID;
+  const rpId = typeof rpIdRaw === 'string' ? rpIdRaw.trim().toLowerCase() : '';
+  if (!rpId) return null;
+  if (!/^(localhost|([a-z0-9-]+\.)+[a-z]{2,})$/.test(rpId)) {
+    throw new Error('WEBAUTHN_RP_ID must be a domain without protocol or port (e.g. climacerto-refrigeracao.com.br)');
+  }
+  const originsRaw = typeof config.WEBAUTHN_ORIGINS === 'string' ? config.WEBAUTHN_ORIGINS : '';
+  const origins = [...new Set(originsRaw.split(',').map((o) => o.trim()).filter(Boolean))];
+  if (origins.length === 0) {
+    throw new Error('WEBAUTHN_ORIGINS is required when WEBAUTHN_RP_ID is set');
+  }
+  for (const origin of origins) {
+    let url: URL;
+    try {
+      url = new URL(origin);
+    } catch {
+      throw new Error(`WEBAUTHN_ORIGINS contains an invalid origin: ${origin}`);
+    }
+    const local = url.hostname === 'localhost';
+    if (url.origin !== origin || (url.protocol !== 'https:' && !(local && url.protocol === 'http:'))) {
+      throw new Error(`WEBAUTHN_ORIGINS must contain exact https origins (http only for localhost): ${origin}`);
+    }
+    if (url.hostname !== rpId && !url.hostname.endsWith(`.${rpId}`)) {
+      throw new Error(`WEBAUTHN_ORIGINS origin ${origin} is not within WEBAUTHN_RP_ID ${rpId}`);
+    }
+  }
+  const nameRaw = typeof config.WEBAUTHN_RP_NAME === 'string' ? config.WEBAUTHN_RP_NAME.trim() : '';
+  return { rpId, rpName: nameRaw || appName, origins };
 }
 
 function assertProductionSecret(value: string, key: string): void {
@@ -245,5 +292,6 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
     ),
     LOG_LEVEL: logLevel as EnvironmentVariables['LOG_LEVEL'],
     ORGANIZATION_INSTAGRAM: parseInstagramHandle(config.ORGANIZATION_INSTAGRAM),
+    WEBAUTHN: parseWebAuthnConfig(config, requireString(config, 'APP_NAME')),
   };
 }

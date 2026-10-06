@@ -22,7 +22,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { authApi, usersApi, setSessionScope, type SessionScope } from "@erp/api";
+import { authApi, usersApi, webauthnApi, setSessionScope, type SessionScope } from "@erp/api";
 import { ensureFreshSession, hasSession, onSessionInvalid } from "@erp/api";
 import type { Role, SessionUser, UserPermissions } from "@erp/api";
 
@@ -40,6 +40,8 @@ type AuthContextValue = {
   role: Role | null;
   permissions: UserPermissions | null;
   login: (email: string, password: string) => Promise<void>;
+  /** Entrar com a biometria do aparelho (passkey). */
+  loginWithBiometrics: () => Promise<void>;
   logout: () => Promise<void>;
   /** Re-fetch /users/me (e.g. after profile/preference changes). */
   refresh: () => Promise<void>;
@@ -148,6 +150,11 @@ export function AuthProvider({ scope = "platform", children }: { scope?: Session
     [loadSession, scope],
   );
 
+  const loginWithBiometrics = useCallback(async () => {
+    await webauthnApi.loginWithBiometrics(scope === "operator" ? "OPERATOR" : "PLATFORM");
+    await loadSession();
+  }, [loadSession, scope]);
+
   const logout = useCallback(async () => {
     await authApi.logout();
     setSession(null);
@@ -176,12 +183,13 @@ export function AuthProvider({ scope = "platform", children }: { scope?: Session
       role: session?.role ?? null,
       permissions: session?.permissions ?? null,
       login,
+      loginWithBiometrics,
       logout,
       refresh: loadSession,
       can,
       hasRole,
     }),
-    [scope, status, session, login, logout, loadSession, can, hasRole],
+    [scope, status, session, login, loginWithBiometrics, logout, loadSession, can, hasRole],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

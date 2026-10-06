@@ -62,6 +62,7 @@ function serviceWith(footprint: Footprint): {
     },
     userAvatarAsset: { delete: jest.fn().mockResolvedValue({}) },
     refreshToken: { updateMany: jest.fn().mockResolvedValue({}) },
+    webAuthnCredential: { deleteMany: jest.fn().mockResolvedValue({}) },
     auditLog: { create: jest.fn().mockResolvedValue({}) },
   };
   const client = {
@@ -142,6 +143,10 @@ describe('User removal — behaviour', () => {
       data: expect.objectContaining({ active: false }) as unknown,
     });
     expect(prisma.refreshToken.updateMany).toHaveBeenCalled();
+    // Biometria cadastrada é apagada: o usuário arquivado não entra mais.
+    expect(prisma.webAuthnCredential.deleteMany).toHaveBeenCalledWith({
+      where: { userId: TARGET },
+    });
     const audit = (
       prisma.auditLog.create.mock.calls[0] as [{ data: { metadata: Record<string, unknown> } }]
     )[0];

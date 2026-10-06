@@ -10,6 +10,7 @@ import { useEffect } from "react";
 import { Calendar, ChevronRight, ClipboardList, FileText, Plus, QrCode, RefreshCw, ShieldCheck, Wrench } from "lucide-react";
 import { AssignmentCard } from "@operator/components/assignment-card";
 import { useAuth } from "@erp/ui/auth/auth-provider";
+import { BiometricEnrollPrompt } from "@erp/ui/auth/biometric-devices";
 import { SkeletonList } from "@erp/ui/skeletons";
 import { EmptyState } from "@erp/ui/empty-state";
 import { ErrorState } from "@erp/ui/states";
@@ -72,6 +73,9 @@ export function OperatorHome() {
         <h1 className="text-[22px] font-semibold tracking-tight leading-tight">{firstName(session?.user.name ?? "Operador")}.</h1>
         <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">Sua fila de campo está pronta.</p>
       </header>
+
+      {/* Convite para entrar com biometria (logo após o primeiro acesso/login). */}
+      <BiometricEnrollPrompt />
 
       <div className="grid grid-cols-2 gap-2.5">
         <Metric label="Hoje" value={today.length} />
