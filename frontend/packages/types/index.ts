@@ -1484,6 +1484,11 @@ export type OperatorExecutionOperations = Paginated<OperatorExecutionOperation> 
 };
 
 export type CreateOperationPayload = {
+  newEquipments?: Array<{
+    equipmentTypeCatalogId: string;
+    sector?: string; tag?: string; manufacturer?: string; model?: string;
+    serialNumber?: string; capacity?: string; voltage?: string; observations?: string;
+  }>;
   customerId: string;
   sourceSaleId?: string | null;
   addressId?: string | null;

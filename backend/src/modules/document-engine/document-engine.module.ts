@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { FinancialModule } from '../financial/financial.module';
+import { ReceiptService } from './receipt.service';
 import { StorageModule } from '../../infra/storage/storage.module';
 import { AssetLifecycleModule } from '../asset-lifecycle/asset-lifecycle.module';
 import { OperationAccessModule } from '../operation-access/operation-access.module';
@@ -17,9 +19,10 @@ import { PdfEngineService } from './pdf/pdf-engine.service';
 import { DocumentRendererService } from './renderer/document-renderer.service';
 
 @Module({
-  imports: [StorageModule, AssetLifecycleModule, OperationAccessModule],
+  imports: [StorageModule, AssetLifecycleModule, OperationAccessModule, FinancialModule],
   controllers: [DocumentEngineController, DocumentConfigurationController],
   providers: [
+    ReceiptService,
     DocumentEngineService,
     DocumentHandoffService,
     DocumentBuilderService,

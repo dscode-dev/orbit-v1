@@ -9,6 +9,8 @@ import type { AuthenticatedUser } from '../../shared/types/authenticated-user.ty
 import type { RequestWithId } from '../../shared/types/request-with-id.type';
 import { DocumentEngineService, contextFromRequest } from './document-engine.service';
 import { DocumentHandoffService } from './document-handoff.service';
+import { ReceiptService } from './receipt.service';
+import { ReceiptRevisionDto, UpdateReceiptDto } from './dto/receipt.dto';
 import {
   CollectCustomerSignatureDto,
   FinalizeDocumentReviewDto,
@@ -29,7 +31,26 @@ export class DocumentEngineController {
   constructor(
     private readonly documents: DocumentEngineService,
     private readonly handoffs: DocumentHandoffService,
+    private readonly receipts: ReceiptService,
   ) {}
+
+  @Roles(Role.OWNER, Role.MANAGER)
+  @Get(':documentId/receipt')
+  getReceipt(@Param('documentId', new ParseUUIDPipe({ version: '4' })) id: string, @CurrentUser() actor: AuthenticatedUser): Promise<unknown> {
+    return this.receipts.get(id, actor);
+  }
+
+  @Roles(Role.OWNER, Role.MANAGER)
+  @Patch(':documentId/receipt')
+  updateReceipt(@Param('documentId', new ParseUUIDPipe({ version: '4' })) id: string, @Body() body: UpdateReceiptDto, @CurrentUser() actor: AuthenticatedUser, @Req() request: RequestWithId): Promise<unknown> {
+    return this.receipts.update(id, body, actor, contextFromRequest(request));
+  }
+
+  @Roles(Role.OWNER, Role.MANAGER)
+  @Post(':documentId/receipt/cancel')
+  cancelReceipt(@Param('documentId', new ParseUUIDPipe({ version: '4' })) id: string, @Body() body: ReceiptRevisionDto, @CurrentUser() actor: AuthenticatedUser, @Req() request: RequestWithId): Promise<unknown> {
+    return this.receipts.cancel(id, body, actor, contextFromRequest(request));
+  }
 
   @Roles(Role.OWNER, Role.MANAGER)
   @Get('handoffs')

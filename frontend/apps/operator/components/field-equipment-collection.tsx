@@ -38,9 +38,13 @@ export function FieldEquipmentCollection({
   onAdd,
   onRemove,
   title = "Equipamentos identificados em campo",
+  maxItems = 20,
+  showForm = true,
   description = "Registre os equipamentos encontrados no local. Os novos itens serão vinculados ao cliente e ao relatório.",
 }: {
   drafts: NewFieldEquipmentDraft[];
+  maxItems?: number;
+  showForm?: boolean;
   equipmentTypes: TechnicalCatalog[];
   equipmentTypesLoading: boolean;
   onAdd: (draft: NewFieldEquipmentDraft) => void;
@@ -61,7 +65,7 @@ export function FieldEquipmentCollection({
   }
 
   function add(): void {
-    if (!complete || drafts.length >= 20) return;
+    if (!complete || drafts.length >= maxItems) return;
     onAdd(draft);
     setDraft(createEmptyFieldEquipmentDraft());
   }
@@ -72,14 +76,14 @@ export function FieldEquipmentCollection({
         <h2 className="font-semibold">{title}</h2>
         <p className="text-caption">{description}</p>
       </div>
-      <div className="space-y-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-3">
+      {showForm && <div className="space-y-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-3">
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm font-semibold">Adicionar equipamento</p>
-          <span className="text-caption">{drafts.length}/20</span>
+          <span className="text-caption">{drafts.length}/{maxItems}</span>
         </div>
         <label className="block space-y-1 text-sm">
           <span className="font-medium">Tipo *</span>
-          <select value={draft.equipmentTypeCatalogId} onChange={(event) => change("equipmentTypeCatalogId", event.target.value)} disabled={equipmentTypesLoading || drafts.length >= 20} className={inputClass}>
+          <select value={draft.equipmentTypeCatalogId} onChange={(event) => change("equipmentTypeCatalogId", event.target.value)} disabled={equipmentTypesLoading || drafts.length >= maxItems} className={inputClass}>
             <option value="">{equipmentTypesLoading ? "Carregando tipos…" : "Selecione"}</option>
             {equipmentTypes.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
           </select>
@@ -92,11 +96,12 @@ export function FieldEquipmentCollection({
           <FieldEquipmentInput label="Número de série" value={draft.serialNumber ?? ""} onChange={(value) => change("serialNumber", value)} />
           <FieldEquipmentInput label="Tensão" value={draft.voltage ?? ""} onChange={(value) => change("voltage", value)} />
         </div>
-        <button type="button" onClick={add} disabled={!complete || drafts.length >= 20} className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-sm font-semibold text-[var(--color-primary-foreground)] disabled:opacity-50">
+        <button type="button" onClick={add} disabled={!complete || drafts.length >= maxItems} className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-sm font-semibold text-[var(--color-primary-foreground)] disabled:opacity-50">
           <Plus className="h-4 w-4" /> Adicionar equipamento
         </button>
         {!complete && <p className="text-center text-[11px] text-[var(--color-muted-foreground)]">Preencha tipo, marca, modelo e capacidade para adicionar.</p>}
-      </div>
+        {drafts.length >= maxItems && <p className="text-center text-[11px] text-[var(--color-muted-foreground)]">Limite de equipamentos atingido. Remova um item para adicionar outro.</p>}
+      </div>}
 
       {drafts.length > 0 && (
         <div className="space-y-2">

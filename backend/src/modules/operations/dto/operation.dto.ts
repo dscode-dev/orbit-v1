@@ -144,6 +144,13 @@ export class OperationInspectedEquipmentDto {
 }
 
 export class CreateOperationDto {
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => OperationFieldEquipmentDto)
+  newEquipments?: OperationFieldEquipmentDto[];
+
   @IsOptional() @IsUUID('4') sourceSaleId?: string;
   @IsUUID('4') customerId!: string;
   @IsOptional() @IsUUID('4') addressId?: string;

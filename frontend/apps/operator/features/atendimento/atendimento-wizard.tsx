@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Loader2,
+  Plus,
   Building2,
   CalendarClock,
   MapPin,
@@ -171,6 +172,8 @@ export function AtendimentoWizard({
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [address, setAddress] = useState<{ id: string; label: string } | null>(null);
   const [equipments, setEquipments] = useState<EquipmentSummary[]>([]);
+  const [newEquipments, setNewEquipments] = useState<NewFieldEquipmentDraft[]>([]);
+  const [newEquipmentFormOpen, setNewEquipmentFormOpen] = useState(false);
   const [equipmentProfiles, setEquipmentProfiles] = useState<Record<string, EquipmentProfileDraft>>({});
   const [serviceType, setServiceType] = useState<ServiceTypeKey | null>(null);
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
@@ -200,6 +203,7 @@ export function AtendimentoWizard({
   const [walkInCreated, setWalkInCreated] = useState<WalkInCustomerResult | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
+  const [submissionOperationId, setSubmissionOperationId] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [result, setResult] = useState<{ operationId: string; documentId: string; documentNumber: string; documentType: DocumentKind } | null>(
     null,
@@ -207,8 +211,8 @@ export function AtendimentoWizard({
   const [startedAt] = useState(() => new Date().toISOString());
 
   const walkInEquipmentTypes = useQuery(
-    (signal) => walkInMode ? technicalCatalogsApi.listEquipmentTypes({ signal }) : Promise.resolve([]),
-    [walkInMode],
+    (signal) => technicalCatalogsApi.listEquipmentTypes({ signal }),
+    [],
   );
 
   // Prefill from QR / "Iniciar atendimento" deep links.
@@ -320,7 +324,7 @@ export function AtendimentoWizard({
       case 0:
         return walkInMode ? walkInValid(walk, walkInEquipments) : !!customer && (documentType !== 'TECHNICAL_REPORT' || !!address);
       case 1:
-        return equipmentProfilesComplete && (documentType !== 'TECHNICAL_REPORT' || equipments.length > 0);
+        return equipmentProfilesComplete && equipments.length + newEquipments.length <= 20 && (documentType !== 'TECHNICAL_REPORT' || equipments.length + newEquipments.length > 0);
       case 2:
         return !!serviceType;
       case 3:
@@ -336,9 +340,10 @@ export function AtendimentoWizard({
       default:
         return false;
     }
-  }, [step, customer, address, serviceType, signature, signerName, technicalSignatureId, walkInMode, walk, walkInEquipments, equipmentProfilesComplete, equipments.length, documentType]);
+  }, [step, customer, address, serviceType, signature, signerName, technicalSignatureId, walkInMode, walk, walkInEquipments, equipmentProfilesComplete, equipments.length, newEquipments.length, documentType]);
 
   function back() {
+    if (submitting || submissionOperationId) return;
     if (step === 0) router.push('/operator');
     // OS avulso pula o passo de seleção: os novos equipamentos já são coletados no cadastro.
     else if (step === 2 && walkInMode) setStep(0);
@@ -441,6 +446,10 @@ export function AtendimentoWizard({
         addressId,
         equipmentId,
         inspectedEquipments,
+        newEquipments: walkInMode ? undefined : newEquipments.map(({ localId, ...item }) => {
+          void localId;
+          return item;
+        }),
         serviceType,
         checklist,
         maintenanceType,
@@ -459,7 +468,7 @@ export function AtendimentoWizard({
         signedAt,
         technicalSignatureId,
         startedAt,
-      });
+      }, { operationId: submissionOperationId, onCreated: setSubmissionOperationId });
       setResult({
         operationId: submission.operation.id,
         documentId: submission.handoff.id,
@@ -583,7 +592,9 @@ export function AtendimentoWizard({
         id: item.localId,
         name: [item.manufacturer, item.model, item.capacity].map((value) => value?.trim()).filter(Boolean).join(' - ') || `Equipamento ${index + 1}`,
       } as unknown as EquipmentSummary))
-    : equipments;
+    : [...equipments, ...newEquipments.map((item) => ({
+        id: item.localId, name: [item.manufacturer, item.model, item.capacity].filter(Boolean).join(' - '),
+      } as EquipmentSummary))];
 
   return (
     <div className="flex flex-col min-h-dvh">
@@ -617,6 +628,8 @@ export function AtendimentoWizard({
                   setAddress(null);
                   setEquipments([]);
                   setEquipmentProfiles({});
+                  setNewEquipments([]);
+                  setNewEquipmentFormOpen(false);
                   setOsOrigin(null);
                 }}
               />
@@ -629,6 +642,8 @@ export function AtendimentoWizard({
                   setAddress(null);
                   setEquipments([]);
                   setEquipmentProfiles({});
+                  setNewEquipments([]);
+                  setNewEquipmentFormOpen(false);
                   setOsOrigin('scratch');
                 }}
                 className="flex w-full items-center gap-3 rounded-[var(--radius-md)] border border-dashed border-[var(--color-primary)]/40 bg-[var(--color-primary)]/5 p-3.5 text-left active:scale-[0.99]"
@@ -647,29 +662,50 @@ export function AtendimentoWizard({
           )
         )}
         {step === 1 && customer && (
-          <EquipamentoStep
-            customerId={customer.id}
-            selected={equipments}
-            onChange={setEquipments}
-            profiles={equipmentProfiles}
-            onProfileChange={(equipmentId, field, value) =>
-              setEquipmentProfiles((current) => ({
-                ...current,
-                [equipmentId]: {
-                  manufacturer: current[equipmentId]?.manufacturer ?? '',
-                  model: current[equipmentId]?.model ?? '',
-                  capacity: current[equipmentId]?.capacity ?? '',
-                  [field]: value,
-                },
-              }))
-            }
-            onScanSelect={(eq) => {
-              setEquipments((current) =>
-                current.some((item) => item.id === eq.id) ? current : [...current, eq],
-              );
-              if (eq.manufacturer && eq.model && eq.capacity) setStep(2);
-            }}
-          />
+          <div className="space-y-4">
+            <button type="button" aria-expanded={newEquipmentFormOpen} onClick={() => setNewEquipmentFormOpen((open) => !open)} className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-primary)] text-sm font-semibold text-[var(--color-primary)]">
+              <Plus className="h-5 w-5" /> {newEquipmentFormOpen ? 'Fechar cadastro de equipamentos' : 'Cadastrar novos equipamentos'}
+            </button>
+            {(newEquipmentFormOpen || newEquipments.length > 0) && (
+              walkInEquipmentTypes.error ? <ErrorState error={walkInEquipmentTypes.error} onRetry={walkInEquipmentTypes.refetch} /> :
+              <FieldEquipmentCollection
+                drafts={newEquipments}
+                equipmentTypes={walkInEquipmentTypes.data ?? []}
+                equipmentTypesLoading={walkInEquipmentTypes.loading}
+                maxItems={Math.max(0, 20 - equipments.length)}
+                showForm={newEquipmentFormOpen}
+                title="Novos equipamentos deste cliente"
+                description="Ao concluir o atendimento, os equipamentos serão salvos no cadastro do cliente e vinculados a este documento."
+                onAdd={(draft) => setNewEquipments((current) => [...current, draft])}
+                onRemove={(localId) => setNewEquipments((current) => current.filter((item) => item.localId !== localId))}
+              />
+            )}
+            <EquipamentoStep
+              customerId={customer.id}
+              selected={equipments}
+              onChange={setEquipments}
+              maxSelected={20 - newEquipments.length}
+              profiles={equipmentProfiles}
+              onProfileChange={(equipmentId, field, value) =>
+                setEquipmentProfiles((current) => ({
+                  ...current,
+                  [equipmentId]: {
+                    manufacturer: current[equipmentId]?.manufacturer ?? '',
+                    model: current[equipmentId]?.model ?? '',
+                    capacity: current[equipmentId]?.capacity ?? '',
+                    [field]: value,
+                  },
+                }))
+              }
+              onScanSelect={(eq) => {
+                if (equipments.length + newEquipments.length >= 20 && !equipments.some((item) => item.id === eq.id)) return;
+                setEquipments((current) =>
+                  current.some((item) => item.id === eq.id) ? current : [...current, eq],
+                );
+                if (eq.manufacturer && eq.model && eq.capacity) setStep(2);
+              }}
+            />
+          </div>
         )}
         {step === 2 && (
           <div className="space-y-4">
@@ -773,7 +809,7 @@ export function AtendimentoWizard({
       </div>
 
       <WizardFooter
-        onBack={back}
+        onBack={submitting || submissionOperationId ? undefined : back}
         onNext={next}
         nextLabel={isLast ? 'Concluir e gerar PDF' : 'Continuar'}
         nextDisabled={!canNext}
@@ -1372,6 +1408,7 @@ function EnderecoStep({
 
 function EquipamentoStep({
   customerId,
+  maxSelected,
   selected,
   onChange,
   onScanSelect,
@@ -1379,6 +1416,7 @@ function EquipamentoStep({
   onProfileChange,
 }: {
   customerId: string;
+  maxSelected: number;
   selected: EquipmentSummary[];
   onChange: (equipments: EquipmentSummary[]) => void;
   onScanSelect: (e: EquipmentSummary) => void;
@@ -1412,6 +1450,8 @@ function EquipamentoStep({
     setScanError(null);
     try {
       const eq = await equipmentsApi.lookupByQr(text.trim());
+      if (eq.customer?.id !== customerId) throw new Error('Este equipamento pertence a outro cliente.');
+      if (!selected.some((item) => item.id === eq.id) && selected.length >= maxSelected) throw new Error('O atendimento permite no máximo 20 equipamentos.');
       setScanned(eq);
     } catch (err) {
       setScanError(
@@ -1419,7 +1459,7 @@ function EquipamentoStep({
           ? 'Nenhum equipamento encontrado para este QR Code.'
           : err instanceof ApiClientError && err.status === 400
             ? 'QR Code inválido.'
-            : 'Não foi possível ler o QR Code. Tente novamente.',
+            : err instanceof Error ? err.message : 'Não foi possível ler o QR Code. Tente novamente.',
       );
     } finally {
       setScanning(false);
@@ -1487,6 +1527,7 @@ function EquipamentoStep({
             <li key={e.id}>
               <button
                 type="button"
+                disabled={!selected.some((item) => item.id === e.id) && selected.length >= maxSelected}
                 onClick={() =>
                   onChange(
                     selected.some((item) => item.id === e.id)

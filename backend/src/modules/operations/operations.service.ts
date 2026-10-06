@@ -1,5 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { AssignmentEventType, AssignmentStatus, DocumentHandoffOrigin, DocumentRevisionAction, DocumentTemplateType, EquipmentStatus, EquipmentType, OperationStatus, Prisma, Role, TechnicalCatalogType } from '@prisma/client';
+import { AssignmentEventType, AssignmentStatus, DocumentHandoffOrigin, DocumentRevisionAction, DocumentTemplateType, type Equipment, EquipmentStatus, EquipmentType, OperationStatus, Prisma, Role, TechnicalCatalogType } from '@prisma/client';
 import type { OperationType } from '../../shared/constants/service-types.constants';
 import { randomUUID } from 'node:crypto';
 import {
@@ -34,6 +34,7 @@ import type {
   CreateOperationFieldEquipmentsDto,
   ListOperationsQueryDto,
   OperationChecklistItemDto,
+  OperationFieldEquipmentDto,
   OperationPhotoInputDto,
   OperationStatsQueryDto,
   UpdateOperationDto,
@@ -216,6 +217,8 @@ const OPERATION_MANAGEMENT_EDIT_FIELDS = new Set<keyof UpdateOperationDto>([
   'serviceValue',
   'maintenanceReminderIntervalMonths',
 ]);
+type FieldEquipmentRecord = Pick<Equipment, 'id' | 'sector' | 'manufacturer' | 'model' | 'capacity' | 'tag' | 'serialNumber' | 'type'>;
+
 type InspectedEquipmentSnapshot = {
   equipmentId: string;
   position: number;
@@ -392,6 +395,19 @@ export class OperationsService {
       dto.customerId,
       dto.inspectedEquipments,
     );
+    const drafts = dto.newEquipments ?? [];
+    for (const draft of drafts) {
+      if (!draft.manufacturer?.trim() || !draft.model?.trim() || !draft.capacity?.trim()) {
+        throw new ApplicationException(ERROR_CODES.OPERATION_EQUIPMENT_INVALID, 'Informe marca, modelo e capacidade de cada novo equipamento', HttpStatus.BAD_REQUEST);
+      }
+    }
+
+    if (drafts.length > 0 && !OPERATOR_DIRECT_COMPLETION_DOCUMENT_TYPES.includes(requestedDocumentType as (typeof OPERATOR_DIRECT_COMPLETION_DOCUMENT_TYPES)[number])) {
+      throw new ApplicationException(ERROR_CODES.OPERATION_EQUIPMENT_INVALID, 'O cadastro em campo está disponível para OS e RVT', HttpStatus.BAD_REQUEST);
+    }
+    if (drafts.length > 0 && inspectedEquipments.length + drafts.length > 20) {
+      throw new ApplicationException(ERROR_CODES.OPERATION_EQUIPMENT_INVALID, 'Selecione ou cadastre no máximo 20 equipamentos', HttpStatus.BAD_REQUEST);
+    }
     await this.validateChecklistEquipments(dto.customerId, dto.maintenanceChecklist);
     const photos = (dto.photos ?? []).map((p) => this.decodePhoto(p));
     if (photos.length > MAX_OPERATION_PHOTOS) {
@@ -430,12 +446,19 @@ export class OperationsService {
     // Operation + auto Work Order draft are created atomically. The OS number is
     // derived from the operation sequential number.
     const operationId = await this.prisma.$transaction(async (tx) => {
+      const createdEquipments = drafts.length ? await this.createFieldEquipmentsTx(tx, dto.customerId, dto.addressId ?? null, drafts, actor, context) : [];
+      const allInspectedEquipments: InspectedEquipmentSnapshot[] = [...inspectedEquipments, ...createdEquipments.map((item, index) => ({
+        equipmentId: item.id, sector: item.sector || 'Local do atendimento',
+        position: inspectedEquipments.length + index,
+        brandSnapshot: item.manufacturer, modelSnapshot: item.model, capacitySnapshot: item.capacity,
+        tagSnapshot: item.tag, serialSnapshot: item.serialNumber, systemTypeSnapshot: null, currentSituationSnapshot: null,
+      }))];
       const operation = await tx.operation.create({
         data: {
           customerId: dto.customerId,
           sourceSaleId: sourceSale?.id ?? null,
           addressId: dto.addressId ?? null,
-          equipmentId: dto.equipmentId ?? null,
+          equipmentId: dto.equipmentId ?? createdEquipments[0]?.id ?? null,
           operatorId: assignment.operatorId,
           type: dto.type,
           requestedDocumentType: dto.documentType ?? DocumentTemplateType.WORK_ORDER,
@@ -484,7 +507,7 @@ export class OperationsService {
               position,
             })),
           },
-          inspectedEquipments: { create: inspectedEquipments },
+          inspectedEquipments: { create: allInspectedEquipments },
           signatureData,
           customerSignerName: signatureData ? (dto.customerSignerName ?? null) : null,
           customerSignerRole: signatureData ? (dto.customerSignerRole ?? null) : null,
@@ -1395,73 +1418,7 @@ export class OperationsService {
           );
         }
 
-        const catalogIds = [...new Set(drafts.map((item) => item.equipmentTypeCatalogId))];
-        const catalogs = catalogIds.length
-          ? await tx.technicalCatalog.findMany({
-              where: {
-                id: { in: catalogIds },
-                type: TechnicalCatalogType.EQUIPMENT_TYPE,
-                active: true,
-                deletedAt: null,
-              },
-              select: { id: true, title: true, tags: true },
-            })
-          : [];
-        const catalogById = new Map(catalogs.map((item) => [item.id, item]));
-        if (catalogs.length !== catalogIds.length) {
-          throw new ApplicationException(
-            ERROR_CODES.TECHNICAL_CATALOG_NOT_FOUND,
-            'Um dos tipos de equipamento não está disponível',
-            HttpStatus.BAD_REQUEST,
-          );
-        }
-
-        const created: typeof existing = [];
-        for (const item of drafts) {
-          const catalog = catalogById.get(item.equipmentTypeCatalogId)!;
-          const qrToken = randomUUID();
-          const manufacturer = item.manufacturer?.trim() || null;
-          const model = item.model?.trim() || null;
-          const equipment = await tx.equipment.create({
-            data: {
-              customerId: operation.customerId,
-              addressId: operation.addressId,
-              equipmentTypeCatalogId: catalog.id,
-              type: this.equipmentTypeFromTags(catalog.tags),
-              status: EquipmentStatus.ACTIVE,
-              name: ([manufacturer, model].filter(Boolean).join(' ') || catalog.title).slice(0, 180),
-              sector: item.sector?.trim() || null,
-              tag: item.tag?.trim() || null,
-              manufacturer,
-              model,
-              serialNumber: item.serialNumber?.trim() || null,
-              capacity: item.capacity?.trim() || null,
-              voltage: item.voltage?.trim() || null,
-              observations: item.observations?.trim() || null,
-              qrToken,
-              qrCode: `equipment:${qrToken}`,
-            },
-            select: {
-              id: true,
-              sector: true,
-              manufacturer: true,
-              model: true,
-              capacity: true,
-              tag: true,
-              serialNumber: true,
-              type: true,
-            },
-          });
-          created.push(equipment);
-          await tx.auditLog.create({
-            data: this.audit('EQUIPMENT_CREATED', 'EQUIPMENT', actor, context, {
-              equipmentId: equipment.id,
-              customerId: operation.customerId,
-              operationId: id,
-              source: 'FIELD_OPERATION',
-            }),
-          });
-        }
+        const created = await this.createFieldEquipmentsTx(tx, operation.customerId, operation.addressId, drafts, actor, context, id);
 
         const selected = [...existing, ...created];
         await tx.operation.update({ where: { id }, data: { equipmentId: selected[0].id } });
@@ -2045,6 +2002,86 @@ export class OperationsService {
     if (actor.role !== Role.OWNER && actor.role !== Role.MANAGER) {
       throw new ApplicationException(ERROR_CODES.FORBIDDEN, 'Somente owner e gestor podem gerenciar evidências do histórico', HttpStatus.FORBIDDEN);
     }
+  }
+
+  private async createFieldEquipmentsTx(
+    tx: Prisma.TransactionClient,
+    customerId: string,
+    addressId: string | null,
+    drafts: OperationFieldEquipmentDto[],
+    actor: AuthenticatedUser,
+    context: OperationAuditContext,
+    operationId: string | null = null,
+  ): Promise<FieldEquipmentRecord[]> {
+    const catalogIds = [...new Set(drafts.map((item) => item.equipmentTypeCatalogId))];
+    const catalogs = catalogIds.length
+      ? await tx.technicalCatalog.findMany({
+          where: {
+            id: { in: catalogIds },
+            type: TechnicalCatalogType.EQUIPMENT_TYPE,
+            active: true,
+            deletedAt: null,
+          },
+          select: { id: true, title: true, tags: true },
+        })
+      : [];
+    const catalogById = new Map(catalogs.map((item) => [item.id, item]));
+    if (catalogs.length !== catalogIds.length) {
+      throw new ApplicationException(
+        ERROR_CODES.TECHNICAL_CATALOG_NOT_FOUND,
+        'Um dos tipos de equipamento não está disponível',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const created: FieldEquipmentRecord[] = [];
+    for (const item of drafts) {
+      const catalog = catalogById.get(item.equipmentTypeCatalogId)!;
+      const qrToken = randomUUID();
+      const manufacturer = item.manufacturer?.trim() || null;
+      const model = item.model?.trim() || null;
+      const equipment = await tx.equipment.create({
+        data: {
+          customerId: customerId,
+          addressId: addressId,
+          equipmentTypeCatalogId: catalog.id,
+          type: this.equipmentTypeFromTags(catalog.tags),
+          status: EquipmentStatus.ACTIVE,
+          name: ([manufacturer, model].filter(Boolean).join(' ') || catalog.title).slice(0, 180),
+          sector: item.sector?.trim() || null,
+          tag: item.tag?.trim() || null,
+          manufacturer,
+          model,
+          serialNumber: item.serialNumber?.trim() || null,
+          capacity: item.capacity?.trim() || null,
+          voltage: item.voltage?.trim() || null,
+          observations: item.observations?.trim() || null,
+          qrToken,
+          qrCode: `equipment:${qrToken}`,
+        },
+        select: {
+          id: true,
+          sector: true,
+          manufacturer: true,
+          model: true,
+          capacity: true,
+          tag: true,
+          serialNumber: true,
+          type: true,
+        },
+      });
+      created.push(equipment);
+      await tx.auditLog.create({
+        data: this.audit('EQUIPMENT_CREATED', 'EQUIPMENT', actor, context, {
+          equipmentId: equipment.id,
+          customerId: customerId,
+          operationId,
+          source: 'FIELD_OPERATION',
+        }),
+      });
+    }
+
+    return created;
   }
 
   private async markDocumentsChangedTx(

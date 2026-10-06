@@ -94,7 +94,7 @@ export class DocumentEngineService {
         where, skip: (query.page - 1) * query.limit, take: query.limit,
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         include: {
-          operation: { select: { id: true, number: true, completedAt: true, customer: { select: { id: true, name: true } }, equipment: { select: { id: true, name: true, tag: true } }, operator: { select: { id: true, name: true } } } },
+          operation: { select: { id: true, number: true, completedAt: true, receiptIssuedAt: true, customer: { select: { id: true, name: true } }, equipment: { select: { id: true, name: true, tag: true } }, operator: { select: { id: true, name: true } } } },
           budget: { select: { id: true, number: true, customer: { select: { id: true, name: true } }, equipment: { select: { id: true, name: true, tag: true } }, creator: { select: { id: true, name: true } } } },
         },
       }),
@@ -103,6 +103,7 @@ export class DocumentEngineService {
     return buildPaginatedResponse(items.map((document) => ({
       id: document.id, number: document.number, type: document.type, status: document.status,
       editorialStatus: document.editorialStatus,
+      canceledAt: document.canceledAt,
       handoffOrigin: document.handoffOrigin,
       submittedAt: document.submittedAt,
       finalizedAt: document.finalizedAt,
@@ -115,7 +116,7 @@ export class DocumentEngineService {
       // Emissão é quando o documento foi emitido, não a última vez que alguém
       // baixou o PDF (`renderedAt` muda a cada render e desinformava o cliente).
       issuedAt:
-        document.finalizedAt ?? document.operation?.completedAt ?? document.createdAt,
+        (document.type === DocumentTemplateType.RECEIPT ? document.operation?.receiptIssuedAt : null) ?? document.finalizedAt ?? document.operation?.completedAt ?? document.createdAt,
       renderedAt: document.renderedAt, fileSize: document.fileSize,
       version: this.blueprintVersion(document.renderMetadata),
       createdAt: document.createdAt, updatedAt: document.updatedAt,
@@ -136,6 +137,10 @@ export class DocumentEngineService {
   ): Promise<unknown> {
     this.assertTypeAccess(type, actor);
     await this.assertOperationAccess(operationId, actor, context);
+    if (type === DocumentTemplateType.RECEIPT) {
+      const receipt = await this.prisma.operationDocument.findUnique({ where: { operationId_type: { operationId, type } } });
+      if (receipt) this.assertNotCanceled(receipt);
+    }
     const blueprint = this.withSourceFingerprint(await this.builder.buildFromOperation(operationId, type));
     await this.audit(
       DOCUMENT_ENGINE_AUDIT_ACTIONS.DOCUMENT_PREVIEWED,
@@ -159,6 +164,7 @@ export class DocumentEngineService {
     const document = await this.documentOrThrow(documentId);
     this.assertTypeAccess(document.type, actor);
     await this.assertDocumentAccess(document, actor, context);
+    this.assertNotCanceled(document);
     if (document.budgetId) {
       const blueprint = await this.builder.buildBudget(document.budgetId);
       await this.audit(
@@ -337,6 +343,7 @@ export class DocumentEngineService {
     const document = await this.documentOrThrow(documentId);
     this.assertTypeAccess(document.type, actor);
     await this.assertDocumentAccess(document, actor, context);
+    this.assertNotCanceled(document);
     await this.assertRenderer(document, actor);
     const isManagement = actor.role === Role.OWNER || actor.role === Role.MANAGER;
     // Operador só gera após a revisão finalizar (READY). Owner/Manager é a própria
@@ -480,6 +487,7 @@ export class DocumentEngineService {
     const document = await this.documentOrThrow(documentId);
     this.assertTypeAccess(document.type, actor);
     await this.assertDocumentAccess(document, actor, context);
+    this.assertNotCanceled(document);
     if (!document.storageKey || !document.mimeType || !document.fileSize) {
       throw new ApplicationException(
         ERROR_CODES.DOCUMENT_DOWNLOAD_NOT_READY,
@@ -650,6 +658,12 @@ export class DocumentEngineService {
         HttpStatus.CONFLICT,
         { required: PMOC_MIN_PROCEDURE_IMAGES, current: source._count.photos },
       );
+    }
+  }
+
+  private assertNotCanceled(document: OperationDocument): void {
+    if (document.canceledAt) {
+      throw new ApplicationException(ERROR_CODES.OPERATION_INVALID_TRANSITION, 'O recibo está cancelado e não pode ser emitido', HttpStatus.CONFLICT);
     }
   }
 

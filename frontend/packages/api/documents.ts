@@ -17,6 +17,7 @@ import type {
 export type DocumentCatalogItem = {
   id: string; number: string; type: DocumentKind; status: OperationDocumentStatus;
   editorialStatus: DocumentEditorialStatus; handoffOrigin: DocumentHandoffOrigin;
+  canceledAt: string | null;
   submittedAt: string | null; finalizedAt: string | null; revision: number;
   origin: "OPERATION" | "BUDGET"; originId: string | null;
   customer: { id: string; name: string } | null;
@@ -25,6 +26,31 @@ export type DocumentCatalogItem = {
   issuedAt: string; renderedAt: string | null; fileSize: number | null;
   version: string; createdAt: string; updatedAt: string;
 };
+
+export type ReceiptDetails = {
+  id: string; number: string; revision: number; canceledAt: string | null;
+  receiptIssuedAt: string | null; receiptAmount: string | null; receiptAmountInWords: string | null;
+  receiptDescription: string | null; receiptService: string | null; receiptWarrantyDays: number | null;
+  receiptDeclaration: string | null; sourceSaleId: string | null;
+  customer: { name: string; tradeName: string | null };
+};
+
+export type UpdateReceiptPayload = {
+  revision: number; receiptIssuedAt: string; receiptAmount: number; receiptAmountInWords: string;
+  receiptDescription: string; receiptWarrantyDays: number | null; receiptDeclaration?: string | null;
+};
+
+export function getReceipt(documentId: string, opts?: { signal?: AbortSignal }): Promise<ReceiptDetails> {
+  return api.get<ReceiptDetails>(`/documents/${documentId}/receipt`, opts);
+}
+
+export function updateReceipt(documentId: string, payload: UpdateReceiptPayload): Promise<{ revision: number }> {
+  return api.patch<{ revision: number }>(`/documents/${documentId}/receipt`, payload);
+}
+
+export function cancelReceipt(documentId: string, revision: number): Promise<{ revision: number }> {
+  return api.post<{ revision: number }>(`/documents/${documentId}/receipt/cancel`, { revision });
+}
 
 export function listDocuments(params?: {
   page?: number; limit?: number; search?: string; type?: DocumentKind;

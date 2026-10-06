@@ -8,6 +8,7 @@
 import { assignmentsApi, documentsApi, operationApi, rvtApi } from '@erp/api';
 import type {
   CreateOperationPayload,
+  FieldEquipmentDraft,
   DocumentHandoff,
   DocumentKind,
   OperationDetail,
@@ -19,6 +20,7 @@ import type { ServiceTypeKey } from './service-types';
 
 export type AtendimentoDraft = {
   documentType: DocumentKind;
+  newEquipments?: FieldEquipmentDraft[];
   customerId: string | null;
   addressId: string | null;
   equipmentId: string | null;
@@ -71,7 +73,10 @@ export function workOrderNumber(operation: OperationDetail): string | null {
   return operation.documents.find((d) => d.type === 'WORK_ORDER')?.number ?? null;
 }
 
-export async function createOperationFromDraft(draft: AtendimentoDraft): Promise<AtendimentoSubmission> {
+export async function createOperationFromDraft(
+  draft: AtendimentoDraft,
+  options: { operationId?: string | null; onCreated?: (operationId: string) => void } = {},
+): Promise<AtendimentoSubmission> {
   if (!draft.customerId) throw new Error('Cliente é obrigatório');
   if (!draft.serviceType) throw new Error('Tipo de atendimento é obrigatório');
   if (draft.documentType !== 'WORK_ORDER' && draft.documentType !== 'TECHNICAL_REPORT') {
@@ -93,6 +98,7 @@ export async function createOperationFromDraft(draft: AtendimentoDraft): Promise
     addressId: draft.addressId,
     equipmentId: draft.equipmentId,
     inspectedEquipments: draft.inspectedEquipments,
+    newEquipments: draft.newEquipments,
     type: draft.serviceType,
     documentType: draft.documentType,
     status: 'DRAFT',
@@ -120,34 +126,43 @@ export async function createOperationFromDraft(draft: AtendimentoDraft): Promise
     photos,
   };
 
-  const created = await operationApi.createOperation(payload);
+  const created = options.operationId
+    ? await operationApi.getOperation(options.operationId)
+    : await operationApi.createOperation(payload);
+  options.onCreated?.(created.id);
   const assignments = await assignmentsApi.listMyAssignments({ operationId: created.id, limit: 1 });
   const assignment = assignments.items[0];
   if (!assignment) throw new Error('O atendimento foi criado, mas sua execução não foi localizada.');
 
   // Self-service continua passando pelo Assignment oficial, mas OS/RVT são
   // concluídos diretamente em campo e não entram em uma fila editorial.
-  await assignmentsApi.acceptAssignment(assignment.id);
-  await assignmentsApi.startAssignment(assignment.id);
+  if (assignment.status === 'ASSIGNED') await assignmentsApi.acceptAssignment(assignment.id);
+  if (assignment.status === 'ASSIGNED' || assignment.status === 'ACCEPTED') await assignmentsApi.startAssignment(assignment.id);
 
-  let draftDocument = await documentsApi.saveHandoffDraft(created.id, draft.documentType);
-  draftDocument = await documentsApi.selectHandoffTechnicalSignature(
-    draftDocument.id,
-    draft.technicalSignatureId,
-  );
-  // Registro oficial da assinatura no documento (nome/função/quando/por quem),
-  // usado pelo Preview e pelo PDF a partir do mesmo DocumentContext.
-  if (draft.signature && now) {
-    draftDocument = await documentsApi.collectCustomerSignature(draftDocument.id, {
-      signerName: draft.signerName.trim(),
-      signerRole: draft.signerRole.trim() || undefined,
-      signatureData: draft.signature,
-      collectedAt: now,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Recife',
-    });
+  const existingDocument = created.documents.find((document) => document.type === draft.documentType);
+  let draftDocument: DocumentHandoff;
+  if (assignment.status === 'COMPLETED' && existingDocument) {
+    draftDocument = await documentsApi.getHandoff(existingDocument.id);
+  } else {
+    draftDocument = await documentsApi.saveHandoffDraft(created.id, draft.documentType);
+    draftDocument = await documentsApi.selectHandoffTechnicalSignature(
+      draftDocument.id,
+      draft.technicalSignatureId,
+    );
+    // Registro oficial da assinatura no documento (nome/função/quando/por quem),
+    // usado pelo Preview e pelo PDF a partir do mesmo DocumentContext.
+    if (draft.signature && now) {
+      draftDocument = await documentsApi.collectCustomerSignature(draftDocument.id, {
+        signerName: draft.signerName.trim(),
+        signerRole: draft.signerRole.trim() || undefined,
+        signatureData: draft.signature,
+        collectedAt: now,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Recife',
+      });
+    }
+    await documentsApi.submitHandoff(draftDocument.id);
+    await assignmentsApi.completeAssignment(assignment.id, 'Atendimento iniciado e executado pelo operador.');
   }
-  await documentsApi.submitHandoff(draftDocument.id);
-  await assignmentsApi.completeAssignment(assignment.id, 'Atendimento iniciado e executado pelo operador.');
   const handoff = await documentsApi.finalizeHandoffReview(draftDocument.id);
   await documentsApi.renderDocument(draftDocument.id);
   if (draft.documentType === 'TECHNICAL_REPORT') await rvtApi.registerAdHoc(created.id);

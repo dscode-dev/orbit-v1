@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { FileText } from "lucide-react";
+import { FileText, Pencil } from "lucide-react";
+import { useAuth } from "@erp/ui/auth/auth-provider";
+import { ReceiptEditDrawer } from "@platform/components/receipt-edit-drawer";
 import { PageHeader } from "@platform/components/page-header";
 import { DataTable, type Column } from "@platform/components/data-table";
 import { Pagination } from "@platform/components/pagination";
@@ -24,6 +26,12 @@ const KINDS: DocumentKind[] = ["WORK_ORDER", "TECHNICAL_REPORT", "TECHNICAL_OPIN
 const selectCls = "h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-2 text-sm outline-none focus:border-[var(--color-primary)]";
 
 export default function DocumentosPage() {
+  const { hasRole } = useAuth();
+  const canEditReceipts = hasRole("OWNER", "MANAGER");
+  const [editingReceipt, setEditingReceipt] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  function editReceipt(document: DocumentCatalogItem) { setDetail(null); setNotice(null); setEditingReceipt(document.id); }
+
   const [page, setPage] = useState(1); const [limit, setLimit] = useState(20);
   const [search, setSearch] = useState(""); const [customerId, setCustomerId] = useState("");
   const [equipmentId, setEquipmentId] = useState(""); const [operatorId, setOperatorId] = useState("");
@@ -46,11 +54,13 @@ export default function DocumentosPage() {
     { key: "responsible", header: "Responsável", cell: (d) => d.responsible?.name ?? "—" },
     { key: "issued", header: "Emissão", cell: (d) => formatDate(d.issuedAt) },
     { key: "version", header: "Versão", cell: (d) => `v${d.version} · r${d.revision}` },
-    { key: "status", header: "Status", cell: (d) => <StatusChip tone={STATUS[d.editorialStatus].tone} dot>{STATUS[d.editorialStatus].label}</StatusChip> },
+    { key: "status", header: "Status", cell: (d) => <StatusChip tone={d.canceledAt ? "danger" : STATUS[d.editorialStatus].tone} dot>{d.canceledAt ? "Cancelado" : STATUS[d.editorialStatus].label}</StatusChip> },
+    ...(canEditReceipts ? [{ key: "actions", header: "Ações", cell: (d: DocumentCatalogItem) => d.type === "RECEIPT" && !d.canceledAt ? <button type="button" onClick={(event) => { event.stopPropagation(); editReceipt(d); }} className="inline-flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 py-2 text-sm"><Pencil className="h-4 w-4" /> Editar recibo</button> : null }] : []),
   ];
   const resetPage = <T,>(setter: (value: T) => void) => (value: T) => { setter(value); setPage(1); };
   return <div className="space-y-6 max-w-[1500px]">
     <PageHeader eyebrow="Documentos" title="Central de documentos" description="Repositório oficial de todos os documentos emitidos pelo Orbit." />
+    {notice && <p role="status" className="rounded-[var(--radius-md)] bg-[var(--color-success)]/10 p-3 text-sm text-[var(--color-success)]">{notice}</p>}
     <FilterBar search={search} onSearch={resetPage(setSearch)} searchPlaceholder="Número, cliente ou equipamento…">
       <Select label="Cliente" value={customerId} onChange={resetPage(setCustomerId)} options={options.customers} />
       <Select label="Equipamento" value={equipmentId} onChange={resetPage(setEquipmentId)} options={options.equipments} />
@@ -64,11 +74,13 @@ export default function DocumentosPage() {
     {docs.loading && !docs.data ? <SkeletonList rows={6} /> : docs.error && !docs.data ? <ErrorState error={docs.error} onRetry={docs.refetch} /> : items.length === 0 ? <EmptyState icon={FileText} title="Nenhum documento" description="Nenhum documento emitido corresponde aos filtros." /> : <div className="space-y-3"><DataTable columns={columns} rows={items} onRowClick={setDetail} />{docs.data && <Pagination pagination={docs.data.pagination} onPageChange={setPage} onPageSizeChange={(value) => { setLimit(value); setPage(1); }} />}</div>}
     <Drawer open={Boolean(detail)} onClose={() => setDetail(null)} eyebrow="Documento oficial" title={detail?.number ?? ""} width="max-w-[1280px]">
       {detail && <div className="space-y-5">
-        <section><h3 className="font-semibold">Resumo</h3><p className="text-sm text-[var(--color-muted-foreground)]">{DOCUMENT_KIND_LABEL[detail.type]} · {STATUS[detail.editorialStatus].label} · versão {detail.version} · revisão {detail.revision}</p></section>
+        <section><h3 className="font-semibold">Resumo</h3><p className="text-sm text-[var(--color-muted-foreground)]">{DOCUMENT_KIND_LABEL[detail.type]} · {detail.canceledAt ? "Cancelado" : STATUS[detail.editorialStatus].label} · versão {detail.version} · revisão {detail.revision}</p></section>
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Meta label="Cliente" value={detail.customer?.name} /><Meta label="Equipamento" value={detail.equipment?.name} /><Meta label="Responsável" value={detail.responsible?.name} /><Meta label="Emissão" value={formatDateTime(detail.issuedAt)} /><Meta label="Origem" value={detail.origin === "BUDGET" ? "Orçamento" : "Operação"} /><Meta label="Tamanho" value={formatBytes(detail.fileSize)} /></section>
-        <section><h3 className="font-semibold mb-2">Assinaturas, preview e ações</h3><DocumentViewer source={{ documentId: detail.id, type: detail.type }} title={detail.number} onRendered={() => docs.refetch()} /></section>
+        {canEditReceipts && detail.type === "RECEIPT" && !detail.canceledAt && <button type="button" onClick={() => editReceipt(detail)} className="inline-flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 py-2 text-sm"><Pencil className="h-4 w-4" /> Editar recibo</button>}
+        {detail.canceledAt ? <p className="text-sm text-[var(--color-danger)]">Recibo cancelado. O lançamento financeiro foi estornado e o documento não pode ser emitido.</p> : <section><h3 className="font-semibold mb-2">Assinaturas, preview e ações</h3><DocumentViewer source={{ documentId: detail.id, type: detail.type }} title={detail.number} onRendered={() => docs.refetch()} /></section>}
       </div>}
     </Drawer>
+    {editingReceipt && <ReceiptEditDrawer key={editingReceipt} documentId={editingReceipt} onClose={() => setEditingReceipt(null)} onSaved={(canceled) => { setEditingReceipt(null); setNotice(canceled ? "Recibo cancelado e lançamento financeiro estornado." : "Recibo atualizado e saldo financeiro ajustado. Abra o documento e gere o PDF atualizado."); docs.refetch(); }} />}
   </div>;
 }
 

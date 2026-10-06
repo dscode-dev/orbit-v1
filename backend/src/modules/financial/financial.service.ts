@@ -320,7 +320,7 @@ export class FinancialService {
     });
     const importedIds = new Set(imported.map((entry) => entry.originId).filter(Boolean));
     const operations = await this.prisma.operation.findMany({
-      where: { receiptAmount: { not: null } },
+      where: { receiptAmount: { not: null }, status: { not: 'CANCELED' }, documents: { none: { type: 'RECEIPT', canceledAt: { not: null } } } },
       orderBy: [{ completedAt: 'desc' }, { createdAt: 'desc' }],
       take: 200,
       select: {
@@ -351,79 +351,183 @@ export class FinancialService {
     actor: AuthenticatedUser,
     context: FinancialAuditContext,
   ): Promise<{ imported: number }> {
-    const organizationId = await this.organizationId();
-    const accountId = await this.getOrCreateGeneralAccountId(organizationId);
     let imported = 0;
     for (const operationId of [...new Set(dto.operationIds)]) {
-      if (await this.syncReceiptEntryInternal(organizationId, accountId, operationId, actor.id, context)) {
+      if (await this.syncReceiptEntry(operationId, actor.id, context)) {
         imported += 1;
       }
     }
     return { imported };
   }
 
-  /**
-   * Extração automática: chamado quando um recibo é emitido/atualizado com valor.
-   * Idempotente (uma operação = uma entrada RECEIPT). Não lança se já existe ou
-   * se a operação não tem valor de recibo.
-   */
-  async syncReceiptEntry(operationId: string, actorId: string, context: FinancialAuditContext): Promise<boolean> {
-    const organizationId = await this.organizationId();
-    const accountId = await this.getOrCreateGeneralAccountId(organizationId);
-    return this.syncReceiptEntryInternal(organizationId, accountId, operationId, actorId, context);
-  }
-
-  private async syncReceiptEntryInternal(
-    organizationId: string,
-    accountId: string,
+  /** Synchronizes the receipt and its balance under the same operation lock. */
+  async syncReceiptEntry(
     operationId: string,
     actorId: string,
     context: FinancialAuditContext,
   ): Promise<boolean> {
-    const existing = await this.prisma.financialEntry.findFirst({
-      where: { organizationId, origin: FinancialEntryOrigin.RECEIPT, originId: operationId, canceledAt: null, deletedAt: null },
-      select: { id: true },
+    return this.prisma.$transaction((tx) =>
+      this.syncReceiptEntryTx(tx, operationId, actorId, context),
+    );
+  }
+
+  async syncReceiptEntryTx(
+    tx: Prisma.TransactionClient,
+    operationId: string,
+    actorId: string,
+    context: FinancialAuditContext,
+  ): Promise<boolean> {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${operationId}))`;
+    const operation = await tx.operation.findUnique({
+      where: { id: operationId },
+      select: {
+        receiptAmount: true,
+        receiptNumber: true,
+        receiptService: true,
+        receiptIssuedAt: true,
+        completedAt: true,
+        createdAt: true,
+        status: true,
+        documents: { where: { type: 'RECEIPT' }, select: { canceledAt: true } },
+      },
     });
-    if (existing) return false;
-    const operation = await this.prisma.operation.findFirst({
-      where: { id: operationId, receiptAmount: { not: null } },
-      select: { receiptAmount: true, receiptNumber: true, receiptService: true, completedAt: true, createdAt: true },
+    if (!operation) return false;
+    const organizationId = await this.organizationId(tx);
+    const entries = await tx.financialEntry.findMany({
+      where: {
+        organizationId,
+        origin: FinancialEntryOrigin.RECEIPT,
+        originId: operationId,
+        canceledAt: null,
+        deletedAt: null,
+      },
     });
-    if (!operation?.receiptAmount) return false;
-    const amount = this.money(Number(operation.receiptAmount));
-    const when = operation.completedAt ?? operation.createdAt;
-    const description = `Recibo ${operation.receiptNumber ?? ''}${operation.receiptService ? ` · ${operation.receiptService}` : ''}`
-      .trim()
-      .slice(0, 180) || 'Recibo';
-    await this.prisma.$transaction(async (tx) => {
-      const entry = await tx.financialEntry.create({
+    const canceled =
+      operation.status === 'CANCELED' ||
+      operation.documents.some((document) => document.canceledAt);
+    const actor = { id: actorId } as AuthenticatedUser;
+    if (canceled) {
+      for (const entry of entries) {
+        if (entry.status === FinancialEntryStatus.PAID) {
+          await this.applyBalanceTx(tx, entry.accountId, entry.type, entry.amount, 'reverse');
+        }
+        await tx.financialEntry.update({
+          where: { id: entry.id },
+          data: { status: FinancialEntryStatus.CANCELED, canceledAt: new Date() },
+        });
+        await this.createHistoryTx(
+          tx,
+          entry.id,
+          actorId,
+          FinancialHistoryAction.CANCELED,
+          entry.status,
+          FinancialEntryStatus.CANCELED,
+          { operationId, amount: entry.amount.toString() },
+        );
+        await this.auditTx(
+          tx,
+          FINANCIAL_AUDIT_ACTIONS.ENTRY_CANCELED,
+          FINANCIAL_ENTRY_RESOURCE,
+          actor,
+          context,
+          { entryId: entry.id, operationId, origin: 'RECEIPT' },
+        );
+      }
+      return entries.length > 0;
+    }
+    if (operation.receiptAmount == null) return false;
+    const amount = new Prisma.Decimal(this.money(Number(operation.receiptAmount)));
+    const when = operation.receiptIssuedAt ?? operation.completedAt ?? operation.createdAt;
+    const description =
+      `Recibo ${operation.receiptNumber ?? ''}${operation.receiptService ? ` · ${operation.receiptService}` : ''}`
+        .trim()
+        .slice(0, 180) || 'Recibo';
+    const existing = entries[0];
+    if (existing) {
+      if (
+        existing.amount.equals(amount) &&
+        existing.description === description &&
+        existing.dueDate.getTime() === when.getTime()
+      )
+        return false;
+      if (existing.status === FinancialEntryStatus.PAID) {
+        await this.applyBalanceTx(
+          tx,
+          existing.accountId,
+          existing.type,
+          amount.minus(existing.amount),
+          'apply',
+        );
+      }
+      await tx.financialEntry.update({
+        where: { id: existing.id },
         data: {
-          organizationId,
-          accountId,
-          categoryId: null,
-          type: FinancialEntryType.RECEIVABLE,
-          origin: FinancialEntryOrigin.RECEIPT,
-          originId: operationId,
           amount,
-          dueDate: when,
-          paidAt: when,
           description,
-          status: FinancialEntryStatus.PAID,
-          createdBy: actorId,
+          dueDate: when,
+          ...(existing.status === FinancialEntryStatus.PAID ? { paidAt: when } : {}),
         },
       });
-      await this.applyBalanceTx(tx, accountId, FinancialEntryType.RECEIVABLE, entry.amount, 'apply');
-      await this.createHistoryTx(tx, entry.id, actorId, FinancialHistoryAction.CREATED, null, entry.status, {
-        amount: entry.amount.toString(),
-        origin: 'RECEIPT',
-        operationId,
-      });
-      await this.auditTx(tx, FINANCIAL_AUDIT_ACTIONS.ENTRY_CREATED, FINANCIAL_ENTRY_RESOURCE, { id: actorId } as AuthenticatedUser, context, {
-        entryId: entry.id,
-        origin: 'RECEIPT',
-        amount: entry.amount.toString(),
-      });
+      await this.createHistoryTx(
+        tx,
+        existing.id,
+        actorId,
+        FinancialHistoryAction.UPDATED,
+        existing.status,
+        existing.status,
+        { operationId, previousAmount: existing.amount.toString(), amount: amount.toString() },
+      );
+      await this.auditTx(
+        tx,
+        FINANCIAL_AUDIT_ACTIONS.ENTRY_UPDATED,
+        FINANCIAL_ENTRY_RESOURCE,
+        actor,
+        context,
+        {
+          entryId: existing.id,
+          operationId,
+          previousAmount: existing.amount.toString(),
+          amount: amount.toString(),
+          origin: 'RECEIPT',
+        },
+      );
+      return true;
+    }
+    const accountId = await this.getOrCreateGeneralAccountId(organizationId, tx);
+    const entry = await tx.financialEntry.create({
+      data: {
+        organizationId,
+        accountId,
+        categoryId: null,
+        type: FinancialEntryType.RECEIVABLE,
+        origin: FinancialEntryOrigin.RECEIPT,
+        originId: operationId,
+        amount,
+        dueDate: when,
+        paidAt: when,
+        description,
+        status: FinancialEntryStatus.PAID,
+        createdBy: actorId,
+      },
     });
+    await this.applyBalanceTx(tx, accountId, entry.type, entry.amount, 'apply');
+    await this.createHistoryTx(
+      tx,
+      entry.id,
+      actorId,
+      FinancialHistoryAction.CREATED,
+      null,
+      entry.status,
+      { amount: entry.amount.toString(), origin: 'RECEIPT', operationId },
+    );
+    await this.auditTx(
+      tx,
+      FINANCIAL_AUDIT_ACTIONS.ENTRY_CREATED,
+      FINANCIAL_ENTRY_RESOURCE,
+      actor,
+      context,
+      { entryId: entry.id, origin: 'RECEIPT', amount: entry.amount.toString(), operationId },
+    );
     return true;
   }
 
@@ -714,14 +818,15 @@ export class FinancialService {
    * reaproveita a conta ativa existente ou cria "Conta Geral". Sem cadastro
    * manual de contas por enquanto.
    */
-  private async getOrCreateGeneralAccountId(organizationId: string): Promise<string> {
-    const existing = await this.prisma.financialAccount.findFirst({
+  private async getOrCreateGeneralAccountId(organizationId: string, client: Prisma.TransactionClient = this.prisma): Promise<string> {
+    if (client !== this.prisma) await client.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`receipt-account:${organizationId}`}))`;
+    const existing = await client.financialAccount.findFirst({
       where: { organizationId, active: true, deletedAt: null },
       orderBy: { createdAt: 'asc' },
       select: { id: true },
     });
     if (existing) return existing.id;
-    const created = await this.prisma.financialAccount.create({
+    const created = await client.financialAccount.create({
       data: { organizationId, name: 'Conta Geral', type: FinancialAccountType.CASH },
       select: { id: true },
     });
@@ -871,8 +976,8 @@ export class FinancialService {
     });
   }
 
-  private async organizationId(): Promise<string> {
-    const organization = await this.prisma.organization.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } });
+  private async organizationId(client: Prisma.TransactionClient = this.prisma): Promise<string> {
+    const organization = await client.organization.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } });
     if (!organization) {
       throw new ApplicationException(ERROR_CODES.ORGANIZATION_NOT_FOUND, 'Organização não encontrada', HttpStatus.NOT_FOUND);
     }
