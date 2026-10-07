@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -31,6 +32,7 @@ import {
   ListCustomerPortalAccountsQueryDto,
   ListCustomerTicketsQueryDto,
   UpsertCustomerPortalAccountDto,
+  UpdateCustomerPortalAccountDto,
 } from './dto/customer-portal.dto';
 import { CustomerPortalAuthGuard } from './guards/customer-portal-auth.guard';
 
@@ -160,6 +162,24 @@ export class CustomerPortalAccountsController {
     @CurrentUser() actor: AuthenticatedUser,
   ): Promise<unknown> {
     return this.portal.provisionAccount(body, actor);
+  }
+
+  @Roles(Role.OWNER, Role.MANAGER)
+  @Patch(':id')
+  update(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string, @Body() body: UpdateCustomerPortalAccountDto, @CurrentUser() actor: AuthenticatedUser): Promise<unknown> {
+    return this.portal.updateAccount(id, body, actor);
+  }
+
+  @Roles(Role.OWNER, Role.MANAGER)
+  @Patch(':id/enable')
+  enable(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string, @CurrentUser() actor: AuthenticatedUser): Promise<unknown> {
+    return this.portal.enableAccount(id, actor);
+  }
+
+  @Roles(Role.OWNER)
+  @Delete(':id')
+  remove(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string, @CurrentUser() actor: AuthenticatedUser): Promise<unknown> {
+    return this.portal.deleteAccount(id, actor);
   }
 
   @Roles(Role.OWNER, Role.MANAGER)

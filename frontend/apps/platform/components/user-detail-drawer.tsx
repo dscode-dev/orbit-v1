@@ -12,7 +12,7 @@ import { DrawerTabs } from "@erp/ui/drawer-tabs";
 import { StatusChip } from "@erp/ui/status-chip";
 import { ConfirmDialog } from "@erp/ui/confirm-dialog";
 import { useAuth } from "@erp/ui/auth/auth-provider";
-import { usersApi, ApiClientError, type TeamUser } from "@erp/api";
+import { usersApi, customerPortalApi, ApiClientError, type TeamUser, type CustomerPortalDirectoryAccount } from "@erp/api";
 import { initials, formatDate, formatDateTime } from "@erp/utils";
 import { ROLE_LABEL, ROLE_TONE, PERMISSION_KEYS, PERMISSION_LABEL } from "@platform/user-display";
 
@@ -21,6 +21,8 @@ type Tab = (typeof TABS)[number];
 
 export function UserDetailDrawer({
   user,
+  portalAccount = null,
+  onEditPortal,
   open,
   onClose,
   onChanged,
@@ -28,9 +30,11 @@ export function UserDetailDrawer({
   onEdit,
 }: {
   user: TeamUser | null;
+  portalAccount?: CustomerPortalDirectoryAccount | null;
+  onEditPortal?: (account: CustomerPortalDirectoryAccount) => void;
   open: boolean;
   onClose: () => void;
-  onChanged: () => void;
+  onChanged: (account?: CustomerPortalDirectoryAccount) => void;
   /** Depois da exclusão: o drawer deve fechar (o usuário pode ter saído da lista). */
   onDeleted?: (mode: "deleted" | "archived", name: string) => void;
   onEdit: (user: TeamUser) => void;
@@ -44,11 +48,13 @@ export function UserDetailDrawer({
   const [copied, setCopied] = useState(false);
 
   const isOwner = hasRole("OWNER");
-  const isSelf = session?.user.id === user?.id;
+  const account = user ?? portalAccount;
+  const [actionError, setActionError] = useState<string | null>(null);
+  const isSelf = Boolean(user) && session?.user.id === user?.id;
 
   useEffect(() => {
-    if (open) { setTab("Dados"); setTempPassword(null); setCopied(false); }
-  }, [open, user]);
+    if (open) { setTab("Dados"); setTempPassword(null); setCopied(false); setConfirm(null); setActionError(null); }
+  }, [open, user?.id, portalAccount?.id]);
 
   useEffect(() => {
     setAvatar(null);
@@ -60,15 +66,16 @@ export function UserDetailDrawer({
     return () => { active = false; };
   }, [open, user?.avatarAssetId]);
 
-  if (!user) return null;
+  if (!account) return null;
 
-  async function runAction(fn: () => Promise<unknown>) {
+  async function runAction(fn: () => Promise<TeamUser | CustomerPortalDirectoryAccount>) {
     setBusy(true);
+    setActionError(null);
     try {
-      await fn();
-      onChanged();
-    } catch {
-      // Surface nothing destructive silently; errors are handled inline below by callers.
+      const updated = await fn();
+      onChanged("customer" in updated ? updated : undefined);
+    } catch (error) {
+      setActionError(error instanceof ApiClientError ? error.message : "Não foi possível concluir a ação.");
     } finally {
       setBusy(false);
     }
@@ -77,9 +84,9 @@ export function UserDetailDrawer({
   async function handleReset() {
     setBusy(true);
     try {
-      const res = await usersApi.resetPassword(user!.id);
+      const res = portalAccount ? await customerPortalApi.resetAccountPassword(portalAccount.id) : await usersApi.resetPassword(user!.id);
       setTempPassword(res.temporaryPassword);
-      onChanged();
+      onChanged("account" in res ? res.account : undefined);
     } catch (err) {
       setTempPassword(err instanceof ApiClientError ? `Erro: ${err.message}` : "Erro ao redefinir.");
     } finally {
@@ -89,19 +96,19 @@ export function UserDetailDrawer({
 
   return (
     <>
-      <Drawer open={open} onClose={onClose} eyebrow="Usuário" title={user.name}>
+      <Drawer open={open} onClose={onClose} eyebrow="Usuário" title={account.name}>
         <div className="space-y-4">
           {/* Header */}
           <div className="flex items-center gap-3">
             <span className="relative h-14 w-14 rounded-full bg-[var(--color-accent)] grid place-items-center text-white font-semibold text-lg overflow-hidden">
-              {avatar ? <Image src={avatar} alt={user.name} fill sizes="56px" unoptimized className="object-cover" /> : initials(user.name)}
+              {avatar ? <Image src={avatar} alt={account.name} fill sizes="56px" unoptimized className="object-cover" /> : initials(account.name)}
             </span>
             <div className="min-w-0">
-              <div className="font-medium truncate">{user.name}</div>
-              <div className="text-caption truncate">{user.email}</div>
+              <div className="font-medium truncate">{account.name}</div>
+              <div className="text-caption truncate">{account.email}</div>
               <div className="mt-1 flex items-center gap-1.5">
-                <StatusChip tone={ROLE_TONE[user.role]}>{ROLE_LABEL[user.role]}</StatusChip>
-                <StatusChip tone={user.isActive ? "success" : "neutral"} dot>{user.isActive ? "Ativo" : "Inativo"}</StatusChip>
+                <StatusChip tone={user ? ROLE_TONE[user.role] : "info"}>{user ? ROLE_LABEL[user.role] : "Portal do cliente"}</StatusChip>
+                <StatusChip tone={account.isActive ? "success" : "neutral"} dot>{account.isActive ? "Ativo" : "Inativo"}</StatusChip>
               </div>
             </div>
           </div>
@@ -109,11 +116,11 @@ export function UserDetailDrawer({
           {/* Actions (OWNER only) */}
           {isOwner && (
             <div className="flex flex-wrap gap-2">
-              <ActionBtn icon={Pencil} label="Editar" onClick={() => onEdit(user)} />
-              {user.isActive ? (
+              <ActionBtn icon={Pencil} label="Editar" onClick={() => { if (portalAccount) onEditPortal?.(portalAccount); else if (user) onEdit(user); }} />
+              {account.isActive ? (
                 <ActionBtn icon={Power} label="Desativar" onClick={() => setConfirm("disable")} disabled={isSelf} />
               ) : (
-                <ActionBtn icon={Power} label="Ativar" onClick={() => runAction(() => usersApi.enableUser(user.id))} disabled={busy} />
+                <ActionBtn icon={Power} label="Ativar" onClick={() => runAction(() => portalAccount ? customerPortalApi.enableAccount(portalAccount.id) : usersApi.enableUser(user!.id))} disabled={busy} />
               )}
               <ActionBtn icon={KeyRound} label="Resetar senha" onClick={handleReset} disabled={busy} />
               <ActionBtn icon={Trash2} label="Excluir" onClick={() => setConfirm("delete")} disabled={isSelf} danger />
@@ -132,21 +139,28 @@ export function UserDetailDrawer({
             </div>
           )}
 
-          <DrawerTabs tabs={TABS} active={tab} onChange={setTab} />
+          {actionError && <p role="alert" className="text-sm text-[var(--color-danger)]">{actionError}</p>}
+          <DrawerTabs tabs={portalAccount ? TABS.filter((item) => item !== "Preferências") : TABS} active={tab} onChange={setTab} />
 
           {tab === "Dados" && (
             <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
-              <Row label="Usuário" value={user.username} />
-              <Row label="Telefone" value={user.phone} />
-              <Row label="Cargo" value={user.jobTitle} />
-              <Row label="Último acesso" value={user.lastLoginAt ? formatDateTime(user.lastLoginAt) : "Nunca"} />
-              <Row label="Criado em" value={formatDate(user.createdAt)} />
-              {user.mustChangePassword && <Row label="Senha" value={<StatusChip tone="warning">Troca obrigatória pendente</StatusChip>} />}
-              {user.notes && <Row label="Observações" value={user.notes} />}
+              <Row label={portalAccount ? "Login" : "Usuário"} value={user?.username ?? account.email} />
+              {portalAccount && <Row label="Cliente vinculado" value={portalAccount.customer.tradeName || portalAccount.customer.name} />}
+              <Row label="Telefone" value={account.phone} />
+              {user && <Row label="Cargo" value={user.jobTitle} />}
+              <Row label="Último acesso" value={account.lastLoginAt ? formatDateTime(account.lastLoginAt) : "Nunca"} />
+              <Row label="Criado em" value={formatDate(account.createdAt)} />
+              {account.mustChangePassword && <Row label="Senha" value={<StatusChip tone="warning">Troca obrigatória pendente</StatusChip>} />}
+              {user?.notes && <Row label="Observações" value={user.notes} />}
             </div>
           )}
 
-          {tab === "Permissões" && (
+          {tab === "Permissões" && portalAccount && (
+            <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4 text-sm">
+              Este usuário acessa somente os dados e as solicitações do cliente {portalAccount.customer.tradeName || portalAccount.customer.name} no Portal do Cliente.
+            </div>
+          )}
+          {tab === "Permissões" && user && (
             <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] divide-y divide-[var(--color-border)]">
               {PERMISSION_KEYS.map((k) => {
                 const on = user.role === "OWNER" || user.permission[k];
@@ -160,7 +174,7 @@ export function UserDetailDrawer({
             </div>
           )}
 
-          {tab === "Preferências" && (
+          {tab === "Preferências" && user && (
             <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
               <Row label="Tema" value={user.preferences?.theme ?? "SYSTEM"} />
               <Row label="Notificações" value={user.preferences?.notificationsEnabled ? "Ativadas" : "Desativadas"} />
@@ -172,10 +186,10 @@ export function UserDetailDrawer({
       <ConfirmDialog
         open={confirm === "disable"}
         title="Desativar usuário"
-        description={<>O acesso de <strong>{user.name}</strong> será revogado imediatamente.</>}
+        description={<>O acesso de <strong>{account.name}</strong> será revogado imediatamente.</>}
         confirmLabel="Desativar"
         danger
-        onConfirm={() => usersApi.disableUser(user.id).then(onChanged)}
+        onConfirm={() => (portalAccount ? customerPortalApi.disableAccount(portalAccount.id) : usersApi.disableUser(user!.id)).then((updated) => onChanged("customer" in updated ? updated : undefined))}
         onClose={() => setConfirm(null)}
       />
       <ConfirmDialog
@@ -183,8 +197,7 @@ export function UserDetailDrawer({
         title="Excluir usuário"
         description={
           <>
-            <strong>{user.name}</strong> será excluído junto com a assinatura e os acessos. Se já
-            tiver atendimentos, documentos ou outros registros, ficará apenas inativo para auditoria
+            <strong>{account.name}</strong> {portalAccount ? "será excluído do Portal do Cliente. Se já tiver solicitações no histórico," : "será excluído junto com a assinatura e os acessos. Se já tiver atendimentos, documentos ou outros registros,"} ficará apenas inativo para auditoria
             e sairá da lista de usuários. Para só suspender o acesso e manter na lista, use{" "}
             <strong>Desativar</strong>.
           </>
@@ -192,9 +205,9 @@ export function UserDetailDrawer({
         confirmLabel="Excluir"
         danger
         onConfirm={() =>
-          usersApi.deleteUser(user.id).then((result) => {
+          (portalAccount ? customerPortalApi.deleteAccount(portalAccount.id) : usersApi.deleteUser(user!.id)).then((result) => {
             onChanged();
-            onDeleted?.(result.mode, user.name);
+            onDeleted?.(result.mode, account.name);
           })
         }
         onClose={() => setConfirm(null)}

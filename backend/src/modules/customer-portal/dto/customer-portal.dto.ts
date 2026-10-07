@@ -80,6 +80,25 @@ export class UpsertCustomerPortalAccountDto {
   phone?: string;
 }
 
+export class UpdateCustomerPortalAccountDto {
+  @Transform(({ value }) => lower(value))
+  @IsEmail()
+  @MaxLength(254)
+  email!: string;
+
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MinLength(1)
+  @MaxLength(150)
+  name!: string;
+
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(30)
+  phone?: string | null;
+}
+
 export class ListCustomerPortalAccountsQueryDto {
   @IsOptional()
   @Type(() => Number)

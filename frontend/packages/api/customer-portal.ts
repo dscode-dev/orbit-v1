@@ -65,8 +65,11 @@ export const listAccountDirectory = (params?: { page?: number; limit?: number; s
   return api.get<Paginated<CustomerPortalDirectoryAccount>>('/customer-portal/accounts/directory', { query, signal });
 };
 export const provisionAccount = (payload: { customerId: string; email: string; name: string; phone?: string }) => api.post<{ account: CustomerPortalAccount; temporaryPassword: string }>('/customer-portal/accounts', payload);
-export const disableAccount = (id: string) => api.patch<CustomerPortalAccount>(`/customer-portal/accounts/${id}/disable`);
-export const resetAccountPassword = (id: string) => api.patch<{ account: CustomerPortalAccount; temporaryPassword: string }>(`/customer-portal/accounts/${id}/reset-password`);
+export const updateAccount = (id: string, payload: { name: string; email: string; phone: string | null }) => api.patch<CustomerPortalDirectoryAccount>(`/customer-portal/accounts/${id}`, payload);
+export const enableAccount = (id: string) => api.patch<CustomerPortalDirectoryAccount>(`/customer-portal/accounts/${id}/enable`);
+export const deleteAccount = (id: string) => api.delete<{ deleted: boolean; mode: 'deleted' | 'archived' }>(`/customer-portal/accounts/${id}`);
+export const disableAccount = (id: string) => api.patch<CustomerPortalDirectoryAccount>(`/customer-portal/accounts/${id}/disable`);
+export const resetAccountPassword = (id: string) => api.patch<{ account: CustomerPortalDirectoryAccount; temporaryPassword: string }>(`/customer-portal/accounts/${id}/reset-password`);
 
 export const listTickets = (params?: { page?: number; limit?: number; search?: string; status?: string; customerId?: string; signal?: AbortSignal }) => {
   const { signal, ...query } = params ?? {};

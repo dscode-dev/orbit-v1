@@ -19,6 +19,7 @@ import {
   type Customer,
   type Role,
   type TeamUser,
+  type CustomerPortalDirectoryAccount,
   type UserPermissions,
 } from "@erp/api";
 import { ROLE_LABEL, ROLES, PERMISSION_KEYS, PERMISSION_LABEL } from "@platform/user-display";
@@ -50,13 +51,13 @@ const EMPTY_PERMS: UserPermissions = {
   canTemplates: false,
 };
 
-function fromUser(u: TeamUser | null): FormState {
+function fromUser(u: TeamUser | null, portalAccount: CustomerPortalDirectoryAccount | null = null): FormState {
   return {
-    name: u?.name ?? "",
-    email: u?.email ?? "",
+    name: u?.name ?? portalAccount?.name ?? "",
+    email: u?.email ?? portalAccount?.email ?? "",
     username: u?.username ?? "",
     role: u?.role ?? "OPERATOR",
-    phone: u?.phone ?? "",
+    phone: u?.phone ?? portalAccount?.phone ?? "",
     jobTitle: u?.jobTitle ?? "",
     notes: u?.notes ?? "",
     permissions: u?.permission ?? EMPTY_PERMS,
@@ -68,14 +69,16 @@ export function UserFormDrawer({
   onClose,
   onSaved,
   user = null,
+  portalAccount = null,
 }: {
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
   user?: TeamUser | null;
+  portalAccount?: CustomerPortalDirectoryAccount | null;
 }) {
-  const isEdit = Boolean(user);
-  const [form, setForm] = useState<FormState>(fromUser(user));
+  const isEdit = Boolean(user || portalAccount);
+  const [form, setForm] = useState<FormState>(fromUser(user, portalAccount));
   const [accessType, setAccessType] = useState<AccessType>("INTERNAL");
   const [customerId, setCustomerId] = useState("");
   const [saving, setSaving] = useState(false);
@@ -91,16 +94,16 @@ export function UserFormDrawer({
 
   useEffect(() => {
     if (open) {
-      setForm(fromUser(user));
-      setAccessType("INTERNAL");
-      setCustomerId("");
+      setForm(fromUser(user, portalAccount));
+      setAccessType(portalAccount ? "CUSTOMER" : "INTERNAL");
+      setCustomerId(portalAccount?.customerId ?? "");
       setError(null);
       setFieldError(null);
       setSaving(false);
       setCredential(null);
       setCopied(false);
     }
-  }, [open, user]);
+  }, [open, user, portalAccount]);
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -133,7 +136,7 @@ export function UserFormDrawer({
   }
 
   async function handleSave() {
-    if (!isEdit && accessType === "CUSTOMER") {
+    if (accessType === "CUSTOMER") {
       if (!customerId) {
         setError("Selecione o cliente que terá acesso ao portal.");
         return;
@@ -146,6 +149,12 @@ export function UserFormDrawer({
       setError(null);
       setFieldError(null);
       try {
+        if (portalAccount) {
+          await customerPortalApi.updateAccount(portalAccount.id, { name: form.name.trim(), email: form.email.trim(), phone: form.phone.trim() || null });
+          onSaved();
+          onClose();
+          return;
+        }
         const result = await customerPortalApi.provisionAccount({
           customerId,
           name: form.name.trim(),
@@ -160,11 +169,11 @@ export function UserFormDrawer({
         onSaved();
       } catch (err) {
         if (err instanceof ApiClientError && err.status === 409) {
-          setFieldError("Este e-mail já está vinculado a outro cliente.");
+          setFieldError(err.message);
         } else if (err instanceof ApiClientError && err.isForbidden) {
-          setError("Você não tem permissão para criar acessos de clientes.");
+          setError("Você não tem permissão para gerenciar acessos de clientes.");
         } else {
-          setError(err instanceof ApiClientError ? err.message : "Não foi possível criar o acesso do cliente.");
+          setError(err instanceof ApiClientError ? err.message : "Não foi possível salvar o acesso do cliente.");
         }
       } finally {
         setSaving(false);
@@ -316,6 +325,7 @@ export function UserFormDrawer({
           </Field>
         )}
 
+        {portalAccount && <Field label="Cliente vinculado"><p className="text-sm">{portalAccount.customer.tradeName || portalAccount.customer.name}</p></Field>}
         {!isEdit && accessType === "CUSTOMER" && (
           <>
             <div className="rounded-[var(--radius-md)] border border-[var(--color-primary)]/20 bg-[var(--color-primary)]/5 px-3 py-2 text-sm">
@@ -340,36 +350,36 @@ export function UserFormDrawer({
           </>
         )}
 
-        <Field label={accessType === "CUSTOMER" && !isEdit ? "Nome do usuário do cliente" : "Nome completo"} required>
+        <Field label={accessType === "CUSTOMER" ? "Nome do usuário do cliente" : "Nome completo"} required>
           <input
             value={form.name}
             onChange={(e) => set("name", e.target.value)}
             className={inputCls}
-            placeholder={accessType === "CUSTOMER" && !isEdit ? "Nome da pessoa que utilizará o portal" : "Nome do colaborador"}
+            placeholder={accessType === "CUSTOMER" ? "Nome da pessoa que utilizará o portal" : "Nome do colaborador"}
           />
         </Field>
-        <div className={isEdit || accessType === "INTERNAL" ? "grid grid-cols-2 gap-3" : "grid gap-3"}>
+        <div className={accessType === "INTERNAL" ? "grid grid-cols-2 gap-3" : "grid gap-3"}>
           <Field label="E-mail" required error={fieldError ?? undefined}>
             <input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} className={inputCls} placeholder="email@empresa.com.br" />
           </Field>
-          {(isEdit || accessType === "INTERNAL") && (
+          {(accessType === "INTERNAL") && (
             <Field label="Usuário" required>
               <input value={form.username} onChange={(e) => set("username", e.target.value)} className={inputCls} placeholder="usuario" />
             </Field>
           )}
         </div>
-        <div className={isEdit || accessType === "INTERNAL" ? "grid grid-cols-2 gap-3" : "grid gap-3"}>
+        <div className={accessType === "INTERNAL" ? "grid grid-cols-2 gap-3" : "grid gap-3"}>
           <Field label="Telefone">
             <input value={form.phone} onChange={(e) => set("phone", e.target.value)} className={inputCls} placeholder="(00) 00000-0000" />
           </Field>
-          {(isEdit || accessType === "INTERNAL") && (
+          {(accessType === "INTERNAL") && (
             <Field label="Cargo">
               <input value={form.jobTitle} onChange={(e) => set("jobTitle", e.target.value)} className={inputCls} placeholder="Ex.: Técnico" />
             </Field>
           )}
         </div>
 
-        {(isEdit || accessType === "INTERNAL") && <Field label="Papel">
+        {(accessType === "INTERNAL") && <Field label="Papel">
           <div className="grid grid-cols-2 gap-2">
             {ROLES.map((r) => (
               <button
@@ -386,7 +396,7 @@ export function UserFormDrawer({
           </div>
         </Field>}
 
-        {(isEdit || accessType === "INTERNAL") && <Field label="Permissões">
+        {(accessType === "INTERNAL") && <Field label="Permissões">
           <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] divide-y divide-[var(--color-border)]">
             {PERMISSION_KEYS.map((k) => {
               const checked = ownerLocked || form.permissions[k];
@@ -407,7 +417,7 @@ export function UserFormDrawer({
           {ownerLocked && <p className="text-[11px] text-[var(--color-muted-foreground)] mt-1">Proprietários têm todas as permissões.</p>}
         </Field>}
 
-        {(isEdit || accessType === "INTERNAL") && <Field label="Observações">
+        {(accessType === "INTERNAL") && <Field label="Observações">
           <textarea value={form.notes} onChange={(e) => set("notes", e.target.value)} rows={2} className={`${inputCls} h-auto py-2 resize-none`} />
         </Field>}
       </div>

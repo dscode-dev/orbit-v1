@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Building2, Plus, Users } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { DataTable, type Column } from "@platform/components/data-table";
@@ -31,7 +30,6 @@ type StatusFilter = "all" | "active" | "inactive";
 type AccessView = "team" | "customers";
 
 export default function UsuariosPage() {
-  const router = useRouter();
   const [accessView, setAccessView] = useState<AccessView>("team");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -41,8 +39,10 @@ export default function UsuariosPage() {
   const debounced = useDebounce(search, 300);
 
   const [detail, setDetail] = useState<TeamUser | null>(null);
+  const [portalDetail, setPortalDetail] = useState<CustomerPortalDirectoryAccount | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<TeamUser | null>(null);
+  const [portalEditing, setPortalEditing] = useState<CustomerPortalDirectoryAccount | null>(null);
   // Resultado da última exclusão (apagado de vez × mantido inativo para auditoria).
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -166,7 +166,7 @@ export default function UsuariosPage() {
         description="Equipe interna e acessos isolados do Portal do Cliente."
         actions={
           <Gate roles={["OWNER"]}>
-            <button onClick={() => { setEditing(null); setFormOpen(true); }} className="inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] px-3 h-9 text-sm font-medium shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-hover)]">
+            <button onClick={() => { setEditing(null); setPortalEditing(null); setFormOpen(true); }} className="inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] px-3 h-9 text-sm font-medium shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-hover)]">
               <Plus className="h-4 w-4" /> Novo usuário
             </button>
           </Gate>
@@ -244,7 +244,7 @@ export default function UsuariosPage() {
         />
       ) : (
         <div className="space-y-3">
-          <DataTable columns={columns} rows={rows} onRowClick={(u) => setDetail(u)} />
+          <DataTable columns={columns} rows={rows} onRowClick={(u) => { setPortalDetail(null); setDetail(u); }} />
           {list.data && (
             <Pagination
               pagination={list.data.pagination}
@@ -268,7 +268,7 @@ export default function UsuariosPage() {
           <DataTable
             columns={portalColumns}
             rows={portalList.data?.items ?? []}
-            onRowClick={(account) => router.push(`/clientes/${account.customerId}`)}
+            onRowClick={(account) => { setDetail(null); setPortalDetail(account); }}
           />
           {portalList.data && (
             <Pagination
@@ -281,25 +281,30 @@ export default function UsuariosPage() {
       )}
 
       <UserDetailDrawer
-        user={detail}
-        open={detail !== null}
-        onClose={() => setDetail(null)}
-        onChanged={() => { list.refetch(); }}
+        user={detail ? list.data?.items.find((item) => item.id === detail.id) ?? detail : null}
+        portalAccount={portalDetail}
+        open={detail !== null || portalDetail !== null}
+        onClose={() => { setDetail(null); setPortalDetail(null); }}
+        onChanged={(account) => { if (account) setPortalDetail(account); list.refetch(); portalList.refetch(); }}
         onDeleted={(mode, name) => {
           setDetail(null);
-          setNotice(
-            mode === "deleted"
+          setPortalDetail(null);
+          setNotice(portalDetail
+            ? mode === "deleted" ? `${name} foi excluído do Portal do Cliente.` : `${name} foi excluído da lista; o histórico de solicitações foi preservado para auditoria.`
+            : mode === "deleted"
               ? `${name} foi excluído, junto com a assinatura e os acessos.`
               : `${name} tinha atendimentos ou documentos no histórico: foi mantido como inativo apenas para auditoria e saiu da lista de usuários.`,
           );
         }}
-        onEdit={(u) => { setDetail(null); setEditing(u); setFormOpen(true); }}
+        onEdit={(u) => { setDetail(null); setPortalEditing(null); setEditing(u); setFormOpen(true); }}
+        onEditPortal={(account) => { setPortalDetail(null); setEditing(null); setPortalEditing(account); setFormOpen(true); }}
       />
       <UserFormDrawer
         open={formOpen}
         onClose={() => setFormOpen(false)}
         onSaved={() => { void list.refetch(); void portalList.refetch(); }}
         user={editing}
+        portalAccount={portalEditing}
       />
     </div>
   );

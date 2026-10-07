@@ -5,6 +5,7 @@ import {
   DocumentTemplateType,
   OperationStatus,
   Prisma,
+  Role,
 } from '@prisma/client';
 import { SYSTEM_SERVICE_TYPE_KEYS } from '../../shared/constants/service-types.constants';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -24,6 +25,7 @@ import type {
   ListCustomerPortalAccountsQueryDto,
   ListCustomerTicketsQueryDto,
   UpsertCustomerPortalAccountDto,
+  UpdateCustomerPortalAccountDto,
 } from './dto/customer-portal.dto';
 import type { AuthenticatedCustomerPortalAccount } from './customer-portal.types';
 
@@ -41,6 +43,14 @@ type CustomerRefreshPayload = {
   type: 'customer-refresh';
   jti: string;
 };
+
+const ACCOUNT_SELECT = {
+  id: true, customerId: true, email: true, name: true, phone: true, mustChangePassword: true,
+  isActive: true, disabledAt: true, lastLoginAt: true, createdAt: true, updatedAt: true,
+  customer: { select: { id: true, name: true, tradeName: true, cpf: true, cnpj: true, isActive: true } },
+} satisfies Prisma.CustomerPortalAccountSelect;
+
+type ManagedPortalAccount = Prisma.CustomerPortalAccountGetPayload<{ select: typeof ACCOUNT_SELECT }>;
 
 const TICKET_INCLUDE = {
   customer: { select: { id: true, name: true, tradeName: true, cpf: true, cnpj: true } },
@@ -141,7 +151,7 @@ export class CustomerPortalService {
       include: { customer: true },
     });
     const passwordValid = await this.passwords.verifyPassword(account?.passwordHash ?? null, input.password);
-    if (!account || !passwordValid || !account.isActive || !account.customer.isActive) {
+    if (!account || !passwordValid || !account.isActive || account.deletedAt || !account.customer.isActive) {
       await this.prisma.auditLog.create({
         data: {
           action: 'CUSTOMER_PORTAL_LOGIN_FAILURE',
@@ -183,7 +193,7 @@ export class CustomerPortalService {
     }
     const now = new Date();
     const valid = stored.expiresAt > now && (await this.passwords.verify(stored.tokenHash, rawToken));
-    if (!valid || !stored.account.isActive || !stored.account.customer.isActive) {
+    if (!valid || !stored.account.isActive || stored.account.deletedAt || !stored.account.customer.isActive) {
       throw this.invalidToken();
     }
     const tokens = await this.issueTokenPair(stored.account);
@@ -227,13 +237,14 @@ export class CustomerPortalService {
             email: true,
             name: true,
             isActive: true,
+            deletedAt: true,
             mustChangePassword: true,
             customer: { select: { isActive: true } },
           },
         },
       },
     });
-    if (!session?.account.isActive || !session.account.customer.isActive) throw this.invalidToken();
+    if (!session?.account.isActive || session.account.deletedAt || !session.account.customer.isActive) throw this.invalidToken();
     return {
       id: session.account.id,
       organizationId: session.account.organizationId,
@@ -247,7 +258,7 @@ export class CustomerPortalService {
 
   async listAccounts(customerId: string): Promise<unknown> {
     return this.prisma.customerPortalAccount.findMany({
-      where: { customerId },
+      where: { customerId, deletedAt: null },
       orderBy: { createdAt: 'asc' },
       select: {
         id: true, customerId: true, email: true, name: true, phone: true, mustChangePassword: true,
@@ -260,6 +271,7 @@ export class CustomerPortalService {
     const organization = await this.defaultOrganization();
     const where: Prisma.CustomerPortalAccountWhereInput = {
       organizationId: organization.id,
+      deletedAt: null,
       ...(query.status === 'ACTIVE' ? { isActive: true } : query.status === 'INACTIVE' ? { isActive: false } : {}),
       ...(query.search ? { OR: [
         { name: { contains: query.search, mode: 'insensitive' } },
@@ -296,6 +308,7 @@ export class CustomerPortalService {
     const temporaryPassword = this.generateTemporaryPassword();
     const passwordHash = await this.passwords.hash(temporaryPassword);
     const existing = await this.prisma.customerPortalAccount.findUnique({ where: { email: dto.email } });
+    if (existing?.deletedAt) throw new ApplicationException(ERROR_CODES.USER_CONFLICT, 'Este e-mail pertence a um acesso excluído e reservado ao histórico', HttpStatus.CONFLICT);
     if (existing && existing.customerId !== customer.id) {
       throw new ApplicationException(ERROR_CODES.FORBIDDEN, 'E-mail já vinculado a outro cliente', HttpStatus.CONFLICT);
     }
@@ -333,36 +346,181 @@ export class CustomerPortalService {
     return { account, temporaryPassword };
   }
 
-  async disableAccount(id: string, actor: AuthenticatedUser): Promise<unknown> {
-    const account = await this.prisma.customerPortalAccount.update({
-      where: { id },
-      data: { isActive: false, disabledAt: new Date() },
-      select: { id: true, customerId: true, email: true, name: true, isActive: true, disabledAt: true },
-    });
-    await this.prisma.auditLog.create({
-      data: { action: 'CUSTOMER_PORTAL_ACCOUNT_DISABLED', resource: 'CUSTOMER_PORTAL_ACCOUNT', actor: actor.id, metadata: { accountId: id } },
-    });
-    return account;
+  async updateAccount(
+    id: string,
+    dto: UpdateCustomerPortalAccountDto,
+    actor: AuthenticatedUser,
+  ): Promise<ManagedPortalAccount> {
+    this.assertAccountManager(actor);
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const current = await this.managedAccountTx(tx, id);
+        const account = await tx.customerPortalAccount.update({
+          where: { id },
+          data: { name: dto.name, email: dto.email, phone: dto.phone?.trim() || null },
+          select: ACCOUNT_SELECT,
+        });
+        if (current.email !== account.email) await this.revokeAccountSessionsTx(tx, id);
+        await this.auditAccountTx(tx, 'CUSTOMER_PORTAL_ACCOUNT_UPDATED', actor, id, {
+          customerId: account.customerId,
+          changedFields: ['name', 'email', 'phone'],
+        });
+        return account;
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ApplicationException(
+          ERROR_CODES.USER_CONFLICT,
+          'E-mail já cadastrado no Portal do Cliente',
+          HttpStatus.CONFLICT,
+        );
+      }
+      throw error;
+    }
   }
 
-  async resetAccountPassword(id: string, actor: AuthenticatedUser): Promise<unknown> {
+  async enableAccount(id: string, actor: AuthenticatedUser): Promise<ManagedPortalAccount> {
+    return this.setAccountActive(id, true, actor);
+  }
+
+  async disableAccount(id: string, actor: AuthenticatedUser): Promise<ManagedPortalAccount> {
+    return this.setAccountActive(id, false, actor);
+  }
+
+  private async setAccountActive(
+    id: string,
+    active: boolean,
+    actor: AuthenticatedUser,
+  ): Promise<ManagedPortalAccount> {
+    this.assertAccountManager(actor);
+    return this.prisma.$transaction(async (tx) => {
+      const current = await this.managedAccountTx(tx, id);
+      if (active && !current.customer.isActive) {
+        throw new ApplicationException(
+          ERROR_CODES.VALIDATION_ERROR,
+          'Ative o cliente antes de reativar seu acesso',
+          HttpStatus.CONFLICT,
+        );
+      }
+      const account = await tx.customerPortalAccount.update({
+        where: { id },
+        data: { isActive: active, disabledAt: active ? null : new Date() },
+        select: ACCOUNT_SELECT,
+      });
+      await this.revokeAccountSessionsTx(tx, id);
+      await this.auditAccountTx(
+        tx,
+        active ? 'CUSTOMER_PORTAL_ACCOUNT_ENABLED' : 'CUSTOMER_PORTAL_ACCOUNT_DISABLED',
+        actor,
+        id,
+        { customerId: account.customerId },
+      );
+      return account;
+    });
+  }
+
+  async deleteAccount(
+    id: string,
+    actor: AuthenticatedUser,
+  ): Promise<{ deleted: true; mode: 'deleted' | 'archived' }> {
+    this.assertAccountManager(actor, true);
+    return this.prisma.$transaction(async (tx) => {
+      const account = await this.managedAccountTx(tx, id);
+      const hasHistory = await tx.customerServiceTicket.count({ where: { accountId: id } });
+      const mode = hasHistory ? 'archived' : 'deleted';
+      await this.revokeAccountSessionsTx(tx, id);
+      if (hasHistory) {
+        const now = new Date();
+        await tx.customerPortalAccount.update({
+          where: { id },
+          data: { isActive: false, disabledAt: now, deletedAt: now },
+        });
+      } else {
+        await tx.customerPortalAccount.delete({ where: { id } });
+      }
+      await this.auditAccountTx(tx, 'CUSTOMER_PORTAL_ACCOUNT_DELETED', actor, id, {
+        customerId: account.customerId,
+        name: account.name,
+        mode,
+      });
+      return { deleted: true, mode };
+    });
+  }
+
+  async resetAccountPassword(
+    id: string,
+    actor: AuthenticatedUser,
+  ): Promise<{ account: ManagedPortalAccount; temporaryPassword: string }> {
+    this.assertAccountManager(actor);
     const temporaryPassword = this.generateTemporaryPassword();
     const passwordHash = await this.passwords.hash(temporaryPassword);
     const account = await this.prisma.$transaction(async (tx) => {
+      await this.managedAccountTx(tx, id);
       const updated = await tx.customerPortalAccount.update({
         where: { id },
         data: { passwordHash, mustChangePassword: true, isActive: true, disabledAt: null },
-        select: { id: true, customerId: true, email: true, name: true, mustChangePassword: true, isActive: true },
+        select: ACCOUNT_SELECT,
       });
-      await tx.customerPortalRefreshToken.updateMany({
-        where: { accountId: id, revokedAt: null }, data: { revokedAt: new Date() },
-      });
-      await tx.auditLog.create({
-        data: { action: 'CUSTOMER_PORTAL_PASSWORD_RESET', resource: 'CUSTOMER_PORTAL_ACCOUNT', actor: actor.id, metadata: { accountId: id, customerId: updated.customerId } },
+      await this.revokeAccountSessionsTx(tx, id);
+      await this.auditAccountTx(tx, 'CUSTOMER_PORTAL_PASSWORD_RESET', actor, id, {
+        customerId: updated.customerId,
       });
       return updated;
     });
     return { account, temporaryPassword };
+  }
+
+  private async managedAccountTx(
+    tx: Prisma.TransactionClient,
+    id: string,
+  ): Promise<ManagedPortalAccount> {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`portal-account:${id}`}))`;
+    const organization = await this.defaultOrganization();
+    const account = await tx.customerPortalAccount.findFirst({
+      where: { id, organizationId: organization.id, deletedAt: null },
+      select: ACCOUNT_SELECT,
+    });
+    if (!account)
+      throw new ApplicationException(
+        ERROR_CODES.USER_NOT_FOUND,
+        'Usuário do Portal do Cliente não encontrado',
+        HttpStatus.NOT_FOUND,
+      );
+    return account;
+  }
+
+  private assertAccountManager(actor: AuthenticatedUser, ownerOnly = false): void {
+    if (actor.role !== Role.OWNER && (ownerOnly || actor.role !== Role.MANAGER)) {
+      throw new ApplicationException(
+        ERROR_CODES.FORBIDDEN,
+        'Você não tem permissão para gerenciar este acesso',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+  }
+
+  private async revokeAccountSessionsTx(tx: Prisma.TransactionClient, id: string): Promise<void> {
+    await tx.customerPortalRefreshToken.updateMany({
+      where: { accountId: id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
+
+  private async auditAccountTx(
+    tx: Prisma.TransactionClient,
+    action: string,
+    actor: AuthenticatedUser,
+    id: string,
+    metadata: Record<string, unknown>,
+  ): Promise<void> {
+    await tx.auditLog.create({
+      data: {
+        action,
+        resource: 'CUSTOMER_PORTAL_ACCOUNT',
+        actor: actor.id,
+        metadata: { accountId: id, ...metadata },
+      },
+    });
   }
 
   async changePassword(
