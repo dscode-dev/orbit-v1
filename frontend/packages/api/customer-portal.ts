@@ -9,6 +9,8 @@ import type {
   CustomerPortalOperation,
   CustomerPortalSession,
   CustomerServiceTicket,
+  DocumentBlueprint,
+  DocumentDownloadResult,
   DocumentTemplateType,
   OperationType,
   OperationDetail,
@@ -51,6 +53,8 @@ export const listOperations = (params?: { page?: number; limit?: number; search?
   return api.get<Paginated<CustomerPortalOperation>>('/customer/operations', { query, signal });
 };
 export const getOperation = (id: string, signal?: AbortSignal) => api.get<CustomerPortalOperation>(`/customer/operations/${id}`, { signal });
+export const getReportPreview = (operationId: string, documentId: string, signal?: AbortSignal) => api.get<DocumentBlueprint>(`/customer/operations/${operationId}/reports/${documentId}/preview`, { signal });
+export const downloadReport = (operationId: string, documentId: string): Promise<DocumentDownloadResult> => api.blob(`/customer/operations/${operationId}/reports/${documentId}/pdf`);
 export const listEquipments = (signal?: AbortSignal) => api.get<CustomerPortalEquipment[]>('/customer/equipments', { signal });
 export const getEquipment = (id: string, signal?: AbortSignal) => api.get<CustomerPortalEquipment & { operations: CustomerPortalOperation[] }>(`/customer/equipments/${id}`, { signal });
 export const listMyTickets = (params?: { page?: number; limit?: number; status?: string; search?: string; signal?: AbortSignal }) => {

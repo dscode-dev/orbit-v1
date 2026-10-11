@@ -87,6 +87,11 @@ export class DocumentAssetResolver {
     return this.storage.get(storageKey);
   }
 
+  /** Remove o PDF de um documento excluído (falha aqui não desfaz a exclusão). */
+  async deleteDocumentPdf(storageKey: string): Promise<void> {
+    await this.storage.delete(storageKey).catch(() => undefined);
+  }
+
   async saveSignatureImage(input: SaveSignatureImageInput): Promise<StoredFile> {
     const storageKey = `${SIGNATURE_STORAGE_PREFIX}/${randomUUID()}.${input.extension}`;
     return this.storage.save({ storageKey, content: input.content });

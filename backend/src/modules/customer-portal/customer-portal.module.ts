@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { AuthModule } from '../auth/auth.module';
 import { AppConfigModule } from '../config/app-config.module';
 import { OperationsModule } from '../operations/operations.module';
+import { DocumentEngineModule } from '../document-engine/document-engine.module';
 import {
   CustomerPortalAccountsController,
   CustomerPortalAuthController,
@@ -13,7 +14,7 @@ import { CustomerPortalService } from './customer-portal.service';
 import { CustomerPortalAuthGuard } from './guards/customer-portal-auth.guard';
 
 @Module({
-  imports: [AppConfigModule, AuthModule, JwtModule.register({}), OperationsModule],
+  imports: [AppConfigModule, AuthModule, JwtModule.register({}), OperationsModule, DocumentEngineModule],
   controllers: [
     CustomerPortalAuthController,
     CustomerPortalController,

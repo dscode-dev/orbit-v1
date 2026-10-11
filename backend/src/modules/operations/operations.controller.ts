@@ -182,7 +182,8 @@ export class OperationsController {
     return this.operations.reactivate(id, actor, this.context(request));
   }
 
-  @Roles(Role.OWNER, Role.MANAGER)
+  /** Exclusão definitiva (qualquer status, inclusive concluída). Só OWNER. */
+  @Roles(Role.OWNER)
   @Delete(':id')
   remove(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,

@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Optional } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import {
   CustomerPortalTicketStatus,
@@ -12,6 +12,8 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { AppConfigService } from '../config/app-config.service';
 import { PrismaService } from '../database/prisma.service';
 import { OperationsService, type OperationAuditContext } from '../operations/operations.service';
+import { DocumentEngineService, type DocumentDownload } from '../document-engine/document-engine.service';
+import type { DocumentBlueprint } from '../document-engine/blueprint/document-blueprint.types';
 import { PasswordService } from '../auth/password.service';
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
@@ -59,6 +61,47 @@ const TICKET_INCLUDE = {
   operation: { select: { id: true, number: true, status: true, operator: { select: { id: true, name: true } } } },
 } satisfies Prisma.CustomerServiceTicketInclude;
 
+/** Relatório liberado pela equipe: finalizado na revisão ou já gerado em PDF. */
+function reportReleased(document: { finalizedAt: Date | null; renderedAt: Date | null }): boolean {
+  return Boolean(document.finalizedAt || document.renderedAt);
+}
+
+type PortalReportStatus = 'AVAILABLE' | 'IN_REVIEW' | 'PREPARING';
+
+/**
+ * Relatórios do serviço para o portal: disponíveis (serviço concluído e
+ * relatório liberado), em revisão pela equipe, ou ainda em preparação (nenhum
+ * documento gerado). O cliente não vê o fluxo interno de revisão.
+ */
+function withReports<
+  T extends {
+    status: OperationStatus;
+    documents: Array<{ id: string; type: string; number: string; renderedAt: Date | null; finalizedAt: Date | null; canceledAt: Date | null }>;
+  },
+>(operation: T): T & {
+  reports: Array<{ id: string; type: string; number: string; available: boolean; issuedAt: Date | null }>;
+  reportStatus: PortalReportStatus | null;
+} {
+  const completed = operation.status === OperationStatus.COMPLETED;
+  const reports = operation.documents
+    .filter((document) => !document.canceledAt)
+    .map((document) => ({
+      id: document.id,
+      type: document.type,
+      number: document.number,
+      available: completed && reportReleased(document),
+      issuedAt: document.renderedAt ?? document.finalizedAt,
+    }));
+  const reportStatus: PortalReportStatus | null = !completed
+    ? null
+    : reports.some((report) => report.available)
+      ? 'AVAILABLE'
+      : reports.length > 0
+        ? 'IN_REVIEW'
+        : 'PREPARING';
+  return { ...operation, reports, reportStatus };
+}
+
 const CUSTOMER_OPERATION_SELECT = {
   id: true,
   number: true,
@@ -90,7 +133,10 @@ const CUSTOMER_OPERATION_SELECT = {
   operator: { select: { id: true, name: true } },
   documents: {
     orderBy: { createdAt: 'asc' as const },
-    select: { id: true, type: true, number: true, status: true, revision: true, renderedAt: true, createdAt: true },
+    select: {
+      id: true, type: true, number: true, status: true, revision: true, renderedAt: true, createdAt: true,
+      finalizedAt: true, canceledAt: true,
+    },
   },
   pmocExecutionRequest: {
     select: {
@@ -143,6 +189,7 @@ export class CustomerPortalService {
     private readonly config: AppConfigService,
     private readonly passwords: PasswordService,
     private readonly operations: OperationsService,
+    @Optional() private readonly documentEngine?: DocumentEngineService,
   ) {}
 
   async login(input: CustomerPortalLoginDto): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
@@ -597,7 +644,7 @@ export class CustomerPortalService {
       }),
       this.prisma.operation.count({ where }),
     ]);
-    return buildPaginatedResponse(items, total, query.page, query.limit);
+    return buildPaginatedResponse(items.map(withReports), total, query.page, query.limit);
   }
 
   async customerOperation(id: string, account: AuthenticatedCustomerPortalAccount): Promise<unknown> {
@@ -605,7 +652,65 @@ export class CustomerPortalService {
       where: { id, customerId: account.customerId }, select: CUSTOMER_OPERATION_SELECT,
     });
     if (!operation) throw new ApplicationException(ERROR_CODES.OPERATION_NOT_FOUND, 'Atendimento não encontrado', HttpStatus.NOT_FOUND);
-    return operation;
+    return withReports(operation);
+  }
+
+  /** Pré-visualização do relatório de um serviço concluído do próprio cliente. */
+  async customerReportPreview(
+    operationId: string,
+    documentId: string,
+    account: AuthenticatedCustomerPortalAccount,
+  ): Promise<DocumentBlueprint> {
+    await this.releasedReportOrThrow(operationId, documentId, account);
+    return this.engine().portalPreview(documentId);
+  }
+
+  /**
+   * PDF do relatório de um serviço concluído do próprio cliente. Sempre
+   * entrega: se o PDF estiver desatualizado, é gerado de novo na hora.
+   */
+  async customerReportPdf(
+    operationId: string,
+    documentId: string,
+    account: AuthenticatedCustomerPortalAccount,
+    context: { requestId: string; ip: string | null; userAgent: string | null },
+  ): Promise<DocumentDownload> {
+    await this.releasedReportOrThrow(operationId, documentId, account);
+    return this.engine().portalPdf(documentId, account.id, context);
+  }
+
+  /** O documento é da operação do cliente, a operação está concluída e a equipe já liberou o relatório. */
+  private async releasedReportOrThrow(
+    operationId: string,
+    documentId: string,
+    account: AuthenticatedCustomerPortalAccount,
+  ): Promise<void> {
+    const document = await this.prisma.operationDocument.findFirst({
+      where: {
+        id: documentId,
+        operationId,
+        canceledAt: null,
+        operation: { customerId: account.customerId },
+      },
+      select: { finalizedAt: true, renderedAt: true, operation: { select: { status: true } } },
+    });
+    if (!document) {
+      throw new ApplicationException(ERROR_CODES.DOCUMENT_NOT_FOUND, 'Relatório não encontrado', HttpStatus.NOT_FOUND);
+    }
+    if (document.operation?.status !== OperationStatus.COMPLETED || !reportReleased(document)) {
+      throw new ApplicationException(
+        ERROR_CODES.DOCUMENT_DOWNLOAD_NOT_READY,
+        'O relatório deste serviço ainda está em revisão pela equipe',
+        HttpStatus.CONFLICT,
+      );
+    }
+  }
+
+  private engine(): DocumentEngineService {
+    if (!this.documentEngine) {
+      throw new ApplicationException(ERROR_CODES.INTERNAL_SERVER_ERROR, 'Relatórios indisponíveis', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+    return this.documentEngine;
   }
 
   async customerEquipments(account: AuthenticatedCustomerPortalAccount): Promise<unknown> {
@@ -628,7 +733,7 @@ export class CustomerPortalService {
       },
     });
     if (!equipment) throw new ApplicationException(ERROR_CODES.EQUIPMENT_NOT_FOUND, 'Equipamento não encontrado', HttpStatus.NOT_FOUND);
-    return equipment;
+    return { ...equipment, operations: equipment.operations.map(withReports) };
   }
 
   async listTickets(query: ListCustomerTicketsQueryDto, account?: AuthenticatedCustomerPortalAccount): Promise<unknown> {

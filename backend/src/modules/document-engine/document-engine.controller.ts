@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req, Res } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req, Res } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import type { Response } from 'express';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
@@ -63,6 +63,17 @@ export class DocumentEngineController {
   @Post('handoffs')
   saveHandoffDraft(@Body() body: SaveDocumentHandoffDto, @CurrentUser() actor: AuthenticatedUser, @Req() request: RequestWithId): Promise<unknown> {
     return this.handoffs.saveDraft(body, actor, contextFromRequest(request));
+  }
+
+  /** Exclusão definitiva do documento (emitido ou não). Só OWNER. */
+  @Roles(Role.OWNER)
+  @Delete(':documentId')
+  deleteDocument(
+    @Param('documentId', new ParseUUIDPipe({ version: '4' })) documentId: string,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Req() request: RequestWithId,
+  ): Promise<{ deleted: true }> {
+    return this.documents.deleteDocument(documentId, actor, contextFromRequest(request));
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)

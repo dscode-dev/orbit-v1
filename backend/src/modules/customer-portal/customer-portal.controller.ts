@@ -11,8 +11,11 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
+import { RawResponse } from '../../shared/decorators/raw-response.decorator';
 import { Throttle } from '@nestjs/throttler';
 import { Role } from '@prisma/client';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
@@ -98,6 +101,38 @@ export class CustomerPortalController {
     @CurrentCustomerPortalAccount() account: AuthenticatedCustomerPortalAccount,
   ): Promise<unknown> {
     return this.portal.customerOperation(id, account);
+  }
+
+  /** Pré-visualização do relatório final de um serviço concluído. */
+  @Get('operations/:id/reports/:documentId/preview')
+  reportPreview(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('documentId', new ParseUUIDPipe({ version: '4' })) documentId: string,
+    @CurrentCustomerPortalAccount() account: AuthenticatedCustomerPortalAccount,
+  ): Promise<unknown> {
+    return this.portal.customerReportPreview(id, documentId, account);
+  }
+
+  /** PDF do relatório final (gerado de novo na hora se estiver desatualizado). */
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
+  @RawResponse()
+  @Get('operations/:id/reports/:documentId/pdf')
+  async reportPdf(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('documentId', new ParseUUIDPipe({ version: '4' })) documentId: string,
+    @CurrentCustomerPortalAccount() account: AuthenticatedCustomerPortalAccount,
+    @Req() request: RequestWithId,
+    @Res() response: Response,
+  ): Promise<void> {
+    const file = await this.portal.customerReportPdf(id, documentId, account, {
+      requestId: request.requestId,
+      ip: request.ip || null,
+      userAgent: request.get('user-agent') ?? null,
+    });
+    response.setHeader('Content-Type', file.mimeType);
+    response.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+    response.setHeader('Content-Length', String(file.content.length));
+    response.end(file.content);
   }
 
   @Get('equipments')

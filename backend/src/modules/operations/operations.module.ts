@@ -9,13 +9,14 @@ import { OperationAccessModule } from '../operation-access/operation-access.modu
 import { ServiceTypesModule } from '../service-types/service-types.module';
 import { OperationsController } from './operations.controller';
 import { OperationsService } from './operations.service';
+import { InventoryModule } from '../inventory/inventory.module';
 import { OperatorExecutionsController } from './operator-executions.controller';
 import { OperatorExecutionsService } from './operator-executions.service';
 import { CommissionsService } from './commissions.service';
 import { OperationCancellationsService } from './operation-cancellations.service';
 
 @Module({
-  imports: [StorageModule, AssetLifecycleModule, MaintenancePlanningModule, MaintenanceRemindersModule, AssignmentsModule, OperationAccessModule, FinancialModule, ServiceTypesModule],
+  imports: [StorageModule, AssetLifecycleModule, MaintenancePlanningModule, MaintenanceRemindersModule, AssignmentsModule, OperationAccessModule, FinancialModule, ServiceTypesModule, InventoryModule],
   controllers: [OperationsController, OperatorExecutionsController],
   providers: [OperationsService, OperatorExecutionsService, OperationCancellationsService, CommissionsService],
   exports: [OperationsService],

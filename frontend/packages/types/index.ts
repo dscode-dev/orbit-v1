@@ -181,6 +181,10 @@ export type CustomerPortalOperation = {
   inspectedEquipments: Array<{ position: number; sector: string; equipment: CustomerPortalEquipmentSummary }>;
   operator: { id: string; name: string };
   documents: Array<{ id: string; type: DocumentTemplateType; number: string; status: string; revision: number; renderedAt: string | null; createdAt: string }>;
+  /** Relatórios do atendimento; `available` = liberado para visualizar e baixar. */
+  reports: Array<{ id: string; type: DocumentTemplateType; number: string; available: boolean; issuedAt: string | null }>;
+  /** Situação do relatório final; `null` enquanto o atendimento não foi concluído. */
+  reportStatus: 'AVAILABLE' | 'IN_REVIEW' | 'PREPARING' | null;
   pmocExecutionRequest: null | { id: string; executionNumber: number; equipmentExecutionNumber: number; scheduledFor: string; status: string; pmocPlan: { id: string; number: number; startDate: string; endDate: string } };
   rvtExecution: null | { id: string; executionNumber: number; scheduledAt: string; status: string; rvtPlan: { id: string; number: number; name: string; startDate: string; endDate: string } };
 };

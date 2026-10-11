@@ -674,6 +674,47 @@ export class InventoryService {
     );
   }
 
+  /**
+   * Exclusão definitiva de uma operação: devolve ao estoque todo material ainda
+   * lançado nela (movimentação RETURN, mesma regra de saldo da devolução
+   * manual). Deve rodar na transação da exclusão, ANTES de apagar a operação.
+   */
+  async returnOperationMaterialsTx(
+    tx: Prisma.TransactionClient,
+    operation: { id: string; number: number },
+    actor: AuthenticatedUser,
+    context: InventoryAuditContext,
+  ): Promise<number> {
+    const parts = await tx.operationPart.findMany({
+      where: { operationId: operation.id, deletedAt: null },
+      select: { id: true, inventoryItemId: true, productId: true, quantity: true },
+    });
+    for (const part of parts) {
+      await tx.operationPart.update({ where: { id: part.id }, data: { deletedAt: new Date() } });
+      await this.createMovementTx(
+        tx,
+        {
+          inventoryItemId: part.inventoryItemId,
+          quantity: Number(part.quantity),
+          type: StockMovementType.RETURN,
+          reason: `Estorno: atendimento #${operation.number} excluído`,
+          operationId: operation.id,
+          userId: actor.id,
+          occurredAt: new Date(),
+        },
+        actor,
+        context,
+      );
+      await this.auditTx(tx, INVENTORY_AUDIT_ACTIONS.MATERIAL_RETURNED, OPERATION_PART_RESOURCE, actor, context, {
+        operationId: operation.id,
+        operationPartId: part.id,
+        productId: part.productId,
+        reason: 'OPERATION_DELETED',
+      });
+    }
+    return parts.length;
+  }
+
   private async createMovementTx(
     tx: Prisma.TransactionClient,
     input: {

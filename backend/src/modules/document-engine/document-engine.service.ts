@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { BudgetHistoryAction, BudgetStatus, DocumentTemplateType, type OperationDocument, Prisma, Role } from '@prisma/client';
+import { BudgetHistoryAction, BudgetStatus, type DocumentHandoffOrigin, DocumentTemplateType, type OperationDocument, Prisma, Role } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import {
   DOCUMENT_ENGINE_AUDIT_ACTIONS,
@@ -57,6 +57,39 @@ export class DocumentEngineService {
     private readonly lifecycle: LifecyclePublisher,
     private readonly access: OperationAccessService,
   ) {}
+
+  /**
+   * Exclusão DEFINITIVA de um documento (só OWNER), em qualquer estado —
+   * inclusive emitido/assinado. Apaga o registro e as revisões (cascata) e,
+   * depois do commit, o PDF. A operação/orçamento de origem continua e pode
+   * gerar o documento de novo. O lançamento financeiro de um recibo não é
+   * mexido aqui: ele vem da operação, não do arquivo.
+   */
+  async deleteDocument(id: string, actor: AuthenticatedUser, context: DocumentAuditContext): Promise<{ deleted: true }> {
+    const document = await this.prisma.operationDocument.findUnique({
+      where: { id },
+      select: { id: true, type: true, operationId: true, budgetId: true, storageKey: true, revision: true, renderedAt: true },
+    });
+    if (!document) {
+      throw new ApplicationException(ERROR_CODES.DOCUMENT_NOT_FOUND, 'Documento não encontrado', HttpStatus.NOT_FOUND);
+    }
+    await this.prisma.$transaction(async (tx) => {
+      await tx.auditLog.create({
+        data: this.auditInput(DOCUMENT_ENGINE_AUDIT_ACTIONS.DOCUMENT_DELETED, DOCUMENT_RENDER_RESOURCE, actor, context, {
+          documentId: document.id,
+          type: document.type,
+          operationId: document.operationId,
+          budgetId: document.budgetId,
+          revision: document.revision,
+          wasRendered: Boolean(document.renderedAt),
+          permanent: true,
+        }),
+      });
+      await tx.operationDocument.delete({ where: { id: document.id } });
+    });
+    if (document.storageKey) await this.assets.deleteDocumentPdf(document.storageKey);
+    return { deleted: true };
+  }
 
   async listDocuments(query: ListDocumentsQueryDto, actor: AuthenticatedUser): Promise<unknown> {
     const period = dateRangeFilter(query.from, query.to);
@@ -359,109 +392,12 @@ export class DocumentEngineService {
     }
     await this.assertPmocEmissionReady(document.operationId, document.type);
     try {
-      if (!document.budgetId && !document.operationId) {
-        throw new ApplicationException(
-          ERROR_CODES.DOCUMENT_NOT_FOUND,
-          'O documento não está vinculado a um atendimento ou orçamento',
-          HttpStatus.CONFLICT,
-        );
-      }
-      const blueprint = this.withSourceFingerprint(await this.buildBlueprintForDocument(document));
-      const rendered = this.renderer.render(blueprint);
-      const pdf = await this.pdf.create(rendered);
-      const stored = await this.assets.saveDocumentPdf({
-        operationId: document.operationId,
-        sourceId: document.budgetId ?? document.operationId ?? document.id,
-        documentType: document.type,
-        content: pdf.buffer,
-      });
-
-      const updated = await this.prisma.$transaction(async (tx) => {
-        const persisted = await tx.operationDocument.updateMany({
-          where: { id: document.id, updatedAt: document.updatedAt },
-          data: {
-            storageKey: stored.storageKey,
-            mimeType: DOCUMENT_MIME_TYPE,
-            fileSize: pdf.buffer.length,
-            renderedAt: new Date(),
-            status: 'READY',
-            // Gerar o PDF finaliza o documento: sai de "Rascunho" para pronto.
-            // Idempotente no fluxo do operador (que só renderiza documentos já READY).
-            editorialStatus: 'READY',
-            ...(document.finalizedAt ? {} : { finalizedAt: new Date(), finalizedById: actor.id }),
-            renderMetadata: {
-              engine: 'direct-pdf-v1',
-              blueprintVersion: blueprint.version,
-              pageCount: pdf.pageCount,
-              generatedAt: blueprint.metadata.generatedAt,
-              sourceKind: blueprint.metadata.sourceKind ?? (document.budgetId ? 'budget' : 'operation'),
-              sourceId: blueprint.metadata.sourceId ?? document.budgetId ?? document.operationId ?? document.id,
-              templateId: blueprint.metadata.templateId ?? null,
-              templateUpdatedAt: blueprint.metadata.templateUpdatedAt ?? null,
-              documentType: blueprint.metadata.documentType,
-              documentNumber: blueprint.metadata.documentNumber,
-              sourceFingerprint: blueprint.metadata.sourceFingerprint,
-            },
-          },
-        });
-        if (persisted.count !== 1) {
-          await this.assets.delete(stored.storageKey).catch(() => undefined);
-          throw new ApplicationException(
-            ERROR_CODES.DOCUMENT_RENDER_FAILED,
-            'O documento mudou durante a geração; gere novamente',
-            HttpStatus.CONFLICT,
-          );
-        }
-        const saved = await tx.operationDocument.findUniqueOrThrow({ where: { id: document.id } });
-        const revisioned = await tx.operationDocument.update({
-          where: { id: document.id },
-          data: { revision: { increment: 1 } },
-          select: { revision: true },
-        });
-        await tx.documentRevision.create({
-          data: {
-            documentId: document.id,
-            revision: revisioned.revision,
-            action: 'RENDERED',
-            origin: actor.role === Role.OPERATOR ? 'OPERATOR' : 'PLATFORM',
-            actorId: actor.id,
-            changedFields: ['renderedAt', 'storageKey', 'renderMetadata'],
-            snapshot: { renderedAt: new Date().toISOString(), fileSize: pdf.buffer.length },
-          },
-        });
-        await tx.auditLog.create({
-          data: this.auditInput(
-            DOCUMENT_ENGINE_AUDIT_ACTIONS.DOCUMENT_RENDERED,
-            DOCUMENT_RENDER_RESOURCE,
-            actor,
-            context,
-            {
-              documentId: document.id,
-              operationId: document.operationId,
-              budgetId: document.budgetId,
-              documentType: document.type,
-              pageCount: pdf.pageCount,
-              fileSize: pdf.buffer.length,
-            },
-          ),
-        });
-        await this.lifecycle.publishDocumentRenderedTx(tx, saved.id, actor.id, context);
-        return saved;
-      });
-
-      if (document.storageKey && document.storageKey !== stored.storageKey) {
-        await this.assets.delete(document.storageKey).catch(() => undefined);
-      }
-
-      this.logger.info('Document rendered', {
-        event: 'document.rendered',
-        requestId: context.requestId,
-        documentId: updated.id,
-        operationId: updated.operationId,
-        documentType: updated.type,
-        fileSize: updated.fileSize,
-      });
-
+      const updated = await this.renderAndStore(
+        document,
+        actor,
+        context,
+        actor.role === Role.OPERATOR ? 'OPERATOR' : 'PLATFORM',
+      );
       return this.documentPayload(updated);
     } catch (error) {
       this.logger.error('Document render failed', {
@@ -477,6 +413,125 @@ export class DocumentEngineService {
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
+  }
+
+  /**
+   * Gera o PDF oficial a partir dos dados atuais, grava no storage e marca o
+   * documento como pronto (com revisão e auditoria). Usado pela geração manual
+   * da equipe e pela geração automática do portal do cliente.
+   */
+  private async renderAndStore(
+    document: OperationDocument,
+    actor: AuthenticatedUser,
+    context: DocumentAuditContext,
+    revisionOrigin: DocumentHandoffOrigin,
+    auditExtra: Record<string, unknown> = {},
+  ): Promise<OperationDocument> {
+    if (!document.budgetId && !document.operationId) {
+      throw new ApplicationException(
+        ERROR_CODES.DOCUMENT_NOT_FOUND,
+        'O documento não está vinculado a um atendimento ou orçamento',
+        HttpStatus.CONFLICT,
+      );
+    }
+    const blueprint = this.withSourceFingerprint(await this.buildBlueprintForDocument(document));
+    const rendered = this.renderer.render(blueprint);
+    const pdf = await this.pdf.create(rendered);
+    const stored = await this.assets.saveDocumentPdf({
+      operationId: document.operationId,
+      sourceId: document.budgetId ?? document.operationId ?? document.id,
+      documentType: document.type,
+      content: pdf.buffer,
+    });
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const persisted = await tx.operationDocument.updateMany({
+        where: { id: document.id, updatedAt: document.updatedAt },
+        data: {
+          storageKey: stored.storageKey,
+          mimeType: DOCUMENT_MIME_TYPE,
+          fileSize: pdf.buffer.length,
+          renderedAt: new Date(),
+          status: 'READY',
+          // Gerar o PDF finaliza o documento: sai de "Rascunho" para pronto.
+          // Idempotente no fluxo do operador (que só renderiza documentos já READY).
+          editorialStatus: 'READY',
+          ...(document.finalizedAt ? {} : { finalizedAt: new Date(), finalizedById: actor.id }),
+          renderMetadata: {
+            engine: 'direct-pdf-v1',
+            blueprintVersion: blueprint.version,
+            pageCount: pdf.pageCount,
+            generatedAt: blueprint.metadata.generatedAt,
+            sourceKind: blueprint.metadata.sourceKind ?? (document.budgetId ? 'budget' : 'operation'),
+            sourceId: blueprint.metadata.sourceId ?? document.budgetId ?? document.operationId ?? document.id,
+            templateId: blueprint.metadata.templateId ?? null,
+            templateUpdatedAt: blueprint.metadata.templateUpdatedAt ?? null,
+            documentType: blueprint.metadata.documentType,
+            documentNumber: blueprint.metadata.documentNumber,
+            sourceFingerprint: blueprint.metadata.sourceFingerprint,
+          },
+        },
+      });
+      if (persisted.count !== 1) {
+        await this.assets.delete(stored.storageKey).catch(() => undefined);
+        throw new ApplicationException(
+          ERROR_CODES.DOCUMENT_RENDER_FAILED,
+          'O documento mudou durante a geração; gere novamente',
+          HttpStatus.CONFLICT,
+        );
+      }
+      const saved = await tx.operationDocument.findUniqueOrThrow({ where: { id: document.id } });
+      const revisioned = await tx.operationDocument.update({
+        where: { id: document.id },
+        data: { revision: { increment: 1 } },
+        select: { revision: true },
+      });
+      await tx.documentRevision.create({
+        data: {
+          documentId: document.id,
+          revision: revisioned.revision,
+          action: 'RENDERED',
+          origin: revisionOrigin,
+          actorId: actor.id,
+          changedFields: ['renderedAt', 'storageKey', 'renderMetadata'],
+          snapshot: { renderedAt: new Date().toISOString(), fileSize: pdf.buffer.length },
+        },
+      });
+      await tx.auditLog.create({
+        data: this.auditInput(
+          DOCUMENT_ENGINE_AUDIT_ACTIONS.DOCUMENT_RENDERED,
+          DOCUMENT_RENDER_RESOURCE,
+          actor,
+          context,
+          {
+            documentId: document.id,
+            operationId: document.operationId,
+            budgetId: document.budgetId,
+            documentType: document.type,
+            pageCount: pdf.pageCount,
+            fileSize: pdf.buffer.length,
+            ...auditExtra,
+          },
+        ),
+      });
+      await this.lifecycle.publishDocumentRenderedTx(tx, saved.id, actor.id, context);
+      return saved;
+    });
+
+    if (document.storageKey && document.storageKey !== stored.storageKey) {
+      await this.assets.delete(document.storageKey).catch(() => undefined);
+    }
+
+    this.logger.info('Document rendered', {
+      event: 'document.rendered',
+      requestId: context.requestId,
+      documentId: updated.id,
+      operationId: updated.operationId,
+      documentType: updated.type,
+      fileSize: updated.fileSize,
+    });
+
+    return updated;
   }
 
   async downloadDocument(
@@ -537,6 +592,117 @@ export class DocumentEngineService {
       filename: `${document.number.replace(/[^A-Za-z0-9._-]+/g, '-')}.pdf`,
       mimeType: document.mimeType,
     };
+  }
+
+  /* ---------- Portal do cliente (posse e liberação conferidas pelo portal) ---------- */
+
+  /** Pré-visualização do documento com os dados atuais (mesmo conteúdo do PDF). */
+  async portalPreview(documentId: string): Promise<DocumentBlueprint> {
+    const document = await this.documentOrThrow(documentId);
+    this.assertNotCanceled(document);
+    return this.withSourceFingerprint(await this.buildBlueprintForDocument(document));
+  }
+
+  /**
+   * PDF para o cliente: SEMPRE entrega um documento liberado. Se o PDF estiver
+   * desatualizado (os dados mudaram depois da geração) ou nunca tiver sido
+   * gerado, gera de novo na hora — o mesmo passo que a equipe faria — com
+   * origem SYSTEM e auditoria. Se a geração falhar, entrega a última versão.
+   */
+  async portalPdf(documentId: string, portalAccountId: string, context: DocumentAuditContext): Promise<DocumentDownload> {
+    let document = await this.documentOrThrow(documentId);
+    this.assertNotCanceled(document);
+
+    let fresh = false;
+    try {
+      const current = this.withSourceFingerprint(await this.buildBlueprintForDocument(document));
+      fresh =
+        Boolean(document.storageKey) &&
+        this.renderedSourceFingerprint(document.renderMetadata) === current.metadata.sourceFingerprint;
+    } catch {
+      fresh = false;
+    }
+
+    if (!fresh) {
+      try {
+        document = await this.renderAndStore(document, await this.portalRenderActor(document), context, 'SYSTEM', {
+          trigger: 'CUSTOMER_PORTAL_DOWNLOAD',
+          portalAccountId,
+        });
+      } catch (error) {
+        this.logger.warn('Portal document re-render failed; serving last rendered version', {
+          event: 'document.portal_rerender_failed',
+          requestId: context.requestId,
+          documentId,
+          ...(error instanceof Error ? { error: error.message } : {}),
+        });
+        // Releitura: outra requisição pode ter gerado enquanto isso.
+        document = await this.documentOrThrow(documentId);
+      }
+    }
+
+    if (!document.storageKey) {
+      throw new ApplicationException(
+        ERROR_CODES.DOCUMENT_DOWNLOAD_NOT_READY,
+        'O relatório ainda está sendo preparado. Tente novamente em instantes.',
+        HttpStatus.CONFLICT,
+      );
+    }
+    let stored: { content: Buffer };
+    try {
+      stored = await this.assets.getDocumentPdf(document.storageKey);
+    } catch {
+      throw new ApplicationException(
+        ERROR_CODES.DOCUMENT_DOWNLOAD_NOT_READY,
+        'O arquivo do relatório não está disponível no momento',
+        HttpStatus.CONFLICT,
+      );
+    }
+    await this.prisma.auditLog.create({
+      data: {
+        action: DOCUMENT_ENGINE_AUDIT_ACTIONS.DOCUMENT_DOWNLOADED,
+        resource: DOCUMENT_RENDER_RESOURCE,
+        actor: `customer-portal:${portalAccountId}`,
+        metadata: {
+          requestId: context.requestId,
+          ip: context.ip,
+          userAgent: context.userAgent,
+          documentId: document.id,
+          operationId: document.operationId,
+          documentType: document.type,
+          channel: 'CUSTOMER_PORTAL',
+          regenerated: !fresh,
+        },
+      },
+    });
+    return {
+      content: stored.content,
+      filename: `${document.number.replace(/[^A-Za-z0-9._-]+/g, '-')}.pdf`,
+      mimeType: document.mimeType ?? 'application/pdf',
+    };
+  }
+
+  /**
+   * Autor registrado na geração automática pelo portal: quem liberou o
+   * documento ou, na falta, o técnico da operação (a revisão exige um usuário).
+   */
+  private async portalRenderActor(document: OperationDocument): Promise<AuthenticatedUser> {
+    let actorId = document.finalizedById;
+    if (!actorId && document.operationId) {
+      const operation = await this.prisma.operation.findUnique({
+        where: { id: document.operationId },
+        select: { operatorId: true },
+      });
+      actorId = operation?.operatorId ?? null;
+    }
+    if (!actorId) {
+      throw new ApplicationException(
+        ERROR_CODES.DOCUMENT_RENDER_FAILED,
+        'Documento sem responsável para a geração automática',
+        HttpStatus.CONFLICT,
+      );
+    }
+    return { id: actorId, role: Role.OWNER } as AuthenticatedUser;
   }
 
   async downloadBudget(

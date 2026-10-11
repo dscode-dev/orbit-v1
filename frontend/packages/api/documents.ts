@@ -52,6 +52,11 @@ export function cancelReceipt(documentId: string, revision: number): Promise<{ r
   return api.post<{ revision: number }>(`/documents/${documentId}/receipt/cancel`, { revision });
 }
 
+/** Exclusão definitiva do documento (emitido ou não). Só OWNER. */
+export function deleteDocument(documentId: string): Promise<{ deleted: true }> {
+  return api.delete<{ deleted: true }>(`/documents/${documentId}`);
+}
+
 export function listDocuments(params?: {
   page?: number; limit?: number; search?: string; type?: DocumentKind;
   status?: OperationDocumentStatus; customerId?: string; equipmentId?: string;

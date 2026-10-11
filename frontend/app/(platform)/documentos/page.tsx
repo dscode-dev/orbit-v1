@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { FileText, Pencil } from "lucide-react";
+import { FileText, Pencil, Trash2 } from "lucide-react";
 import { useAuth } from "@erp/ui/auth/auth-provider";
 import { ReceiptEditDrawer } from "@platform/components/receipt-edit-drawer";
 import { PageHeader } from "@platform/components/page-header";
@@ -13,6 +13,7 @@ import { SkeletonList } from "@erp/ui/skeletons";
 import { ErrorState } from "@erp/ui/states";
 import { EmptyState } from "@erp/ui/empty-state";
 import { Drawer } from "@erp/ui/drawer";
+import { ConfirmDialog } from "@erp/ui/confirm-dialog";
 import { DocumentViewer } from "@erp/ui/documents/document-viewer";
 import { documentsApi, useQuery, type DocumentCatalogItem, type DocumentEditorialStatus, type DocumentKind } from "@erp/api";
 import { DOCUMENT_KIND_LABEL } from "@erp/types";
@@ -28,6 +29,10 @@ const selectCls = "h-9 rounded-[var(--radius-md)] border border-[var(--color-bor
 export default function DocumentosPage() {
   const { hasRole } = useAuth();
   const canEditReceipts = hasRole("OWNER", "MANAGER");
+  // Exclusão definitiva de documento (inclusive emitido/assinado): só o proprietário.
+  const canDelete = hasRole("OWNER");
+  const [toDelete, setToDelete] = useState<DocumentCatalogItem | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [editingReceipt, setEditingReceipt] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   function editReceipt(document: DocumentCatalogItem) { setDetail(null); setNotice(null); setEditingReceipt(document.id); }
@@ -55,12 +60,18 @@ export default function DocumentosPage() {
     { key: "issued", header: "Emissão", cell: (d) => formatDate(d.issuedAt) },
     { key: "version", header: "Versão", cell: (d) => `v${d.version} · r${d.revision}` },
     { key: "status", header: "Status", cell: (d) => <StatusChip tone={d.canceledAt ? "danger" : STATUS[d.editorialStatus].tone} dot>{d.canceledAt ? "Cancelado" : STATUS[d.editorialStatus].label}</StatusChip> },
-    ...(canEditReceipts ? [{ key: "actions", header: "Ações", cell: (d: DocumentCatalogItem) => d.type === "RECEIPT" && !d.canceledAt ? <button type="button" onClick={(event) => { event.stopPropagation(); editReceipt(d); }} className="inline-flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 py-2 text-sm"><Pencil className="h-4 w-4" /> Editar recibo</button> : null }] : []),
+    ...(canEditReceipts ? [{ key: "actions", header: "Ações", cell: (d: DocumentCatalogItem) => (
+      <div className="flex items-center gap-1">
+        {d.type === "RECEIPT" && !d.canceledAt && <button type="button" onClick={(event) => { event.stopPropagation(); editReceipt(d); }} className="inline-flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 py-2 text-sm"><Pencil className="h-4 w-4" /> Editar recibo</button>}
+        {canDelete && <button type="button" title="Excluir documento" aria-label={`Excluir ${d.number}`} onClick={(event) => { event.stopPropagation(); setNotice(null); setDeleteError(null); setToDelete(d); }} className="inline-flex h-9 w-9 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--color-danger)] transition hover:border-[var(--color-danger)]/50 hover:bg-[var(--color-danger)]/10"><Trash2 className="h-4 w-4" /></button>}
+      </div>
+    ) }] : []),
   ];
   const resetPage = <T,>(setter: (value: T) => void) => (value: T) => { setter(value); setPage(1); };
   return <div className="space-y-6 max-w-[1500px]">
     <PageHeader eyebrow="Documentos" title="Central de documentos" description="Repositório oficial de todos os documentos emitidos pelo Orbit." />
     {notice && <p role="status" className="rounded-[var(--radius-md)] bg-[var(--color-success)]/10 p-3 text-sm text-[var(--color-success)]">{notice}</p>}
+    {deleteError && <p role="alert" className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 p-3 text-sm text-[var(--color-danger)]">{deleteError}</p>}
     <FilterBar search={search} onSearch={resetPage(setSearch)} searchPlaceholder="Número, cliente ou equipamento…">
       <Select label="Cliente" value={customerId} onChange={resetPage(setCustomerId)} options={options.customers} />
       <Select label="Equipamento" value={equipmentId} onChange={resetPage(setEquipmentId)} options={options.equipments} />
@@ -76,10 +87,41 @@ export default function DocumentosPage() {
       {detail && <div className="space-y-5">
         <section><h3 className="font-semibold">Resumo</h3><p className="text-sm text-[var(--color-muted-foreground)]">{DOCUMENT_KIND_LABEL[detail.type]} · {detail.canceledAt ? "Cancelado" : STATUS[detail.editorialStatus].label} · versão {detail.version} · revisão {detail.revision}</p></section>
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Meta label="Cliente" value={detail.customer?.name} /><Meta label="Equipamento" value={detail.equipment?.name} /><Meta label="Responsável" value={detail.responsible?.name} /><Meta label="Emissão" value={formatDateTime(detail.issuedAt)} /><Meta label="Origem" value={detail.origin === "BUDGET" ? "Orçamento" : "Operação"} /><Meta label="Tamanho" value={formatBytes(detail.fileSize)} /></section>
-        {canEditReceipts && detail.type === "RECEIPT" && !detail.canceledAt && <button type="button" onClick={() => editReceipt(detail)} className="inline-flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 py-2 text-sm"><Pencil className="h-4 w-4" /> Editar recibo</button>}
+        <div className="flex flex-wrap gap-2">
+          {canEditReceipts && detail.type === "RECEIPT" && !detail.canceledAt && <button type="button" onClick={() => editReceipt(detail)} className="inline-flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 py-2 text-sm"><Pencil className="h-4 w-4" /> Editar recibo</button>}
+          {canDelete && <button type="button" onClick={() => { setDeleteError(null); setToDelete(detail); }} className="inline-flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-danger)]/40 px-3 py-2 text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10"><Trash2 className="h-4 w-4" /> Excluir documento</button>}
+        </div>
         {detail.canceledAt ? <p className="text-sm text-[var(--color-danger)]">Recibo cancelado. O lançamento financeiro foi estornado e o documento não pode ser emitido.</p> : <section><h3 className="font-semibold mb-2">Assinaturas, preview e ações</h3><DocumentViewer source={{ documentId: detail.id, type: detail.type }} title={detail.number} onRendered={() => docs.refetch()} /></section>}
       </div>}
     </Drawer>
+    <ConfirmDialog
+      open={toDelete !== null}
+      title={`Excluir ${toDelete?.number ?? "documento"} definitivamente?`}
+      description={toDelete && (
+        <div className="space-y-2">
+          <p><strong>{DOCUMENT_KIND_LABEL[toDelete.type]}</strong>{toDelete.customer?.name ? ` de ${toDelete.customer.name}` : ""} será apagado, junto com o PDF e as revisões. A exclusão não pode ser desfeita.</p>
+          <p className="text-[var(--color-muted-foreground)]">A {toDelete.origin === "BUDGET" ? "proposta de origem" : "operação de origem"} continua e o documento pode ser gerado de novo.{toDelete.type === "RECEIPT" ? " O lançamento financeiro do recibo não é alterado; para estorná-lo, cancele o recibo." : ""}</p>
+        </div>
+      )}
+      confirmLabel="Excluir definitivamente"
+      danger
+      onClose={() => setToDelete(null)}
+      onConfirm={async () => {
+        if (!toDelete) return;
+        const target = toDelete;
+        try {
+          await documentsApi.deleteDocument(target.id);
+          setToDelete(null);
+          if (detail?.id === target.id) setDetail(null);
+          setNotice(`${target.number} foi excluído.`);
+          docs.refetch();
+        } catch (cause) {
+          setToDelete(null);
+          setDeleteError(cause instanceof Error ? cause.message : "Não foi possível excluir o documento.");
+          throw cause;
+        }
+      }}
+    />
     {editingReceipt && <ReceiptEditDrawer key={editingReceipt} documentId={editingReceipt} onClose={() => setEditingReceipt(null)} onSaved={(canceled) => { setEditingReceipt(null); setNotice(canceled ? "Recibo cancelado e lançamento financeiro estornado." : "Recibo atualizado e saldo financeiro ajustado. Abra o documento e gere o PDF atualizado."); docs.refetch(); }} />}
   </div>;
 }

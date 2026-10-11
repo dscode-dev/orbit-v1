@@ -1,4 +1,4 @@
-import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable, Optional } from '@nestjs/common';
 import { AssignmentEventType, AssignmentStatus, DocumentHandoffOrigin, DocumentRevisionAction, DocumentTemplateType, type Equipment, EquipmentStatus, EquipmentType, OperationStatus, Prisma, Role, TechnicalCatalogType } from '@prisma/client';
 import type { OperationType } from '../../shared/constants/service-types.constants';
 import { randomUUID } from 'node:crypto';
@@ -25,6 +25,7 @@ import { buildPaginatedResponse } from '../../shared/types/pagination.types';
 import { LifecyclePublisher } from '../asset-lifecycle/lifecycle-publisher.service';
 import { AssignmentsService } from '../assignments/assignments.service';
 import { FinancialService } from '../financial/financial.service';
+import { InventoryService } from '../inventory/inventory.service';
 import { PrismaService } from '../database/prisma.service';
 import { MaintenancePlanningService } from '../maintenance-planning/maintenance-planning.service';
 import { MaintenanceRemindersService } from '../maintenance-reminders/maintenance-reminders.service';
@@ -244,6 +245,7 @@ export class OperationsService {
     private readonly access: OperationAccessService,
     private readonly financial: FinancialService,
     private readonly serviceTypes: ServiceTypesService,
+    @Optional() private readonly inventory?: InventoryService,
   ) {}
 
   async list(query: ListOperationsQueryDto, actor: AuthenticatedUser): Promise<unknown> {
@@ -1074,29 +1076,35 @@ export class OperationsService {
     return this.operationOrThrow(id);
   }
 
+  /**
+   * Exclusão DEFINITIVA de uma operação (só OWNER), em qualquer status —
+   * inclusive concluída. Na mesma transação:
+   * - devolve ao estoque os materiais lançados (movimentação de retorno);
+   * - cancela os lançamentos financeiros ativos do recibo/operação (estornando
+   *   o saldo dos já pagos);
+   * - retira a operação dos pagamentos de comissão e recalcula cada pagamento
+   *   (o pagamento que ficar vazio é removido);
+   * - apaga a operação com documentos, fotos, checklists e agendamentos.
+   * Vínculos opcionais (PMOC, RVT, orçamento, chamado, histórico do
+   * equipamento) perdem a referência, sem serem apagados. Os arquivos (fotos e
+   * PDFs) saem do storage depois do commit.
+   */
   async remove(
     id: string,
     actor: AuthenticatedUser,
     context: OperationAuditContext,
   ): Promise<{ deleted: true }> {
+    if (!this.inventory) {
+      throw new ApplicationException(
+        ERROR_CODES.INTERNAL_SERVER_ERROR,
+        'Serviço de estoque indisponível',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+    const inventory = this.inventory;
     const operation = await this.prisma.operation.findUnique({
       where: { id },
-      select: {
-        id: true,
-        number: true,
-        status: true,
-        maintenanceExecution: { select: { id: true } },
-        pmocExecutionRequest: { select: { id: true } },
-        generatedPmocExecutionRequest: { select: { id: true } },
-        rvtExecution: { select: { id: true } },
-        customerServiceTicket: { select: { id: true } },
-        documents: {
-          where: { OR: [{ renderedAt: { not: null } }, { revision: { gt: 0 } }] },
-          select: { id: true },
-          take: 1,
-        },
-        _count: { select: { parts: true, budgets: true, stockMovements: true } },
-      },
+      select: { id: true, number: true, status: true },
     });
     if (!operation) {
       throw new ApplicationException(
@@ -1105,74 +1113,91 @@ export class OperationsService {
         HttpStatus.NOT_FOUND,
       );
     }
-    if (operation.status === OperationStatus.COMPLETED) {
-      throw new ApplicationException(
-        ERROR_CODES.OPERATION_COMPLETED_IMMUTABLE,
-        'Operações concluídas não podem ser excluídas',
-        HttpStatus.CONFLICT,
-      );
-    }
-    if (
-      operation.maintenanceExecution ||
-      operation.pmocExecutionRequest ||
-      operation.generatedPmocExecutionRequest ||
-      operation.rvtExecution ||
-      operation.customerServiceTicket ||
-      operation.documents.length > 0 ||
-      operation._count.parts > 0 ||
-      operation._count.budgets > 0 ||
-      operation._count.stockMovements > 0
-    ) {
-      throw new ApplicationException(
-        ERROR_CODES.OPERATION_INVALID_TRANSITION,
-        'A operação possui vínculos operacionais ou comerciais e deve ser cancelada, não excluída',
-        HttpStatus.CONFLICT,
-      );
-    }
-    const storageKeys = await this.prisma.operationPhoto.findMany({
-      where: { operationId: id },
-      select: { storageKey: true },
-    });
-    await this.prisma.$transaction(async (tx) => {
-      const eligible = await tx.operation.findFirst({
-        where: {
-          id,
-          status: { not: OperationStatus.COMPLETED },
-          maintenanceExecution: { is: null },
-          pmocExecutionRequest: { is: null },
-          generatedPmocExecutionRequest: { is: null },
-          rvtExecution: { is: null },
-          customerServiceTicket: { is: null },
-          documents: { none: { OR: [{ renderedAt: { not: null } }, { revision: { gt: 0 } }] } },
-          parts: { none: {} },
-          budgets: { none: {} },
-          stockMovements: { none: {} },
-        },
-        select: { id: true },
-      });
-      if (!eligible) {
-        throw new ApplicationException(
-          ERROR_CODES.OPERATION_INVALID_TRANSITION,
-          'A operação foi alterada por outra requisição',
-          HttpStatus.CONFLICT,
-        );
-      }
-      await tx.auditLog.create({
-        data: this.audit(
-          OPERATION_AUDIT_ACTIONS.OPERATION_DELETED,
-          OPERATION_RESOURCE,
-          actor,
-          context,
-          { operationId: id, number: operation.number, previousStatus: operation.status },
-        ),
-      });
-      await tx.assignmentHistory.deleteMany({ where: { operationId: id } });
-      await tx.assignment.deleteMany({ where: { operationId: id } });
-      await tx.maintenanceReminder.deleteMany({ where: { operationId: id } });
-      await tx.operation.delete({ where: { id } });
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-    await Promise.all(storageKeys.map(({ storageKey }) => this.storage.delete(storageKey).catch(() => undefined)));
+    const [photos, documents] = await Promise.all([
+      this.prisma.operationPhoto.findMany({ where: { operationId: id }, select: { storageKey: true } }),
+      this.prisma.operationDocument.findMany({
+        where: { operationId: id, storageKey: { not: null } },
+        select: { storageKey: true },
+      }),
+    ]);
+    const storageKeys = [
+      ...photos.map((photo) => photo.storageKey),
+      ...documents.map((document) => document.storageKey as string),
+    ];
+
+    await this.prisma.$transaction(
+      async (tx) => {
+        const current = await tx.operation.findUnique({ where: { id }, select: { id: true } });
+        if (!current) {
+          throw new ApplicationException(
+            ERROR_CODES.OPERATION_NOT_FOUND,
+            'Atendimento já foi excluído',
+            HttpStatus.NOT_FOUND,
+          );
+        }
+        const materialsReturned = await inventory.returnOperationMaterialsTx(tx, operation, actor, context);
+        const financialEntriesCanceled = await this.financial.cancelOperationEntriesTx(tx, id, actor.id, context);
+        const commissionPayments = await this.removeFromCommissionPaymentsTx(tx, id);
+
+        await tx.auditLog.create({
+          data: this.audit(OPERATION_AUDIT_ACTIONS.OPERATION_DELETED, OPERATION_RESOURCE, actor, context, {
+            operationId: id,
+            number: operation.number,
+            previousStatus: operation.status,
+            permanent: true,
+            materialsReturned,
+            financialEntriesCanceled,
+            commissionPayments,
+            documentsDeleted: documents.length,
+            photosDeleted: photos.length,
+          }),
+        });
+        await tx.assignmentHistory.deleteMany({ where: { operationId: id } });
+        await tx.assignment.deleteMany({ where: { operationId: id } });
+        await tx.maintenanceReminder.deleteMany({ where: { operationId: id } });
+        // Documentos, revisões, fotos, materiais, checklists e cancelamentos saem em cascata.
+        await tx.operation.delete({ where: { id } });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30_000 },
+    );
+    await Promise.all(storageKeys.map((key) => this.storage.delete(key).catch(() => undefined)));
     return { deleted: true };
+  }
+
+  /**
+   * Retira a operação dos pagamentos de comissão já feitos e recalcula o valor
+   * e a quantidade de cada pagamento afetado; pagamento sem lançamentos é
+   * removido. Devolve o que mudou, para a auditoria.
+   */
+  private async removeFromCommissionPaymentsTx(
+    tx: Prisma.TransactionClient,
+    operationId: string,
+  ): Promise<Array<{ paymentId: string; previousAmount: string; amount: string | null }>> {
+    const entries = await tx.commissionEntry.findMany({
+      where: { operationId },
+      select: { paymentId: true },
+    });
+    const paymentIds = [...new Set(entries.map((entry) => entry.paymentId))];
+    await tx.commissionEntry.deleteMany({ where: { operationId } });
+    const changes: Array<{ paymentId: string; previousAmount: string; amount: string | null }> = [];
+    for (const paymentId of paymentIds) {
+      const payment = await tx.commissionPayment.findUniqueOrThrow({
+        where: { id: paymentId },
+        select: { amount: true, entries: { select: { amount: true } } },
+      });
+      if (payment.entries.length === 0) {
+        await tx.commissionPayment.delete({ where: { id: paymentId } });
+        changes.push({ paymentId, previousAmount: payment.amount.toString(), amount: null });
+        continue;
+      }
+      const amount = payment.entries.reduce((sum, entry) => sum.plus(entry.amount), new Prisma.Decimal(0));
+      await tx.commissionPayment.update({
+        where: { id: paymentId },
+        data: { amount, operationCount: payment.entries.length },
+      });
+      changes.push({ paymentId, previousAmount: payment.amount.toString(), amount: amount.toString() });
+    }
+    return changes;
   }
 
   async cancel(

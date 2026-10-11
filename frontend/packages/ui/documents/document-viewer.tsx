@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   ChevronLeft,
@@ -415,6 +415,36 @@ function Toolbar({
     </div>
   );
 }
+
+/**
+ * Leitura do blueprint oficial sem ações de emissão: todas as páginas em
+ * sequência, ajustadas à largura disponível (usado no portal do cliente).
+ */
+export function BlueprintPreview({ blueprint }: { blueprint: DocumentBlueprint }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+  const pages = useMemo(() => paginate(blueprint), [blueprint]);
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element) return;
+    const observer = new ResizeObserver(([entry]) =>
+      setScale(Math.min(1, entry.contentRect.width / PAGE_WIDTH)),
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  return (
+    <div ref={containerRef} className="w-full space-y-4">
+      {pages.map((sections, index) => (
+        <div key={index} style={{ zoom: scale }}>
+          <DocumentPage blueprint={blueprint} sections={sections} page={index + 1} total={pages.length} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const PAGE_WIDTH = 780;
 
 function DocumentPage({
   blueprint,

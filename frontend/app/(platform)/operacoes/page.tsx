@@ -8,7 +8,7 @@
 import { Suspense, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
-import { Ban, CalendarClock, Check, ClipboardList, Loader2, Plus, ReceiptText, RotateCcw, ShieldCheck, Users } from "lucide-react";
+import { Ban, CalendarClock, Check, ClipboardList, Loader2, Plus, ReceiptText, RotateCcw, ShieldCheck, Trash2, Users } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { DataTable, type Column } from "@platform/components/data-table";
 import { Pagination } from "@platform/components/pagination";
@@ -54,6 +54,10 @@ function OperacoesInner() {
   const { hasRole } = useAuth();
   const canAuthorize = hasRole("OWNER", "MANAGER");
   const canManage = hasRole("OWNER", "MANAGER");
+  // Exclusão definitiva (inclusive concluída): só o proprietário.
+  const canDelete = hasRole("OWNER");
+  const [toDelete, setToDelete] = useState<OperationSummary | null>(null);
+  const [deleteNotice, setDeleteNotice] = useState<string | null>(null);
   const [tab, setTab] = useState<OpsTab>("overview");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"all" | OperationStatus>(initialStatus);
@@ -131,12 +135,17 @@ function OperacoesInner() {
                     <Ban className="h-3.5 w-3.5" /> Cancelar
                   </button>
                 ) : null}
+                {canDelete && (
+                  <button type="button" title="Excluir operação" aria-label={`Excluir ${operationCode(operation.number)}`} onClick={(event) => { event.stopPropagation(); setDeleteNotice(null); setToDelete(operation); }} className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--color-danger)] transition hover:border-[var(--color-danger)]/50 hover:bg-[var(--color-danger)]/10">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
             ),
           } satisfies Column<OperationSummary>]
         : []),
     ],
-    [canManage, list],
+    [canManage, canDelete, list],
   );
 
   return (
@@ -202,6 +211,7 @@ function OperacoesInner() {
         ))}
       </FilterBar>
       {tableActionError && <p className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{tableActionError}</p>}
+      {deleteNotice && <p role="status" className="rounded-[var(--radius-md)] border border-[var(--color-success)]/30 bg-[var(--color-success)]/10 px-3 py-2 text-sm">{deleteNotice}</p>}
 
       {list.loading && !list.data ? (
         <SkeletonList rows={6} />
@@ -244,6 +254,44 @@ function OperacoesInner() {
           onRendered={list.refetch}
         />
       )}
+      <ConfirmDialog
+        open={toDelete !== null}
+        title={`Excluir ${toDelete ? operationCode(toDelete.number) : "operação"} definitivamente?`}
+        description={
+          toDelete?.status === "COMPLETED" ? (
+            <div className="space-y-2">
+              <p>Esta operação já foi <strong>concluída</strong>. A exclusão não pode ser desfeita:</p>
+              <ul className="list-disc space-y-0.5 pl-4">
+                <li>documentos (OS, relatórios, recibo), fotos e checklists serão apagados;</li>
+                <li>as peças usadas voltam ao estoque;</li>
+                <li>o recibo lançado no financeiro é cancelado (com estorno do saldo, se já recebido);</li>
+                <li>se a comissão já foi paga, a operação sai do pagamento e o valor é recalculado.</li>
+              </ul>
+            </div>
+          ) : (
+            <p>A operação, seus agendamentos, documentos e fotos serão apagados. Peças lançadas voltam ao estoque. A exclusão não pode ser desfeita.</p>
+          )
+        }
+        confirmLabel="Excluir definitivamente"
+        danger
+        onClose={() => setToDelete(null)}
+        onConfirm={async () => {
+          if (!toDelete) return;
+          const target = toDelete;
+          try {
+            setTableActionError(null);
+            await operationApi.deleteOperation(target.id);
+            setToDelete(null);
+            if (detailId === target.id) setDetailId(null);
+            setDeleteNotice(`${operationCode(target.number)} foi excluída.`);
+            list.refetch();
+          } catch (cause) {
+            setToDelete(null);
+            setTableActionError(cause instanceof Error ? cause.message : "Não foi possível excluir a operação.");
+            throw cause;
+          }
+        }}
+      />
       <ConfirmDialog
         open={tableAction !== null}
         title="Cancelar esta operação?"

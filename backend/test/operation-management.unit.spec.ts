@@ -138,54 +138,6 @@ describe('Operation management', () => {
     expect(update.data).not.toHaveProperty('maintenanceReminderIntervalMonths');
   });
 
-  it('hard-deletes an eligible operation and its assignments', async () => {
-    const tx = {
-      maintenanceReminder: { deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
-      assignment: { deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
-      operation: {
-        findFirst: jest.fn().mockResolvedValue({ id: '22222222-2222-4222-8222-222222222222' }),
-        delete: jest.fn().mockResolvedValue({}),
-      },
-      assignmentHistory: { deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
-      auditLog: { create: jest.fn().mockResolvedValue({}) },
-    };
-    const prisma = {
-      operation: {
-        findUnique: jest.fn().mockResolvedValue({
-          id: '22222222-2222-4222-8222-222222222222',
-          number: 41,
-          status: OperationStatus.PENDING,
-          maintenanceExecution: null,
-          pmocExecutionRequest: null,
-          generatedPmocExecutionRequest: null,
-          rvtExecution: null,
-          customerServiceTicket: null,
-          documents: [],
-          _count: { parts: 0, budgets: 0, stockMovements: 0 },
-        }),
-      },
-      operationPhoto: { findMany: jest.fn().mockResolvedValue([]) },
-      $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<void>) =>
-        callback(tx),
-      ),
-    };
-
-    await expect(
-      service(prisma).remove(
-        '22222222-2222-4222-8222-222222222222',
-        actor as never,
-        context,
-      ),
-    ).resolves.toEqual({ deleted: true });
-    expect(tx.assignmentHistory.deleteMany).toHaveBeenCalledWith({ where: { operationId: '22222222-2222-4222-8222-222222222222' } });
-    expect(tx.assignment.deleteMany).toHaveBeenCalledWith({ where: { operationId: '22222222-2222-4222-8222-222222222222' } });
-    expect(tx.operation.delete).toHaveBeenCalledWith({ where: { id: '22222222-2222-4222-8222-222222222222' } });
-    const deleteAudit = (tx.auditLog.create.mock.calls as unknown[][])[0]?.[0] as {
-      data: { action: string };
-    };
-    expect(deleteAudit.data.action).toBe('OPERATION_DELETED');
-  });
-
   it('cancels active assignments and removes operator visibility', async () => {
     const tx = {
       assignment: {

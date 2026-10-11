@@ -405,36 +405,11 @@ export class FinancialService {
     const canceled =
       operation.status === 'CANCELED' ||
       operation.documents.some((document) => document.canceledAt);
-    const actor = { id: actorId } as AuthenticatedUser;
     if (canceled) {
-      for (const entry of entries) {
-        if (entry.status === FinancialEntryStatus.PAID) {
-          await this.applyBalanceTx(tx, entry.accountId, entry.type, entry.amount, 'reverse');
-        }
-        await tx.financialEntry.update({
-          where: { id: entry.id },
-          data: { status: FinancialEntryStatus.CANCELED, canceledAt: new Date() },
-        });
-        await this.createHistoryTx(
-          tx,
-          entry.id,
-          actorId,
-          FinancialHistoryAction.CANCELED,
-          entry.status,
-          FinancialEntryStatus.CANCELED,
-          { operationId, amount: entry.amount.toString() },
-        );
-        await this.auditTx(
-          tx,
-          FINANCIAL_AUDIT_ACTIONS.ENTRY_CANCELED,
-          FINANCIAL_ENTRY_RESOURCE,
-          actor,
-          context,
-          { entryId: entry.id, operationId, origin: 'RECEIPT' },
-        );
-      }
+      await this.cancelEntriesTx(tx, entries, operationId, actorId, context, { origin: 'RECEIPT' });
       return entries.length > 0;
     }
+    const actor = { id: actorId } as AuthenticatedUser;
     if (operation.receiptAmount == null) return false;
     const amount = new Prisma.Decimal(this.money(Number(operation.receiptAmount)));
     const when = operation.receiptIssuedAt ?? operation.completedAt ?? operation.createdAt;
@@ -878,6 +853,70 @@ export class FinancialService {
 
   private isRetryablePersistenceConflict(error: unknown): boolean {
     return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034';
+  }
+
+  /**
+   * Exclusão definitiva de uma operação: cancela os lançamentos ativos que
+   * nasceram dela (recibo e origem "operação"), estornando o saldo dos que já
+   * estavam pagos — o mesmo tratamento do cancelamento de recibo. Os lançamentos
+   * ficam no financeiro como cancelados (histórico), não são apagados.
+   */
+  async cancelOperationEntriesTx(
+    tx: Prisma.TransactionClient,
+    operationId: string,
+    actorId: string,
+    context: FinancialAuditContext,
+  ): Promise<number> {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${operationId}))`;
+    const organizationId = await this.organizationId(tx);
+    const entries = await tx.financialEntry.findMany({
+      where: {
+        organizationId,
+        origin: { in: [FinancialEntryOrigin.RECEIPT, FinancialEntryOrigin.OPERATION] },
+        originId: operationId,
+        canceledAt: null,
+        deletedAt: null,
+      },
+    });
+    await this.cancelEntriesTx(tx, entries, operationId, actorId, context, { reason: 'OPERATION_DELETED' });
+    return entries.length;
+  }
+
+  private async cancelEntriesTx(
+    tx: Prisma.TransactionClient,
+    entries: Array<{ id: string; status: FinancialEntryStatus; accountId: string; type: FinancialEntryType; amount: Prisma.Decimal; origin: FinancialEntryOrigin }>,
+    operationId: string,
+    actorId: string,
+    context: FinancialAuditContext,
+    meta: Record<string, unknown>,
+  ): Promise<void> {
+    const actor = { id: actorId } as AuthenticatedUser;
+    for (const entry of entries) {
+      if (entry.status === FinancialEntryStatus.PAID) {
+        await this.applyBalanceTx(tx, entry.accountId, entry.type, entry.amount, 'reverse');
+      }
+      await tx.financialEntry.update({
+        where: { id: entry.id },
+        data: { status: FinancialEntryStatus.CANCELED, canceledAt: new Date() },
+      });
+      await this.createHistoryTx(
+        tx,
+        entry.id,
+        actorId,
+        FinancialHistoryAction.CANCELED,
+        entry.status,
+        FinancialEntryStatus.CANCELED,
+        { operationId, amount: entry.amount.toString(), ...meta },
+      );
+      await this.auditTx(
+        tx,
+        FINANCIAL_AUDIT_ACTIONS.ENTRY_CANCELED,
+        FINANCIAL_ENTRY_RESOURCE,
+        actor,
+        context,
+        { entryId: entry.id, operationId, origin: entry.origin, ...meta },
+      );
+    }
   }
 
   private async applyBalanceTx(
