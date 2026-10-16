@@ -48,7 +48,7 @@ export class ListExportService {
   ) {}
 
   async operations(query: OperationsPdfExportQueryDto, actor: AuthenticatedUser): Promise<PdfExportResult> {
-    const where = { AND: [this.operationWhere(query), this.access.operationScope(actor)] };
+    const where = { AND: [this.operationWhere(query), this.access.operationScope(actor), { deletedAt: null }] };
     const total = await this.prisma.operation.count({ where });
     this.assertLimit(total);
     const rows = await this.prisma.operation.findMany({
@@ -129,7 +129,7 @@ export class ListExportService {
   }
 
   async documents(query: DocumentsPdfExportQueryDto, actor: AuthenticatedUser): Promise<PdfExportResult> {
-    const where = { AND: [this.documentWhere(query), this.access.documentScope(actor)] };
+    const where = { AND: [this.documentWhere(query), this.access.documentScope(actor), { deletedAt: null }] };
     const total = await this.prisma.operationDocument.count({ where });
     this.assertLimit(total);
     const rows = await this.prisma.operationDocument.findMany({

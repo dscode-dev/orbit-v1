@@ -121,6 +121,7 @@ export class OperatorExecutionsService {
           };
     const where: Prisma.OperationWhereInput = {
       assignments: { some: { assignedTo: operatorId } },
+      deletedAt: null,
       ...rangeWhere,
       ...(query.status ? { status: query.status } : {}),
     };
@@ -503,6 +504,7 @@ export class OperatorExecutionsService {
           ],
           status: 'COMPLETED',
           completedAt: { gte: period.start, lt: period.end },
+          deletedAt: null,
           // No modo fixo o valor cobrado não entra na conta, então atendimentos
           // sem valor informado também rendem comissão.
           ...(mode === CommissionMode.PERCENT ? { serviceValue: { not: null } } : {}),

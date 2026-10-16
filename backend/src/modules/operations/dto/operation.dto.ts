@@ -45,6 +45,8 @@ export class ListOperationsQueryDto {
   @IsOptional() @IsUUID('4') operatorId?: string;
   @IsOptional() @IsString() type?: OperationType;
   @IsOptional() @IsEnum(OperationStatus) status?: OperationStatus;
+  /** Lista só os excluídos (exclusão lógica) — vale apenas para o OWNER. */
+  @IsOptional() @Transform(({ value }) => value === true || value === 'true') @IsBoolean() deleted?: boolean;
 }
 
 export class OperationStatsQueryDto {

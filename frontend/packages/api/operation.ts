@@ -49,6 +49,8 @@ export function listOperations(params?: {
   operatorId?: string;
   type?: OperationType;
   status?: OperationStatus;
+  /** Só os excluídos (exclusão lógica) — vale apenas para o OWNER. */
+  deleted?: boolean;
   signal?: AbortSignal;
 }): Promise<Paginated<OperationSummary>> {
   const { signal, ...query } = params ?? {};
@@ -142,8 +144,14 @@ export function updateOperation(
   return api.patch<OperationDetail>(`/operations/${id}`, payload);
 }
 
+/** Exclusão lógica: o atendimento continua na base e pode ser restaurado. Só OWNER. */
 export function deleteOperation(id: string): Promise<{ deleted: true }> {
   return api.delete<{ deleted: true }>(`/operations/${id}`);
+}
+
+/** Restaura um atendimento excluído, desfazendo os estornos da exclusão. Só OWNER. */
+export function restoreOperation(id: string): Promise<OperationDetail> {
+  return api.post<OperationDetail>(`/operations/${id}/restore`);
 }
 
 export function cancelOperation(id: string): Promise<OperationDetail> {

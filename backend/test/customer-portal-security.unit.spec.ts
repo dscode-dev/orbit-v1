@@ -46,12 +46,12 @@ describe('CustomerPortalService customer isolation', () => {
     expect(result.items[0]).not.toHaveProperty('passwordHash');
   });
 
-  it('always scopes operation detail by the authenticated customer', async () => {
+  it('always scopes operation detail by the authenticated customer (and hides deleted ones)', async () => {
     const findFirst = jest.fn().mockResolvedValue({ id: 'operation-1', status: 'IN_PROGRESS', documents: [] });
     const service = createService({ operation: { findFirst } });
     await service.customerOperation('00000000-0000-4000-8000-000000000004', account);
     expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: '00000000-0000-4000-8000-000000000004', customerId: account.customerId },
+      where: { id: '00000000-0000-4000-8000-000000000004', customerId: account.customerId, deletedAt: null },
     }));
   });
 

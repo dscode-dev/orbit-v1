@@ -56,7 +56,7 @@ describe('Operation field equipment collection', () => {
       $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<void>) => callback(tx)),
       operation: { findUnique: jest.fn().mockResolvedValue({ id: operationId }) },
     };
-    const access = { assertOperationAccess: jest.fn().mockResolvedValue(undefined) };
+    const access = { assertOperationAccess: jest.fn().mockResolvedValue(undefined), assertOperationNotDeleted: jest.fn().mockResolvedValue(undefined) };
     const service = new OperationsService(
       prisma as never,
       {} as never,

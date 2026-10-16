@@ -132,6 +132,7 @@ const CUSTOMER_OPERATION_SELECT = {
   },
   operator: { select: { id: true, name: true } },
   documents: {
+    where: { deletedAt: null },
     orderBy: { createdAt: 'asc' as const },
     select: {
       id: true, type: true, number: true, status: true, revision: true, renderedAt: true, createdAt: true,
@@ -625,6 +626,7 @@ export class CustomerPortalService {
   async customerOperations(account: AuthenticatedCustomerPortalAccount, query: ListCustomerTicketsQueryDto): Promise<unknown> {
     const where: Prisma.OperationWhereInput = {
       customerId: account.customerId,
+      deletedAt: null,
       ...(query.search
         ? {
             OR: [
@@ -649,7 +651,7 @@ export class CustomerPortalService {
 
   async customerOperation(id: string, account: AuthenticatedCustomerPortalAccount): Promise<unknown> {
     const operation = await this.prisma.operation.findFirst({
-      where: { id, customerId: account.customerId }, select: CUSTOMER_OPERATION_SELECT,
+      where: { id, customerId: account.customerId, deletedAt: null }, select: CUSTOMER_OPERATION_SELECT,
     });
     if (!operation) throw new ApplicationException(ERROR_CODES.OPERATION_NOT_FOUND, 'Atendimento não encontrado', HttpStatus.NOT_FOUND);
     return withReports(operation);
@@ -690,7 +692,8 @@ export class CustomerPortalService {
         id: documentId,
         operationId,
         canceledAt: null,
-        operation: { customerId: account.customerId },
+        deletedAt: null,
+        operation: { customerId: account.customerId, deletedAt: null },
       },
       select: { finalizedAt: true, renderedAt: true, operation: { select: { status: true } } },
     });
@@ -727,7 +730,7 @@ export class CustomerPortalService {
       select: {
         ...CUSTOMER_EQUIPMENT_SELECT,
         operations: {
-          where: { customerId: account.customerId }, orderBy: { createdAt: 'desc' }, take: 20,
+          where: { customerId: account.customerId, deletedAt: null }, orderBy: { createdAt: 'desc' }, take: 20,
           select: CUSTOMER_OPERATION_SELECT,
         },
       },

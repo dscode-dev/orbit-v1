@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { FileText, Pencil, Trash2 } from "lucide-react";
+import { ArchiveRestore, FileText, Pencil, Trash2 } from "lucide-react";
 import { useAuth } from "@erp/ui/auth/auth-provider";
 import { ReceiptEditDrawer } from "@platform/components/receipt-edit-drawer";
 import { PageHeader } from "@platform/components/page-header";
@@ -29,9 +29,11 @@ const selectCls = "h-9 rounded-[var(--radius-md)] border border-[var(--color-bor
 export default function DocumentosPage() {
   const { hasRole } = useAuth();
   const canEditReceipts = hasRole("OWNER", "MANAGER");
-  // Exclusão definitiva de documento (inclusive emitido/assinado): só o proprietário.
+  // Exclusão lógica de documento (inclusive emitido/assinado) e restauração: só o proprietário.
   const canDelete = hasRole("OWNER");
   const [toDelete, setToDelete] = useState<DocumentCatalogItem | null>(null);
+  const [toRestore, setToRestore] = useState<DocumentCatalogItem | null>(null);
+  const [showDeleted, setShowDeleted] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [editingReceipt, setEditingReceipt] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -44,7 +46,7 @@ export default function DocumentosPage() {
   const [includeDrafts, setIncludeDrafts] = useState(false);
   const [from, setFrom] = useState(""); const [to, setTo] = useState("");
   const [detail, setDetail] = useState<DocumentCatalogItem | null>(null);
-  const docs = useQuery((signal) => documentsApi.listDocuments({ page, limit, search: search || undefined, customerId: customerId || undefined, equipmentId: equipmentId || undefined, operatorId: operatorId || undefined, type: kind || undefined, editorialStatus: status || undefined, includeDrafts: includeDrafts || undefined, from: from || undefined, to: to || undefined, signal }), [page, limit, search, customerId, equipmentId, operatorId, kind, status, includeDrafts, from, to]);
+  const docs = useQuery((signal) => documentsApi.listDocuments({ page, limit, search: search || undefined, customerId: customerId || undefined, equipmentId: equipmentId || undefined, operatorId: operatorId || undefined, type: kind || undefined, editorialStatus: status || undefined, includeDrafts: includeDrafts || undefined, deleted: showDeleted || undefined, from: from || undefined, to: to || undefined, signal }), [page, limit, search, customerId, equipmentId, operatorId, kind, status, includeDrafts, showDeleted, from, to]);
   const items = useMemo(() => docs.data?.items ?? [], [docs.data]);
   const options = useMemo(() => ({
     customers: unique(items.flatMap((item) => item.customer ? [item.customer] : [])),
@@ -59,8 +61,10 @@ export default function DocumentosPage() {
     { key: "responsible", header: "Responsável", cell: (d) => d.responsible?.name ?? "—" },
     { key: "issued", header: "Emissão", cell: (d) => formatDate(d.issuedAt) },
     { key: "version", header: "Versão", cell: (d) => `v${d.version} · r${d.revision}` },
-    { key: "status", header: "Status", cell: (d) => <StatusChip tone={d.canceledAt ? "danger" : STATUS[d.editorialStatus].tone} dot>{d.canceledAt ? "Cancelado" : STATUS[d.editorialStatus].label}</StatusChip> },
-    ...(canEditReceipts ? [{ key: "actions", header: "Ações", cell: (d: DocumentCatalogItem) => (
+    { key: "status", header: "Status", cell: (d) => d.deletedAt ? <StatusChip tone="danger" dot>Excluído · {formatDateTime(d.deletedAt)}</StatusChip> : <StatusChip tone={d.canceledAt ? "danger" : STATUS[d.editorialStatus].tone} dot>{d.canceledAt ? "Cancelado" : STATUS[d.editorialStatus].label}</StatusChip> },
+    ...(canEditReceipts ? [{ key: "actions", header: "Ações", cell: (d: DocumentCatalogItem) => d.deletedAt ? (
+      canDelete ? <button type="button" title={d.operationDeleted ? "Excluído junto com o atendimento" : "Restaurar documento"} aria-label={`Restaurar ${d.number}`} onClick={(event) => { event.stopPropagation(); setNotice(null); setDeleteError(null); setToRestore(d); }} className="inline-flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 py-2 text-sm text-[var(--color-primary)] hover:border-[var(--color-primary)] hover:bg-[var(--color-primary)]/5"><ArchiveRestore className="h-4 w-4" /> Restaurar</button> : null
+    ) : (
       <div className="flex items-center gap-1">
         {d.type === "RECEIPT" && !d.canceledAt && <button type="button" onClick={(event) => { event.stopPropagation(); editReceipt(d); }} className="inline-flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 py-2 text-sm"><Pencil className="h-4 w-4" /> Editar recibo</button>}
         {canDelete && <button type="button" title="Excluir documento" aria-label={`Excluir ${d.number}`} onClick={(event) => { event.stopPropagation(); setNotice(null); setDeleteError(null); setToDelete(d); }} className="inline-flex h-9 w-9 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--color-danger)] transition hover:border-[var(--color-danger)]/50 hover:bg-[var(--color-danger)]/10"><Trash2 className="h-4 w-4" /></button>}
@@ -81,29 +85,34 @@ export default function DocumentosPage() {
       <input className={selectCls} type="date" value={from} onChange={(e) => resetPage(setFrom)(e.target.value)} aria-label="Data inicial" />
       <input className={selectCls} type="date" value={to} onChange={(e) => resetPage(setTo)(e.target.value)} aria-label="Data final" />
       <Toggle checked={includeDrafts} onChange={resetPage(setIncludeDrafts)} label="Mostrar rascunhos" />
+      {canDelete && <Toggle checked={showDeleted} onChange={resetPage(setShowDeleted)} label="Mostrar só excluídos" />}
     </FilterBar>
-    {docs.loading && !docs.data ? <SkeletonList rows={6} /> : docs.error && !docs.data ? <ErrorState error={docs.error} onRetry={docs.refetch} /> : items.length === 0 ? <EmptyState icon={FileText} title="Nenhum documento" description="Nenhum documento emitido corresponde aos filtros." /> : <div className="space-y-3"><DataTable columns={columns} rows={items} onRowClick={setDetail} />{docs.data && <Pagination pagination={docs.data.pagination} onPageChange={setPage} onPageSizeChange={(value) => { setLimit(value); setPage(1); }} />}</div>}
+    {showDeleted && <p className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-muted)]/50 p-3 text-sm text-[var(--color-muted-foreground)]">Documentos excluídos continuam guardados para auditoria, com PDF e revisões. Use <strong>Restaurar</strong> para trazê-los de volta.</p>}
+    {docs.loading && !docs.data ? <SkeletonList rows={6} /> : docs.error && !docs.data ? <ErrorState error={docs.error} onRetry={docs.refetch} /> : items.length === 0 ? <EmptyState icon={FileText} title={showDeleted ? "Nenhum documento excluído" : "Nenhum documento"} description={showDeleted ? "Os documentos excluídos aparecerão aqui, prontos para restaurar." : "Nenhum documento emitido corresponde aos filtros."} /> : <div className="space-y-3"><DataTable columns={columns} rows={items} onRowClick={setDetail} />{docs.data && <Pagination pagination={docs.data.pagination} onPageChange={setPage} onPageSizeChange={(value) => { setLimit(value); setPage(1); }} />}</div>}
     <Drawer open={Boolean(detail)} onClose={() => setDetail(null)} eyebrow="Documento oficial" title={detail?.number ?? ""} width="max-w-[1280px]">
       {detail && <div className="space-y-5">
         <section><h3 className="font-semibold">Resumo</h3><p className="text-sm text-[var(--color-muted-foreground)]">{DOCUMENT_KIND_LABEL[detail.type]} · {detail.canceledAt ? "Cancelado" : STATUS[detail.editorialStatus].label} · versão {detail.version} · revisão {detail.revision}</p></section>
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Meta label="Cliente" value={detail.customer?.name} /><Meta label="Equipamento" value={detail.equipment?.name} /><Meta label="Responsável" value={detail.responsible?.name} /><Meta label="Emissão" value={formatDateTime(detail.issuedAt)} /><Meta label="Origem" value={detail.origin === "BUDGET" ? "Orçamento" : "Operação"} /><Meta label="Tamanho" value={formatBytes(detail.fileSize)} /></section>
         <div className="flex flex-wrap gap-2">
           {canEditReceipts && detail.type === "RECEIPT" && !detail.canceledAt && <button type="button" onClick={() => editReceipt(detail)} className="inline-flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 py-2 text-sm"><Pencil className="h-4 w-4" /> Editar recibo</button>}
-          {canDelete && <button type="button" onClick={() => { setDeleteError(null); setToDelete(detail); }} className="inline-flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-danger)]/40 px-3 py-2 text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10"><Trash2 className="h-4 w-4" /> Excluir documento</button>}
+          {canDelete && detail.deletedAt && <button type="button" onClick={() => { setDeleteError(null); setToRestore(detail); }} className="inline-flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 py-2 text-sm text-[var(--color-primary)] hover:bg-[var(--color-primary)]/5"><ArchiveRestore className="h-4 w-4" /> Restaurar documento</button>}
+          {canDelete && !detail.deletedAt && <button type="button" onClick={() => { setDeleteError(null); setToDelete(detail); }} className="inline-flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-danger)]/40 px-3 py-2 text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10"><Trash2 className="h-4 w-4" /> Excluir documento</button>}
         </div>
+        {detail.deletedAt && <p className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 p-3 text-sm text-[var(--color-danger)]">Documento excluído em {formatDateTime(detail.deletedAt)}. Ele continua guardado; a visualização e o PDF seguem disponíveis para consulta, mas não pode ser gerado nem revisado até ser restaurado.</p>}
         {detail.canceledAt ? <p className="text-sm text-[var(--color-danger)]">Recibo cancelado. O lançamento financeiro foi estornado e o documento não pode ser emitido.</p> : <section><h3 className="font-semibold mb-2">Assinaturas, preview e ações</h3><DocumentViewer source={{ documentId: detail.id, type: detail.type }} title={detail.number} onRendered={() => docs.refetch()} /></section>}
       </div>}
     </Drawer>
     <ConfirmDialog
       open={toDelete !== null}
-      title={`Excluir ${toDelete?.number ?? "documento"} definitivamente?`}
+      title={`Excluir ${toDelete?.number ?? "documento"}?`}
       description={toDelete && (
         <div className="space-y-2">
-          <p><strong>{DOCUMENT_KIND_LABEL[toDelete.type]}</strong>{toDelete.customer?.name ? ` de ${toDelete.customer.name}` : ""} será apagado, junto com o PDF e as revisões. A exclusão não pode ser desfeita.</p>
-          <p className="text-[var(--color-muted-foreground)]">A {toDelete.origin === "BUDGET" ? "proposta de origem" : "operação de origem"} continua e o documento pode ser gerado de novo.{toDelete.type === "RECEIPT" ? " O lançamento financeiro do recibo não é alterado; para estorná-lo, cancele o recibo." : ""}</p>
+          <p><strong>{DOCUMENT_KIND_LABEL[toDelete.type]}</strong>{toDelete.customer?.name ? ` de ${toDelete.customer.name}` : ""} sai da central de documentos, das revisões e do portal do cliente, mas <strong>continua guardado no sistema</strong>, com o PDF e todas as revisões, para auditoria.</p>
+          <p className="text-[var(--color-muted-foreground)]">Enquanto estiver excluído, o documento não pode ser gerado de novo nem revisado.{toDelete.type === "RECEIPT" ? " O lançamento financeiro do recibo não é alterado; para estorná-lo, cancele o recibo." : ""}</p>
+          <p className="rounded-[var(--radius-md)] bg-[var(--color-muted)]/60 px-3 py-2">Para recuperar, ative <strong>Mostrar só excluídos</strong> nesta tela e clique em <strong>Restaurar</strong>.</p>
         </div>
       )}
-      confirmLabel="Excluir definitivamente"
+      confirmLabel="Excluir documento"
       danger
       onClose={() => setToDelete(null)}
       onConfirm={async () => {
@@ -113,11 +122,35 @@ export default function DocumentosPage() {
           await documentsApi.deleteDocument(target.id);
           setToDelete(null);
           if (detail?.id === target.id) setDetail(null);
-          setNotice(`${target.number} foi excluído.`);
+          setNotice(`${target.number} foi excluído. Ele continua guardado e pode ser restaurado em “Mostrar só excluídos”.`);
           docs.refetch();
         } catch (cause) {
           setToDelete(null);
           setDeleteError(cause instanceof Error ? cause.message : "Não foi possível excluir o documento.");
+          throw cause;
+        }
+      }}
+    />
+    <ConfirmDialog
+      open={toRestore !== null}
+      title={`Restaurar ${toRestore?.number ?? "documento"}?`}
+      description={toRestore?.operationDeleted
+        ? <p>Este documento foi excluído <strong>junto com o atendimento</strong>. Para recuperá-lo, restaure o atendimento em Operações → Excluídas; os documentos dele voltam junto.</p>
+        : <p>O documento volta à central de documentos e aos fluxos de revisão como estava antes da exclusão.</p>}
+      confirmLabel="Restaurar documento"
+      onClose={() => setToRestore(null)}
+      onConfirm={async () => {
+        if (!toRestore) return;
+        const target = toRestore;
+        try {
+          await documentsApi.restoreDocument(target.id);
+          setToRestore(null);
+          if (detail?.id === target.id) setDetail(null);
+          setNotice(`${target.number} foi restaurado.`);
+          docs.refetch();
+        } catch (cause) {
+          setToRestore(null);
+          setDeleteError(cause instanceof Error ? cause.message : "Não foi possível restaurar o documento.");
           throw cause;
         }
       }}

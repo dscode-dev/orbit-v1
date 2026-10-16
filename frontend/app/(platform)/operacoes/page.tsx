@@ -8,7 +8,7 @@
 import { Suspense, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
-import { Ban, CalendarClock, Check, ClipboardList, Loader2, Plus, ReceiptText, RotateCcw, ShieldCheck, Trash2, Users } from "lucide-react";
+import { ArchiveRestore, Ban, CalendarClock, Check, ClipboardList, Loader2, Plus, ReceiptText, RotateCcw, ShieldCheck, Trash2, Users } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { DataTable, type Column } from "@platform/components/data-table";
 import { Pagination } from "@platform/components/pagination";
@@ -54,9 +54,11 @@ function OperacoesInner() {
   const { hasRole } = useAuth();
   const canAuthorize = hasRole("OWNER", "MANAGER");
   const canManage = hasRole("OWNER", "MANAGER");
-  // Exclusão definitiva (inclusive concluída): só o proprietário.
+  // Exclusão lógica (inclusive concluída) e restauração: só o proprietário.
   const canDelete = hasRole("OWNER");
   const [toDelete, setToDelete] = useState<OperationSummary | null>(null);
+  const [toRestore, setToRestore] = useState<OperationSummary | null>(null);
+  const [showDeleted, setShowDeleted] = useState(false);
   const [deleteNotice, setDeleteNotice] = useState<string | null>(null);
   const [tab, setTab] = useState<OpsTab>("overview");
   const [search, setSearch] = useState("");
@@ -78,12 +80,13 @@ function OperacoesInner() {
         page,
         limit,
         search: debounced || undefined,
-        status: status === "all" ? undefined : status,
+        status: showDeleted || status === "all" ? undefined : status,
+        deleted: showDeleted || undefined,
         customerId,
         equipmentId,
         signal,
       }),
-    [page, limit, debounced, status, customerId, equipmentId],
+    [page, limit, debounced, status, showDeleted, customerId, equipmentId],
     // "Como se fosse em tempo real": poll silencioso + refresh ao focar a aba.
     { refetchInterval: 10_000, refetchOnFocus: true },
   );
@@ -99,6 +102,7 @@ function OperacoesInner() {
       { key: "createdAt", header: "Criado", className: "w-[125px]", cell: (o) => <span className="font-mono text-xs">{formatDateTime(o.createdAt)}</span> },
       { key: "scheduledFor", header: "Data do agendamento", className: "w-[155px]", cell: (o) => <span className="font-mono text-xs">{o.scheduledFor ? formatDateTime(o.scheduledFor) : "Não agendado"}</span> },
       { key: "status", header: "Status", className: "w-[190px]", cell: (o) => {
+        if (o.deletedAt) return <StatusChip tone="danger" dot className="whitespace-nowrap">Excluída · {formatDateTime(o.deletedAt)}</StatusChip>;
         const cancellation = o.cancellations?.[0];
         const label = cancellation?.status === "REQUESTED" ? "Cancelada · operador" : cancellation?.status === "RESCHEDULED" && o.status !== "COMPLETED" ? "Reagendada" : cancellation?.status === "APPROVED" ? "Cancelada" : OPERATION_STATUS[o.status].label;
         const tone = cancellation?.status === "REQUESTED" || cancellation?.status === "APPROVED" ? "danger" : cancellation?.status === "RESCHEDULED" ? "info" : OPERATION_STATUS[o.status].tone;
@@ -110,7 +114,13 @@ function OperacoesInner() {
             header: "Ações",
             className: "w-[290px]",
             link: false,
-            cell: (operation: OperationSummary) => (
+            cell: (operation: OperationSummary) => operation.deletedAt ? (
+              canDelete ? (
+                <button type="button" title="Restaurar operação" aria-label={`Restaurar ${operationCode(operation.number)}`} onClick={(event) => { event.stopPropagation(); setDeleteNotice(null); setTableActionError(null); setToRestore(operation); }} className="inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-[var(--radius-md)] border border-[var(--color-border)] px-2.5 text-xs font-medium text-[var(--color-primary)] hover:border-[var(--color-primary)] hover:bg-[var(--color-primary)]/5">
+                  <ArchiveRestore className="h-3.5 w-3.5" /> Restaurar
+                </button>
+              ) : null
+            ) : (
               <div className="flex items-center gap-1">
                 {operation.status === "COMPLETED" && operation.requestedDocumentType === "WORK_ORDER" && (
                   <button type="button" title="Gerar Recibo" aria-label={`Gerar Recibo da ${operationCode(operation.number)}`} onClick={(event) => { event.stopPropagation(); setReceiptOperationId(operation.id); }} className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-[var(--radius-md)] border border-[var(--color-border)] px-2 text-xs font-medium text-[var(--color-primary)] transition hover:border-[var(--color-primary)] hover:bg-[var(--color-primary)]/5">
@@ -207,18 +217,24 @@ function OperacoesInner() {
       {(!canAuthorize || tab === "overview") && <>
       <FilterBar search={search} onSearch={(v) => { setSearch(v); setPage(1); }} searchPlaceholder="Buscar por cliente, equipamento, operador…">
         {STATUS_FILTERS.map((f) => (
-          <FilterChip key={f.key} active={status === f.key} onClick={() => { setStatus(f.key); setPage(1); }}>{f.label}</FilterChip>
+          <FilterChip key={f.key} active={!showDeleted && status === f.key} onClick={() => { setShowDeleted(false); setStatus(f.key); setPage(1); }}>{f.label}</FilterChip>
         ))}
+        {canDelete && (
+          <FilterChip active={showDeleted} onClick={() => { setShowDeleted(true); setPage(1); }}>
+            <span className="inline-flex items-center gap-1"><Trash2 className="h-3.5 w-3.5" /> Excluídas</span>
+          </FilterChip>
+        )}
       </FilterBar>
       {tableActionError && <p className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{tableActionError}</p>}
       {deleteNotice && <p role="status" className="rounded-[var(--radius-md)] border border-[var(--color-success)]/30 bg-[var(--color-success)]/10 px-3 py-2 text-sm">{deleteNotice}</p>}
+      {showDeleted && <p className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-muted)]/50 px-3 py-2 text-sm text-[var(--color-muted-foreground)]">Operações excluídas continuam guardadas para auditoria. Use <strong>Restaurar</strong> para trazê-las de volta às listas.</p>}
 
       {list.loading && !list.data ? (
         <SkeletonList rows={6} />
       ) : list.error && !list.data ? (
         <ErrorState error={list.error} onRetry={list.refetch} />
       ) : list.data && list.data.items.length === 0 ? (
-        <EmptyState icon={ClipboardList} title="Nenhuma operação" description={debounced || status !== "all" ? "Ajuste os filtros." : "As operações criadas pelos operadores aparecerão aqui."} />
+        <EmptyState icon={ClipboardList} title={showDeleted ? "Nenhuma operação excluída" : "Nenhuma operação"} description={showDeleted ? "As operações excluídas aparecerão aqui, prontas para restaurar." : debounced || status !== "all" ? "Ajuste os filtros." : "As operações criadas pelos operadores aparecerão aqui."} />
       ) : list.data ? (
         <div className="space-y-3">
           <div className="flex h-4 items-center justify-end">
@@ -256,23 +272,21 @@ function OperacoesInner() {
       )}
       <ConfirmDialog
         open={toDelete !== null}
-        title={`Excluir ${toDelete ? operationCode(toDelete.number) : "operação"} definitivamente?`}
-        description={
-          toDelete?.status === "COMPLETED" ? (
-            <div className="space-y-2">
-              <p>Esta operação já foi <strong>concluída</strong>. A exclusão não pode ser desfeita:</p>
-              <ul className="list-disc space-y-0.5 pl-4">
-                <li>documentos (OS, relatórios, recibo), fotos e checklists serão apagados;</li>
-                <li>as peças usadas voltam ao estoque;</li>
-                <li>o recibo lançado no financeiro é cancelado (com estorno do saldo, se já recebido);</li>
-                <li>se a comissão já foi paga, a operação sai do pagamento e o valor é recalculado.</li>
-              </ul>
-            </div>
-          ) : (
-            <p>A operação, seus agendamentos, documentos e fotos serão apagados. Peças lançadas voltam ao estoque. A exclusão não pode ser desfeita.</p>
-          )
-        }
-        confirmLabel="Excluir definitivamente"
+        title={`Excluir ${toDelete ? operationCode(toDelete.number) : "operação"}?`}
+        description={toDelete && (
+          <div className="space-y-2">
+            <p>A operação sai das listas, da agenda, do app do técnico e do portal do cliente, mas <strong>continua guardada no sistema</strong>, com seus documentos, fotos e histórico, para auditoria.</p>
+            <p>Ao excluir:</p>
+            <ul className="list-disc space-y-0.5 pl-4">
+              <li>as peças usadas voltam ao estoque;</li>
+              <li>o recibo lançado no financeiro é cancelado (com estorno do saldo, se já recebido);</li>
+              <li>se a comissão já foi paga, a operação sai do pagamento e o valor é recalculado;</li>
+              <li>os documentos da operação (OS, relatórios, recibo) também são excluídos.</li>
+            </ul>
+            <p className="rounded-[var(--radius-md)] bg-[var(--color-muted)]/60 px-3 py-2">Para recuperar, use o filtro <strong>Excluídas</strong> nesta tela e clique em <strong>Restaurar</strong>.</p>
+          </div>
+        )}
+        confirmLabel="Excluir operação"
         danger
         onClose={() => setToDelete(null)}
         onConfirm={async () => {
@@ -283,11 +297,43 @@ function OperacoesInner() {
             await operationApi.deleteOperation(target.id);
             setToDelete(null);
             if (detailId === target.id) setDetailId(null);
-            setDeleteNotice(`${operationCode(target.number)} foi excluída.`);
+            setDeleteNotice(`${operationCode(target.number)} foi excluída. Ela continua guardada e pode ser restaurada pelo filtro “Excluídas”.`);
             list.refetch();
           } catch (cause) {
             setToDelete(null);
             setTableActionError(cause instanceof Error ? cause.message : "Não foi possível excluir a operação.");
+            throw cause;
+          }
+        }}
+      />
+      <ConfirmDialog
+        open={toRestore !== null}
+        title={`Restaurar ${toRestore ? operationCode(toRestore.number) : "operação"}?`}
+        description={
+          <div className="space-y-2">
+            <p>A operação volta às listas com o status que tinha, junto com os documentos excluídos com ela. O que foi estornado na exclusão é refeito:</p>
+            <ul className="list-disc space-y-0.5 pl-4">
+              <li>as peças são baixadas do estoque de novo (é preciso haver saldo);</li>
+              <li>os lançamentos do recibo voltam ao financeiro como estavam;</li>
+              <li>a comissão volta como <strong>não paga</strong>, para entrar no próximo fechamento;</li>
+              <li>o técnico volta a ter acesso à operação.</li>
+            </ul>
+          </div>
+        }
+        confirmLabel="Restaurar operação"
+        onClose={() => setToRestore(null)}
+        onConfirm={async () => {
+          if (!toRestore) return;
+          const target = toRestore;
+          try {
+            setTableActionError(null);
+            await operationApi.restoreOperation(target.id);
+            setToRestore(null);
+            setDeleteNotice(`${operationCode(target.number)} foi restaurada.`);
+            list.refetch();
+          } catch (cause) {
+            setToRestore(null);
+            setTableActionError(cause instanceof Error ? cause.message : "Não foi possível restaurar a operação.");
             throw cause;
           }
         }}

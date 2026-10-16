@@ -1631,6 +1631,7 @@ describe('DocumentEngine foundation', () => {
       {} as never,
       {
         assertOperationAccess: jest.fn(),
+        assertOperationNotDeleted: jest.fn(),
         assertOperationBackedResourceAccess: jest.fn(),
       } as never,
       {} as never,
@@ -1714,6 +1715,7 @@ describe('DocumentEngine foundation', () => {
       {} as never,
       {
         assertOperationAccess: jest.fn(),
+        assertOperationNotDeleted: jest.fn(),
         assertOperationBackedResourceAccess: jest.fn(),
       } as never,
     );

@@ -1,6 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { DocumentTemplateType, Prisma, Role } from '@prisma/client';
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
+import { documentDeletedError } from '../operation-access/operation-access.service';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
 import { PrismaService } from '../database/prisma.service';
@@ -82,6 +83,7 @@ export class ReceiptService {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${initial.operationId!}))`;
       const document = await this.receiptOrThrow(tx, id);
       if (cancel && document.canceledAt) return document;
+      if (document.deletedAt) throw documentDeletedError();
       if (document.canceledAt || document.revision !== dto.revision) {
         throw new ApplicationException(
           ERROR_CODES.OPERATION_INVALID_TRANSITION,

@@ -18,6 +18,8 @@ export type DocumentCatalogItem = {
   id: string; number: string; type: DocumentKind; status: OperationDocumentStatus;
   editorialStatus: DocumentEditorialStatus; handoffOrigin: DocumentHandoffOrigin;
   canceledAt: string | null;
+  /** Exclusão lógica (restaurável); `operationDeleted` = excluído junto com o atendimento. */
+  deletedAt: string | null; operationDeleted: boolean;
   submittedAt: string | null; finalizedAt: string | null; revision: number;
   origin: "OPERATION" | "BUDGET"; originId: string | null;
   customer: { id: string; name: string } | null;
@@ -52,15 +54,22 @@ export function cancelReceipt(documentId: string, revision: number): Promise<{ r
   return api.post<{ revision: number }>(`/documents/${documentId}/receipt/cancel`, { revision });
 }
 
-/** Exclusão definitiva do documento (emitido ou não). Só OWNER. */
+/** Exclusão lógica do documento (emitido ou não): continua na base e pode ser restaurado. Só OWNER. */
 export function deleteDocument(documentId: string): Promise<{ deleted: true }> {
   return api.delete<{ deleted: true }>(`/documents/${documentId}`);
+}
+
+/** Restaura um documento excluído. Só OWNER. */
+export function restoreDocument(documentId: string): Promise<unknown> {
+  return api.post(`/documents/${documentId}/restore`);
 }
 
 export function listDocuments(params?: {
   page?: number; limit?: number; search?: string; type?: DocumentKind;
   status?: OperationDocumentStatus; customerId?: string; equipmentId?: string;
   editorialStatus?: DocumentEditorialStatus; includeDrafts?: boolean;
+  /** Só os excluídos (exclusão lógica) — vale apenas para o OWNER. */
+  deleted?: boolean;
   operatorId?: string; from?: string; to?: string; signal?: AbortSignal;
 }): Promise<Paginated<DocumentCatalogItem>> {
   const { signal, ...query } = params ?? {};

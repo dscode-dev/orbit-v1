@@ -675,16 +675,18 @@ export class InventoryService {
   }
 
   /**
-   * Exclusão definitiva de uma operação: devolve ao estoque todo material ainda
+   * Exclusão (lógica) de uma operação: devolve ao estoque todo material ainda
    * lançado nela (movimentação RETURN, mesma regra de saldo da devolução
-   * manual). Deve rodar na transação da exclusão, ANTES de apagar a operação.
+   * manual) e devolve os ids dos lançamentos estornados, para a restauração
+   * dar baixa neles de novo. Roda na transação da exclusão, ANTES de marcar a
+   * operação como excluída.
    */
   async returnOperationMaterialsTx(
     tx: Prisma.TransactionClient,
     operation: { id: string; number: number },
     actor: AuthenticatedUser,
     context: InventoryAuditContext,
-  ): Promise<number> {
+  ): Promise<string[]> {
     const parts = await tx.operationPart.findMany({
       where: { operationId: operation.id, deletedAt: null },
       select: { id: true, inventoryItemId: true, productId: true, quantity: true },
@@ -710,6 +712,50 @@ export class InventoryService {
         operationPartId: part.id,
         productId: part.productId,
         reason: 'OPERATION_DELETED',
+      });
+    }
+    return parts.map((part) => part.id);
+  }
+
+  /**
+   * Restauração de uma operação excluída: dá baixa de novo (CONSUMPTION) nos
+   * materiais que a exclusão devolveu ao estoque. Falta de saldo aborta a
+   * transação inteira (INVENTORY_NEGATIVE_STOCK). Roda DEPOIS de a operação
+   * deixar de estar excluída.
+   */
+  async reconsumeOperationMaterialsTx(
+    tx: Prisma.TransactionClient,
+    operation: { id: string; number: number },
+    partIds: string[],
+    actor: AuthenticatedUser,
+    context: InventoryAuditContext,
+  ): Promise<number> {
+    if (partIds.length === 0) return 0;
+    const parts = await tx.operationPart.findMany({
+      where: { id: { in: partIds }, operationId: operation.id, deletedAt: { not: null } },
+      select: { id: true, inventoryItemId: true, productId: true, quantity: true },
+    });
+    for (const part of parts) {
+      await tx.operationPart.update({ where: { id: part.id }, data: { deletedAt: null } });
+      await this.createMovementTx(
+        tx,
+        {
+          inventoryItemId: part.inventoryItemId,
+          quantity: Number(part.quantity),
+          type: StockMovementType.CONSUMPTION,
+          reason: `Restauração: atendimento #${operation.number} restaurado`,
+          operationId: operation.id,
+          userId: actor.id,
+          occurredAt: new Date(),
+        },
+        actor,
+        context,
+      );
+      await this.auditTx(tx, INVENTORY_AUDIT_ACTIONS.STOCK_MOVEMENT_CREATED, OPERATION_PART_RESOURCE, actor, context, {
+        operationId: operation.id,
+        operationPartId: part.id,
+        productId: part.productId,
+        reason: 'OPERATION_RESTORED',
       });
     }
     return parts.length;
@@ -944,10 +990,13 @@ export class InventoryService {
   private async operationOrThrowTx(tx: Prisma.TransactionClient, id: string): Promise<OperationForInventory> {
     const operation = await tx.operation.findUnique({
       where: { id },
-      select: { id: true, number: true, equipmentId: true, completedAt: true },
+      select: { id: true, number: true, equipmentId: true, completedAt: true, deletedAt: true },
     });
     if (!operation) {
       throw new ApplicationException(ERROR_CODES.OPERATION_NOT_FOUND, 'Atendimento não encontrado', HttpStatus.NOT_FOUND);
+    }
+    if (operation.deletedAt) {
+      throw new ApplicationException(ERROR_CODES.OPERATION_DELETED, 'Atendimento excluído: restaure-o antes de alterar materiais', HttpStatus.CONFLICT);
     }
     return operation;
   }

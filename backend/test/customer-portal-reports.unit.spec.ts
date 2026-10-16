@@ -177,7 +177,8 @@ describe('Portal do cliente — acesso aos relatórios', () => {
           id: DOC,
           operationId: OP,
           canceledAt: null,
-          operation: { customerId: 'cus-1' },
+          deletedAt: null,
+          operation: { customerId: 'cus-1', deletedAt: null },
         }) as unknown,
       }),
     );

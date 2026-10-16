@@ -65,7 +65,7 @@ export class DocumentEngineController {
     return this.handoffs.saveDraft(body, actor, contextFromRequest(request));
   }
 
-  /** Exclusão definitiva do documento (emitido ou não). Só OWNER. */
+  /** Exclusão lógica do documento (emitido ou não): continua na base e pode ser restaurado. Só OWNER. */
   @Roles(Role.OWNER)
   @Delete(':documentId')
   deleteDocument(
@@ -74,6 +74,17 @@ export class DocumentEngineController {
     @Req() request: RequestWithId,
   ): Promise<{ deleted: true }> {
     return this.documents.deleteDocument(documentId, actor, contextFromRequest(request));
+  }
+
+  /** Restaura um documento excluído. Só OWNER. */
+  @Roles(Role.OWNER)
+  @Post(':documentId/restore')
+  restoreDocument(
+    @Param('documentId', new ParseUUIDPipe({ version: '4' })) documentId: string,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Req() request: RequestWithId,
+  ): Promise<unknown> {
+    return this.documents.restoreDocument(documentId, actor, contextFromRequest(request));
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)

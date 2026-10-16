@@ -26,7 +26,7 @@ import { ApplicationException } from '../../shared/exceptions/application.except
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
 import { buildPaginatedResponse } from '../../shared/types/pagination.types';
 import { PrismaService } from '../database/prisma.service';
-import { OperationAccessService } from '../operation-access/operation-access.service';
+import { documentDeletedError, OperationAccessService, operationDeletedError } from '../operation-access/operation-access.service';
 import type {
   CollectCustomerSignatureDto,
   ListDocumentHandoffsQueryDto,
@@ -109,6 +109,7 @@ const COLLECTION_OPERATION_INCLUDE = {
       renderedAt: true,
       collectedById: true,
       technicalSignatureId: true,
+      deletedAt: true,
     },
   },
   assignments: { where: { isPrimary: true }, select: { assignedBy: true, assignedTo: true } },
@@ -138,6 +139,7 @@ export class DocumentHandoffService {
   async list(query: ListDocumentHandoffsQueryDto): Promise<unknown> {
     const where: Prisma.OperationDocumentWhereInput = {
       submittedAt: { not: null },
+      deletedAt: null,
       ...(query.status ? { editorialStatus: query.status } : {}),
       ...(query.type ? { type: query.type } : {}),
       ...(query.origin ? { handoffOrigin: query.origin } : {}),
@@ -204,6 +206,7 @@ export class DocumentHandoffService {
         : null,
     );
     const existingDocument = operation.documents.find((item) => item.type === dto.type) ?? null;
+    if (existingDocument?.deletedAt) throw documentDeletedError();
     const document = await this.prisma.$transaction(async (tx) => {
       // Reserva um número (por tipo) só quando o documento ainda não existe;
       // atualizações preservam o número já atribuído, sem consumir a sequência.
@@ -569,6 +572,7 @@ export class DocumentHandoffService {
   private async documentOrThrow(id: string): Promise<HandoffDocument> {
     const document = await this.prisma.operationDocument.findUnique({ where: { id }, include: DOCUMENT_HANDOFF_INCLUDE });
     if (!document) throw new ApplicationException(ERROR_CODES.DOCUMENT_NOT_FOUND, 'Documento não encontrado', HttpStatus.NOT_FOUND);
+    if (document.deletedAt) throw documentDeletedError();
     return document;
   }
 
@@ -587,6 +591,7 @@ export class DocumentHandoffService {
       include: COLLECTION_OPERATION_INCLUDE,
     });
     if (!operation) throw new ApplicationException(ERROR_CODES.OPERATION_NOT_FOUND, 'Operação não encontrada', HttpStatus.NOT_FOUND);
+    if (operation.deletedAt) throw operationDeletedError();
     return operation;
   }
 

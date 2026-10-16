@@ -256,6 +256,7 @@ export class PmocExecutionRequestsService {
           operationId: { in: operationIds },
           type: DocumentTemplateType.PMOC,
           renderedAt: { not: null },
+          deletedAt: null,
         },
         select: {
           id: true,

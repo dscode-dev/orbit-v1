@@ -18,7 +18,7 @@ import type { AuthenticatedUser } from '../../shared/types/authenticated-user.ty
 import type { RequestWithId } from '../../shared/types/request-with-id.type';
 import { AppLoggerService } from '../../infra/logger/app-logger.service';
 import { LifecyclePublisher } from '../asset-lifecycle/lifecycle-publisher.service';
-import { OperationAccessService } from '../operation-access/operation-access.service';
+import { documentDeletedError, OperationAccessService, operationDeletedError } from '../operation-access/operation-access.service';
 import { PrismaService } from '../database/prisma.service';
 import { DocumentAssetResolver } from './assets/document-asset-resolver.service';
 import type { DocumentBlueprint } from './blueprint/document-blueprint.types';
@@ -59,48 +59,92 @@ export class DocumentEngineService {
   ) {}
 
   /**
-   * Exclusão DEFINITIVA de um documento (só OWNER), em qualquer estado —
-   * inclusive emitido/assinado. Apaga o registro e as revisões (cascata) e,
-   * depois do commit, o PDF. A operação/orçamento de origem continua e pode
-   * gerar o documento de novo. O lançamento financeiro de um recibo não é
-   * mexido aqui: ele vem da operação, não do arquivo.
+   * Exclusão LÓGICA de um documento (só OWNER), em qualquer estado — inclusive
+   * emitido/assinado. O registro, as revisões e o PDF continuam na base para
+   * auditoria; o documento só sai das listas, do portal do cliente e dos
+   * fluxos de revisão/geração até ser restaurado. O lançamento financeiro de um
+   * recibo não é mexido aqui: ele vem da operação, não do arquivo.
    */
   async deleteDocument(id: string, actor: AuthenticatedUser, context: DocumentAuditContext): Promise<{ deleted: true }> {
     const document = await this.prisma.operationDocument.findUnique({
       where: { id },
-      select: { id: true, type: true, operationId: true, budgetId: true, storageKey: true, revision: true, renderedAt: true },
+      select: { id: true, type: true, number: true, operationId: true, budgetId: true, revision: true, renderedAt: true, deletedAt: true },
     });
     if (!document) {
       throw new ApplicationException(ERROR_CODES.DOCUMENT_NOT_FOUND, 'Documento não encontrado', HttpStatus.NOT_FOUND);
     }
+    if (document.deletedAt) return { deleted: true };
     await this.prisma.$transaction(async (tx) => {
+      const changed = await tx.operationDocument.updateMany({
+        where: { id: document.id, deletedAt: null },
+        data: { deletedAt: new Date(), deletedById: actor.id },
+      });
+      if (changed.count !== 1) return;
       await tx.auditLog.create({
         data: this.auditInput(DOCUMENT_ENGINE_AUDIT_ACTIONS.DOCUMENT_DELETED, DOCUMENT_RENDER_RESOURCE, actor, context, {
           documentId: document.id,
+          number: document.number,
           type: document.type,
           operationId: document.operationId,
           budgetId: document.budgetId,
           revision: document.revision,
           wasRendered: Boolean(document.renderedAt),
-          permanent: true,
+          permanent: false,
         }),
       });
-      await tx.operationDocument.delete({ where: { id: document.id } });
     });
-    if (document.storageKey) await this.assets.deleteDocumentPdf(document.storageKey);
     return { deleted: true };
+  }
+
+  /**
+   * Restaura um documento excluído (só OWNER). Documento excluído junto com o
+   * atendimento só volta com a restauração do próprio atendimento.
+   */
+  async restoreDocument(id: string, actor: AuthenticatedUser, context: DocumentAuditContext): Promise<unknown> {
+    const document = await this.prisma.operationDocument.findUnique({
+      where: { id },
+      select: { id: true, type: true, number: true, operationId: true, deletedAt: true, operation: { select: { deletedAt: true } } },
+    });
+    if (!document) {
+      throw new ApplicationException(ERROR_CODES.DOCUMENT_NOT_FOUND, 'Documento não encontrado', HttpStatus.NOT_FOUND);
+    }
+    if (!document.deletedAt) {
+      throw new ApplicationException(ERROR_CODES.DOCUMENT_NOT_DELETED, 'Este documento não está excluído', HttpStatus.CONFLICT);
+    }
+    if (document.operation?.deletedAt) {
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_DELETED,
+        'O atendimento deste documento também está excluído. Restaure o atendimento em Operações → Excluídos; os documentos dele voltam junto.',
+        HttpStatus.CONFLICT,
+      );
+    }
+    await this.prisma.$transaction(async (tx) => {
+      await tx.operationDocument.update({ where: { id }, data: { deletedAt: null, deletedById: null } });
+      await tx.auditLog.create({
+        data: this.auditInput(DOCUMENT_ENGINE_AUDIT_ACTIONS.DOCUMENT_RESTORED, DOCUMENT_RENDER_RESOURCE, actor, context, {
+          documentId: id,
+          number: document.number,
+          type: document.type,
+          operationId: document.operationId,
+          deletedAt: document.deletedAt?.toISOString(),
+        }),
+      });
+    });
+    return this.prisma.operationDocument.findUnique({ where: { id } });
   }
 
   async listDocuments(query: ListDocumentsQueryDto, actor: AuthenticatedUser): Promise<unknown> {
     const period = dateRangeFilter(query.from, query.to);
+    const onlyDeleted = query.deleted === true && actor.role === Role.OWNER;
     const where: Prisma.OperationDocumentWhereInput = {
+      deletedAt: onlyDeleted ? { not: null } : null,
       ...(query.type ? { type: query.type } : {}),
       ...(query.status ? { status: query.status } : {}),
       // Um status explícito sempre vence. Sem filtro explícito, o catálogo
       // esconde rascunhos (DRAFT) por padrão — inclui-os só com includeDrafts.
       ...(query.editorialStatus
         ? { editorialStatus: query.editorialStatus }
-        : query.includeDrafts
+        : query.includeDrafts || onlyDeleted
           ? {}
           : { editorialStatus: { not: 'DRAFT' } }),
       ...(actor.role === Role.OWNER
@@ -127,7 +171,7 @@ export class DocumentEngineService {
         where, skip: (query.page - 1) * query.limit, take: query.limit,
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         include: {
-          operation: { select: { id: true, number: true, completedAt: true, receiptIssuedAt: true, customer: { select: { id: true, name: true } }, equipment: { select: { id: true, name: true, tag: true } }, operator: { select: { id: true, name: true } } } },
+          operation: { select: { id: true, number: true, completedAt: true, receiptIssuedAt: true, deletedAt: true, customer: { select: { id: true, name: true } }, equipment: { select: { id: true, name: true, tag: true } }, operator: { select: { id: true, name: true } } } },
           budget: { select: { id: true, number: true, customer: { select: { id: true, name: true } }, equipment: { select: { id: true, name: true, tag: true } }, creator: { select: { id: true, name: true } } } },
         },
       }),
@@ -137,6 +181,9 @@ export class DocumentEngineService {
       id: document.id, number: document.number, type: document.type, status: document.status,
       editorialStatus: document.editorialStatus,
       canceledAt: document.canceledAt,
+      deletedAt: document.deletedAt,
+      // Excluído junto com o atendimento: só volta restaurando o atendimento.
+      operationDeleted: Boolean(document.operation?.deletedAt),
       handoffOrigin: document.handoffOrigin,
       submittedAt: document.submittedAt,
       finalizedAt: document.finalizedAt,
@@ -263,7 +310,7 @@ export class DocumentEngineService {
     this.assertTypeAccess(type, actor);
     const operation = await this.prisma.operation.findUnique({
       where: { id: operationId },
-      select: { id: true, number: true },
+      select: { id: true, number: true, deletedAt: true },
     });
     if (!operation) {
       throw new ApplicationException(
@@ -272,14 +319,16 @@ export class DocumentEngineService {
         HttpStatus.NOT_FOUND,
       );
     }
+    if (operation.deletedAt) throw operationDeletedError();
     // Garante o documento para renderização. Se ainda não existir, cria com um
     // número reservado da sequência POR TIPO (não do contador global da Operation).
     const document = await this.prisma.$transaction(async (tx) => {
       const found = await tx.operationDocument.findUnique({
         where: { operationId_type: { operationId, type } },
-        select: { id: true },
+        select: { id: true, deletedAt: true },
       });
-      if (found) return found;
+      if (found?.deletedAt) throw documentDeletedError();
+      if (found) return { id: found.id };
       return tx.operationDocument.create({
         data: {
           operationId,
@@ -377,6 +426,7 @@ export class DocumentEngineService {
     this.assertTypeAccess(document.type, actor);
     await this.assertDocumentAccess(document, actor, context);
     this.assertNotCanceled(document);
+    if (document.deletedAt) throw documentDeletedError();
     await this.assertRenderer(document, actor);
     const isManagement = actor.role === Role.OWNER || actor.role === Role.MANAGER;
     // Operador só gera após a revisão finalizar (READY). Owner/Manager é a própria
@@ -600,6 +650,7 @@ export class DocumentEngineService {
   async portalPreview(documentId: string): Promise<DocumentBlueprint> {
     const document = await this.documentOrThrow(documentId);
     this.assertNotCanceled(document);
+    if (document.deletedAt) throw documentDeletedError();
     return this.withSourceFingerprint(await this.buildBlueprintForDocument(document));
   }
 
@@ -612,6 +663,7 @@ export class DocumentEngineService {
   async portalPdf(documentId: string, portalAccountId: string, context: DocumentAuditContext): Promise<DocumentDownload> {
     let document = await this.documentOrThrow(documentId);
     this.assertNotCanceled(document);
+    if (document.deletedAt) throw documentDeletedError();
 
     let fresh = false;
     try {

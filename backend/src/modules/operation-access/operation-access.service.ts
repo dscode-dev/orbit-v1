@@ -26,9 +26,40 @@ export interface OperationAccessTarget {
   context?: OperationAccessContext;
 }
 
+/** Erro padrão ao tentar alterar um atendimento excluído (exclusão lógica). */
+export function operationDeletedError(): ApplicationException {
+  return new ApplicationException(
+    ERROR_CODES.OPERATION_DELETED,
+    'Este atendimento foi excluído. Restaure-o em Operações → Excluídos para voltar a alterá-lo.',
+    HttpStatus.CONFLICT,
+  );
+}
+
+/** Erro padrão ao tentar alterar um documento excluído (exclusão lógica). */
+export function documentDeletedError(): ApplicationException {
+  return new ApplicationException(
+    ERROR_CODES.DOCUMENT_DELETED,
+    'Este documento foi excluído. Restaure-o em Documentos → Excluídos para voltar a usá-lo.',
+    HttpStatus.CONFLICT,
+  );
+}
+
 @Injectable()
 export class OperationAccessService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Bloqueia alterações em atendimento excluído. Leitura continua permitida
+   * (auditoria); quem altera chama isto antes. Atendimento inexistente segue
+   * para o NOT_FOUND de quem chamou.
+   */
+  async assertOperationNotDeleted(operationId: string): Promise<void> {
+    const operation = await this.prisma.operation.findUnique({
+      where: { id: operationId },
+      select: { deletedAt: true },
+    });
+    if (operation?.deletedAt) throw operationDeletedError();
+  }
 
   operationScope(actor: AuthenticatedUser): Prisma.OperationWhereInput {
     if (actor.role !== Role.OPERATOR) return {};

@@ -320,7 +320,7 @@ export class FinancialService {
     });
     const importedIds = new Set(imported.map((entry) => entry.originId).filter(Boolean));
     const operations = await this.prisma.operation.findMany({
-      where: { receiptAmount: { not: null }, status: { not: 'CANCELED' }, documents: { none: { type: 'RECEIPT', canceledAt: { not: null } } } },
+      where: { receiptAmount: { not: null }, status: { not: 'CANCELED' }, deletedAt: null, documents: { none: { type: 'RECEIPT', canceledAt: { not: null } } } },
       orderBy: [{ completedAt: 'desc' }, { createdAt: 'desc' }],
       take: 200,
       select: {
@@ -388,10 +388,12 @@ export class FinancialService {
         completedAt: true,
         createdAt: true,
         status: true,
+        deletedAt: true,
         documents: { where: { type: 'RECEIPT' }, select: { canceledAt: true } },
       },
     });
-    if (!operation) return false;
+    // Atendimento excluído não gera nem atualiza lançamento até ser restaurado.
+    if (!operation || operation.deletedAt) return false;
     const organizationId = await this.organizationId(tx);
     const entries = await tx.financialEntry.findMany({
       where: {
@@ -856,17 +858,18 @@ export class FinancialService {
   }
 
   /**
-   * Exclusão definitiva de uma operação: cancela os lançamentos ativos que
+   * Exclusão (lógica) de uma operação: cancela os lançamentos ativos que
    * nasceram dela (recibo e origem "operação"), estornando o saldo dos que já
    * estavam pagos — o mesmo tratamento do cancelamento de recibo. Os lançamentos
-   * ficam no financeiro como cancelados (histórico), não são apagados.
+   * ficam no financeiro como cancelados (histórico), não são apagados. Devolve
+   * cada lançamento com o status anterior, para a restauração reativá-los.
    */
   async cancelOperationEntriesTx(
     tx: Prisma.TransactionClient,
     operationId: string,
     actorId: string,
     context: FinancialAuditContext,
-  ): Promise<number> {
+  ): Promise<Array<{ id: string; previousStatus: FinancialEntryStatus }>> {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${operationId}))`;
     const organizationId = await this.organizationId(tx);
     const entries = await tx.financialEntry.findMany({
@@ -879,6 +882,48 @@ export class FinancialService {
       },
     });
     await this.cancelEntriesTx(tx, entries, operationId, actorId, context, { reason: 'OPERATION_DELETED' });
+    return entries.map((entry) => ({ id: entry.id, previousStatus: entry.status }));
+  }
+
+  /**
+   * Restauração de uma operação excluída: reativa SÓ os lançamentos que a
+   * exclusão cancelou, voltando cada um ao status anterior e reaplicando o
+   * saldo dos que estavam pagos. Lançamento que mudou depois (excluído ou já
+   * reativado) fica como está.
+   */
+  async restoreOperationEntriesTx(
+    tx: Prisma.TransactionClient,
+    operationId: string,
+    canceled: Array<{ id: string; previousStatus: FinancialEntryStatus }>,
+    actorId: string,
+    context: FinancialAuditContext,
+  ): Promise<number> {
+    if (canceled.length === 0) return 0;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${operationId}))`;
+    const previous = new Map(canceled.map((entry) => [entry.id, entry.previousStatus]));
+    const entries = await tx.financialEntry.findMany({
+      where: { id: { in: [...previous.keys()] }, status: FinancialEntryStatus.CANCELED, deletedAt: null },
+    });
+    const actor = { id: actorId } as AuthenticatedUser;
+    for (const entry of entries) {
+      const status = previous.get(entry.id) ?? FinancialEntryStatus.PENDING;
+      await tx.financialEntry.update({ where: { id: entry.id }, data: { status, canceledAt: null } });
+      if (status === FinancialEntryStatus.PAID) {
+        await this.applyBalanceTx(tx, entry.accountId, entry.type, entry.amount, 'apply');
+      }
+      await this.createHistoryTx(tx, entry.id, actorId, FinancialHistoryAction.RESTORED, FinancialEntryStatus.CANCELED, status, {
+        operationId,
+        amount: entry.amount.toString(),
+        reason: 'OPERATION_RESTORED',
+      });
+      await this.auditTx(tx, FINANCIAL_AUDIT_ACTIONS.ENTRY_RESTORED, FINANCIAL_ENTRY_RESOURCE, actor, context, {
+        entryId: entry.id,
+        operationId,
+        origin: entry.origin,
+        status,
+        reason: 'OPERATION_RESTORED',
+      });
+    }
     return entries.length;
   }
 

@@ -14,6 +14,8 @@ export class ListDocumentsQueryDto {
   @IsOptional() @IsEnum(DocumentEditorialStatus) editorialStatus?: DocumentEditorialStatus;
   /** Por padrão o catálogo esconde documentos em rascunho (DRAFT); enviar true os inclui. */
   @IsOptional() @Type(() => Boolean) @IsBoolean() includeDrafts?: boolean;
+  /** Lista só os excluídos (exclusão lógica) — vale apenas para o OWNER. */
+  @IsOptional() @Transform(({ value }) => value === true || value === 'true') @IsBoolean() deleted?: boolean;
   @IsOptional() @IsUUID('4') customerId?: string;
   @IsOptional() @IsUUID('4') equipmentId?: string;
   @IsOptional() @IsUUID('4') operatorId?: string;

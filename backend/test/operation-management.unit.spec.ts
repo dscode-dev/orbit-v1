@@ -23,7 +23,7 @@ describe('Operation management', () => {
       (dependencies.maintenance ?? {}) as never,
       reminders as never,
       {} as never,
-      { assertOperationAccess: jest.fn().mockResolvedValue(undefined) } as never,
+      { assertOperationAccess: jest.fn().mockResolvedValue(undefined), assertOperationNotDeleted: jest.fn().mockResolvedValue(undefined) } as never,
       {} as never,
       {
         assertValidTypeKeys: async () => undefined,

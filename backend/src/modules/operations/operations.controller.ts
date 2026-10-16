@@ -182,7 +182,10 @@ export class OperationsController {
     return this.operations.reactivate(id, actor, this.context(request));
   }
 
-  /** Exclusão definitiva (qualquer status, inclusive concluída). Só OWNER. */
+  /**
+   * Exclusão lógica (qualquer status, inclusive concluída): sai das listas,
+   * continua na base e pode ser restaurada. Só OWNER.
+   */
   @Roles(Role.OWNER)
   @Delete(':id')
   remove(
@@ -191,6 +194,17 @@ export class OperationsController {
     @Req() request: RequestWithId,
   ): Promise<{ deleted: true }> {
     return this.operations.remove(id, actor, this.context(request));
+  }
+
+  /** Restaura uma operação excluída, desfazendo os estornos da exclusão. Só OWNER. */
+  @Roles(Role.OWNER)
+  @Post(':id/restore')
+  restore(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Req() request: RequestWithId,
+  ): Promise<unknown> {
+    return this.operations.restore(id, actor, this.context(request));
   }
 
   private context(request: RequestWithId): OperationAuditContext {

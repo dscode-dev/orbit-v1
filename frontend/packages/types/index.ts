@@ -1285,6 +1285,8 @@ export type OperationSummary = {
   documents: OperationDocument[];
   cancellations?: OperationCancellation[];
   _count?: { photos: number; documents: number };
+  /** Exclusão lógica: preenchido quando o OWNER excluiu (continua na base, restaurável). */
+  deletedAt?: string | null;
 };
 
 export type OperationDetail = Omit<OperationSummary, 'equipment'> & {

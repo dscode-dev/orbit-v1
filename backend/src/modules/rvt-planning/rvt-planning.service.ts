@@ -36,7 +36,7 @@ const PLAN_INCLUDE = {
   defaultOperator: { select: { id: true, name: true, role: true } },
   equipments: { orderBy: { position: 'asc' as const }, include: { equipment: true } },
   checklists: { orderBy: { position: 'asc' as const }, include: { technicalCatalog: true } },
-  executions: { orderBy: { executionNumber: 'asc' as const }, include: { operation: { select: { id: true, number: true, status: true, documents: { select: { id: true, type: true, number: true, status: true, editorialStatus: true, revision: true, fileSize: true, renderedAt: true, createdAt: true, updatedAt: true } } } }, assignedOperator: { select: { id: true, name: true } } } },
+  executions: { orderBy: { executionNumber: 'asc' as const }, include: { operation: { select: { id: true, number: true, status: true, documents: { where: { deletedAt: null }, select: { id: true, type: true, number: true, status: true, editorialStatus: true, revision: true, fileSize: true, renderedAt: true, createdAt: true, updatedAt: true } } } }, assignedOperator: { select: { id: true, name: true } } } },
   maintenancePlan: true,
 } satisfies Prisma.RvtPlanInclude;
 
@@ -248,7 +248,7 @@ export class RvtPlanningService {
       ...(query.from || query.to ? { scheduledAt: { ...(query.from ? { gte: new Date(query.from) } : {}), ...(query.to ? { lte: new Date(query.to) } : {}) } } : {}),
     };
     const [items, total] = await this.prisma.$transaction([
-      this.prisma.rvtExecution.findMany({ where, include: { operation: { select: { id: true, number: true, status: true, documents: { select: { id: true, type: true, number: true, status: true, editorialStatus: true, revision: true, fileSize: true, renderedAt: true, createdAt: true, updatedAt: true } } } }, assignedOperator: { select: { id: true, name: true } } }, orderBy: { scheduledAt: 'asc' }, skip: (query.page - 1) * query.limit, take: query.limit }),
+      this.prisma.rvtExecution.findMany({ where, include: { operation: { select: { id: true, number: true, status: true, documents: { where: { deletedAt: null }, select: { id: true, type: true, number: true, status: true, editorialStatus: true, revision: true, fileSize: true, renderedAt: true, createdAt: true, updatedAt: true } } } }, assignedOperator: { select: { id: true, name: true } } }, orderBy: { scheduledAt: 'asc' }, skip: (query.page - 1) * query.limit, take: query.limit }),
       this.prisma.rvtExecution.count({ where }),
     ]);
     return buildPaginatedResponse(items, total, query.page, query.limit);
@@ -370,6 +370,7 @@ export class RvtPlanningService {
         operatorId: actor.id,
         requestedDocumentType: DocumentTemplateType.TECHNICAL_REPORT,
         status: 'COMPLETED',
+        deletedAt: null,
       },
       include: {
         customer: { select: { name: true } },

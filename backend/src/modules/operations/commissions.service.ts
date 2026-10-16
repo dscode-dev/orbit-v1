@@ -266,6 +266,8 @@ export class CommissionsService {
       // cancelamento preenche `completedAt`, então elas caem no mesmo intervalo.
       status: { in: [OperationStatus.COMPLETED, OperationStatus.CANCELED] },
       completedAt: { gte: from, lte: to },
+      // Excluída sai da comissão; ao ser restaurada volta como não paga.
+      deletedAt: null,
       // A comissão fixa independe do valor cobrado, então atendimentos sem valor
       // informado também contam; no percentual, sem valor não há base.
       ...(mode === CommissionMode.PERCENT ? { serviceValue: { not: null } } : {}),

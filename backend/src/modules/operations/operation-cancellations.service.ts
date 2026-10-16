@@ -8,6 +8,7 @@ import { ApplicationException } from '../../shared/exceptions/application.except
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
 import { PrismaService } from '../database/prisma.service';
 import type { OperationAuditContext } from './operations.service';
+import { operationDeletedError } from '../operation-access/operation-access.service';
 import { decodeOperationPhoto } from './operation-media.utils';
 import type { ApproveOperationCancellationDto, RequestOperationCancellationDto, RescheduleCanceledOperationDto } from './dto/operation-cancellation.dto';
 
@@ -40,6 +41,7 @@ export class OperationCancellationsService {
   ) {}
 
   async request(operationId: string, dto: RequestOperationCancellationDto, actor: AuthenticatedUser, context: OperationAuditContext): Promise<unknown> {
+    await this.assertNotDeleted(operationId);
     if (actor.role !== Role.OPERATOR) {
       throw new ApplicationException(ERROR_CODES.FORBIDDEN, 'Somente o técnico responsável pode solicitar o cancelamento', HttpStatus.FORBIDDEN);
     }
@@ -121,6 +123,7 @@ export class OperationCancellationsService {
   }
 
   async reschedule(operationId: string, dto: RescheduleCanceledOperationDto, actor: AuthenticatedUser, context: OperationAuditContext): Promise<unknown> {
+    await this.assertNotDeleted(operationId);
     this.assertManager(actor);
     const scheduledFor = new Date(dto.scheduledFor);
     if (scheduledFor.getTime() <= Date.now()) throw new ApplicationException(ERROR_CODES.OPERATION_INVALID_TRANSITION, 'A nova data deve estar no futuro', HttpStatus.BAD_REQUEST);
@@ -140,6 +143,7 @@ export class OperationCancellationsService {
   }
 
   async approve(operationId: string, dto: ApproveOperationCancellationDto, actor: AuthenticatedUser, context: OperationAuditContext): Promise<unknown> {
+    await this.assertNotDeleted(operationId);
     this.assertManager(actor);
     await this.prisma.$transaction(async (tx) => {
       const cancellation = await this.pendingOrThrowTx(tx, operationId);
@@ -155,6 +159,11 @@ export class OperationCancellationsService {
 
   async getLatest(operationId: string): Promise<unknown> {
     return this.prisma.operationCancellation.findFirst({ where: { operationId }, orderBy: { requestedAt: 'desc' }, select: CANCELLATION_SELECT });
+  }
+
+  private async assertNotDeleted(operationId: string): Promise<void> {
+    const operation = await this.prisma.operation.findUnique({ where: { id: operationId }, select: { deletedAt: true } });
+    if (operation?.deletedAt) throw operationDeletedError();
   }
 
   private async pendingOrThrowTx(tx: Prisma.TransactionClient, operationId: string): Promise<OperationCancellation> {

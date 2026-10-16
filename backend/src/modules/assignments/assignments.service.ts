@@ -43,7 +43,7 @@ const ASSIGNMENT_INCLUDE = {
       address: true,
       equipment: { select: { id: true, name: true, tag: true, type: true } },
       operator: { select: { id: true, name: true } },
-      documents: { orderBy: { createdAt: 'asc' as const } },
+      documents: { where: { deletedAt: null }, orderBy: { createdAt: 'asc' as const } },
       maintenanceExecution: {
         include: {
           pmocExecutionRequest: {
@@ -140,6 +140,7 @@ export class AssignmentsService {
       where: {
         status: AssignmentStatus.ASSIGNED,
         operatorVisible: false,
+        operation: { deletedAt: null },
       },
       orderBy: [{ assignedTo: 'asc' }, { operation: { scheduledFor: 'asc' } }],
       select: {
@@ -774,8 +775,12 @@ export class AssignmentsService {
       ...(query.operationId ? { operationId: query.operationId } : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(forcedAssignee ? { assignedTo: forcedAssignee } : query.assignedTo ? { assignedTo: query.assignedTo } : {}),
-      ...(query.customerId ? { operation: { customerId: query.customerId } } : {}),
-      ...(query.equipmentId ? { operation: { equipmentId: query.equipmentId } } : {}),
+      // Atribuições de atendimento excluído (exclusão lógica) não aparecem.
+      operation: {
+        deletedAt: null,
+        ...(query.customerId ? { customerId: query.customerId } : {}),
+        ...(query.equipmentId ? { equipmentId: query.equipmentId } : {}),
+      },
       // App do operador: só demandas autorizadas pela gestão. Itens já aceitos/
       // em andamento/concluídos permanecem visíveis (histórico e execução).
       ...(gateVisibility
