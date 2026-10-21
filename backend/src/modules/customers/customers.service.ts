@@ -1,5 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { CustomerType, EquipmentType, Prisma, TechnicalCatalogType } from '@prisma/client';
+import { CustomerType, EquipmentType, Prisma, Role, TechnicalCatalogType } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { extname } from 'node:path';
 import {
@@ -45,6 +45,34 @@ const CUSTOMER_INCLUDE = {
   attachments: { orderBy: { createdAt: 'desc' as const } },
 } satisfies Prisma.CustomerInclude;
 
+/** Identificação mínima: o bastante para listar e escolher um cliente. */
+const CUSTOMER_LIST_BASE = {
+  id: true,
+  name: true,
+  tradeName: true,
+  type: true,
+  isActive: true,
+  createdAt: true,
+  updatedAt: true,
+  _count: { select: { addresses: true, contacts: true, attachments: true } },
+} satisfies Prisma.CustomerSelect;
+
+/** A tabela de Clientes (owner/gestor) mostra documento e contato. */
+const CUSTOMER_LIST_PRIVILEGED = {
+  ...CUSTOMER_LIST_BASE,
+  cpf: true,
+  cnpj: true,
+  email: true,
+  phone: true,
+  secondaryPhone: true,
+} satisfies Prisma.CustomerSelect;
+
+function customerListSelect(actor: AuthenticatedUser): Prisma.CustomerSelect {
+  return actor.role === Role.OWNER || actor.role === Role.MANAGER
+    ? CUSTOMER_LIST_PRIVILEGED
+    : CUSTOMER_LIST_BASE;
+}
+
 @Injectable()
 export class CustomersService {
   constructor(
@@ -52,7 +80,17 @@ export class CustomersService {
     @Inject(STORAGE_PROVIDER_TOKEN) private readonly storage: StorageProviderContract,
   ) {}
 
-  async list(query: ListCustomersQueryDto): Promise<unknown> {
+  /**
+   * Listagem: devolve só o necessário para identificar e escolher um cliente.
+   *
+   * Antes trazia o registro inteiro (CPF, CNPJ, e-mail, telefones, anotações)
+   * para qualquer autenticado — um técnico podia paginar a base e levar os
+   * dados pessoais de todos os clientes. Documento e contato continuam na
+   * lista para owner/gestor, que é quem tem a tela de Clientes e precisa deles
+   * na tabela; o DETALHE (`/customers/:id`) segue completo para todos, porque
+   * o operador depende dele (endereços) no atendimento avulso.
+   */
+  async list(query: ListCustomersQueryDto, actor: AuthenticatedUser): Promise<unknown> {
     const where: Prisma.CustomerWhereInput = query.search
       ? {
           OR: [
@@ -72,7 +110,7 @@ export class CustomersService {
         skip: (query.page - 1) * query.limit,
         take: query.limit,
         orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
-        include: { _count: { select: { addresses: true, contacts: true, attachments: true } } },
+        select: customerListSelect(actor),
       }),
       this.prisma.customer.count({ where }),
     ]);
@@ -616,7 +654,7 @@ export class CustomersService {
     if (!customer)
       throw new ApplicationException(
         ERROR_CODES.CUSTOMER_NOT_FOUND,
-        'Customer was not found',
+        'Cliente não encontrado',
         HttpStatus.NOT_FOUND,
       );
     return customer;
@@ -631,7 +669,7 @@ export class CustomersService {
     )
       throw new ApplicationException(
         ERROR_CODES.NOT_FOUND,
-        'Customer address was not found',
+        'Endereço do cliente não encontrado',
         HttpStatus.NOT_FOUND,
       );
   }
@@ -645,7 +683,7 @@ export class CustomersService {
     )
       throw new ApplicationException(
         ERROR_CODES.NOT_FOUND,
-        'Customer contact was not found',
+        'Contato do cliente não encontrado',
         HttpStatus.NOT_FOUND,
       );
   }
@@ -657,7 +695,7 @@ export class CustomersService {
     if (!value)
       throw new ApplicationException(
         ERROR_CODES.NOT_FOUND,
-        'Customer attachment was not found',
+        'Anexo do cliente não encontrado',
         HttpStatus.NOT_FOUND,
       );
     return value;
@@ -667,26 +705,26 @@ export class CustomersService {
     if (!file)
       throw new ApplicationException(
         ERROR_CODES.UPLOAD_FILE_REQUIRED,
-        'A file field is required',
+        'Envie um arquivo',
         HttpStatus.BAD_REQUEST,
       );
     if (file.size > MAX_CUSTOMER_ATTACHMENT_SIZE_BYTES)
       throw new ApplicationException(
         ERROR_CODES.UPLOAD_FILE_TOO_LARGE,
-        'Attachment exceeds the 5 MiB limit',
+        'O anexo excede o limite de 5 MiB',
         HttpStatus.BAD_REQUEST,
       );
     const extension = extname(file.originalname).slice(1).toLowerCase();
     if (!CUSTOMER_ATTACHMENT_EXTENSIONS.includes(extension as never))
       throw new ApplicationException(
         ERROR_CODES.UPLOAD_INVALID_EXTENSION,
-        'Attachment extension is not allowed',
+        'Extensão do anexo não permitida',
         HttpStatus.BAD_REQUEST,
       );
     if (!CUSTOMER_ATTACHMENT_MIME_TYPES.includes(file.mimetype as never))
       throw new ApplicationException(
         ERROR_CODES.UPLOAD_INVALID_MIME_TYPE,
-        'Attachment MIME type is not allowed',
+        'Tipo MIME do anexo não permitido',
         HttpStatus.BAD_REQUEST,
       );
     const pdf = file.buffer.subarray(0, 5).toString() === '%PDF-';
@@ -705,7 +743,7 @@ export class CustomersService {
     )
       throw new ApplicationException(
         ERROR_CODES.UPLOAD_INVALID_MIME_TYPE,
-        'Attachment content does not match its declared type',
+        'O conteúdo do anexo não corresponde ao tipo declarado',
         HttpStatus.BAD_REQUEST,
       );
   }
@@ -724,7 +762,7 @@ export class CustomersService {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
       throw new ApplicationException(
         ERROR_CODES.CUSTOMER_CONFLICT,
-        'CPF or CNPJ is already in use',
+        'CPF ou CNPJ já está em uso',
         HttpStatus.CONFLICT,
         { fields: error.meta?.target ?? [] },
       );

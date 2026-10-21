@@ -10,3 +10,11 @@ export const AUDIT_ACTIONS = {
 } as const;
 
 export const AUTH_RESOURCE = 'AUTH_SESSION';
+
+/**
+ * Bloqueio temporário por conta, complementar ao rate limit por IP (que um
+ * atacante contorna rodando de vários IPs). Valores em constante, não em env:
+ * variável nova e obrigatória derrubaria o boot em produção.
+ */
+export const LOGIN_MAX_FAILED_ATTEMPTS = 10;
+export const LOGIN_LOCK_DURATION_MS = 15 * 60 * 1000;

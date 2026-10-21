@@ -6,7 +6,10 @@ import { AppConfigService } from '../config/app-config.service';
 import { PrismaService } from '../database/prisma.service';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
-import { AUDIT_ACTIONS, AUTH_RESOURCE } from '../../shared/constants/auth.constants';
+import {
+  AUDIT_ACTIONS,
+  LOGIN_LOCK_DURATION_MS,
+  LOGIN_MAX_FAILED_ATTEMPTS, AUTH_RESOURCE } from '../../shared/constants/auth.constants';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
 import { PasswordService } from './password.service';
 import type {
@@ -43,6 +46,23 @@ export class AuthService {
     private readonly passwords: PasswordService,
   ) {}
 
+  /**
+   * Conta a tentativa errada e bloqueia a conta ao atingir o teto. O bloqueio
+   * é por tempo (não permanente) para não virar negação de serviço contra o
+   * usuário legítimo — e some sozinho no próximo login bem-sucedido.
+   */
+  private async registerFailedAttempt(user: { id: string; failedLoginAttempts: number }): Promise<void> {
+    const attempts = user.failedLoginAttempts + 1;
+    const reached = attempts >= LOGIN_MAX_FAILED_ATTEMPTS;
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        failedLoginAttempts: reached ? 0 : attempts,
+        ...(reached ? { lockedUntil: new Date(Date.now() + LOGIN_LOCK_DURATION_MS) } : {}),
+      },
+    });
+  }
+
   async login(input: LoginDto, context: AuthRequestContext): Promise<TokenPairResponseDto> {
     const user = await this.prisma.user.findUnique({
       where: { email: input.email },
@@ -53,18 +73,42 @@ export class AuthService {
       input.password,
     );
 
+    const lockedUntil = user?.lockedUntil ?? null;
+    const locked = Boolean(lockedUntil && lockedUntil.getTime() > Date.now());
+
     if (!user || !passwordValid || !user.isActive) {
+      if (user && !passwordValid && user.isActive) await this.registerFailedAttempt(user);
       await this.writeAudit(AUDIT_ACTIONS.LOGIN_FAILURE, user?.id ?? null, context, {
         email: input.email,
         reason: !user || !passwordValid ? 'INVALID_CREDENTIALS' : 'USER_INACTIVE',
+        ...(locked ? { locked: true } : {}),
       });
 
+      // Senha errada devolve sempre a MESMA resposta, bloqueado ou não: avisar
+      // do bloqueio aqui diria a um atacante que o e-mail existe.
       throw new ApplicationException(
         !user || !passwordValid
           ? ERROR_CODES.AUTH_INVALID_CREDENTIALS
           : ERROR_CODES.AUTH_USER_INACTIVE,
-        !user || !passwordValid ? 'Invalid email or password' : 'User account is inactive',
+        !user || !passwordValid
+          ? 'E-mail ou senha inválidos'
+          : 'Esta conta está inativa',
         HttpStatus.UNAUTHORIZED,
+      );
+    }
+
+    // Senha correta durante o bloqueio: aí sim vale explicar, porque quem
+    // chegou aqui já provou conhecer a senha.
+    if (locked) {
+      const minutos = Math.max(1, Math.ceil((lockedUntil!.getTime() - Date.now()) / 60_000));
+      await this.writeAudit(AUDIT_ACTIONS.LOGIN_FAILURE, user.id, context, {
+        email: input.email,
+        reason: 'ACCOUNT_LOCKED',
+      });
+      throw new ApplicationException(
+        ERROR_CODES.AUTH_ACCOUNT_LOCKED,
+        `Muitas tentativas sem sucesso. Tente novamente em ${minutos} minuto(s).`,
+        HttpStatus.TOO_MANY_REQUESTS,
       );
     }
 
@@ -94,7 +138,8 @@ export class AuthService {
     await this.prisma.$transaction([
       this.prisma.user.update({
         where: { id: user.id },
-        data: { lastLoginAt: now },
+        // Entrou: zera o contador e qualquer bloqueio pendente.
+        data: { lastLoginAt: now, failedLoginAttempts: 0, lockedUntil: null },
       }),
       this.prisma.refreshToken.create({
         data: tokens.refreshTokenRecord,
@@ -136,7 +181,7 @@ export class AuthService {
       }
       throw new ApplicationException(
         ERROR_CODES.AUTH_SESSION_REVOKED,
-        'Refresh token has already been used or revoked',
+        'O token de renovação já foi utilizado ou revogado',
         HttpStatus.UNAUTHORIZED,
       );
     }
@@ -149,7 +194,7 @@ export class AuthService {
       });
       throw new ApplicationException(
         ERROR_CODES.AUTH_USER_INACTIVE,
-        'User account is inactive',
+        'Conta de usuário inativa',
         HttpStatus.UNAUTHORIZED,
       );
     }
@@ -244,7 +289,7 @@ export class AuthService {
     } catch {
       throw new ApplicationException(
         ERROR_CODES.AUTH_INVALID_TOKEN,
-        'Access token is invalid or expired',
+        'Token de acesso inválido ou expirado',
         HttpStatus.UNAUTHORIZED,
       );
     }
@@ -252,7 +297,7 @@ export class AuthService {
     if (payload.type !== 'access' || !payload.sub || !payload.jti) {
       throw new ApplicationException(
         ERROR_CODES.AUTH_INVALID_TOKEN,
-        'Access token is invalid or expired',
+        'Token de acesso inválido ou expirado',
         HttpStatus.UNAUTHORIZED,
       );
     }
@@ -260,7 +305,7 @@ export class AuthService {
     if (!payload.sid) {
       throw new ApplicationException(
         ERROR_CODES.AUTH_INVALID_TOKEN,
-        'Access token is invalid or expired',
+        'Token de acesso inválido ou expirado',
         HttpStatus.UNAUTHORIZED,
       );
     }
@@ -281,14 +326,14 @@ export class AuthService {
     if (!session) {
       throw new ApplicationException(
         ERROR_CODES.AUTH_SESSION_REVOKED,
-        'Session is no longer active',
+        'A sessão não está mais ativa',
         HttpStatus.UNAUTHORIZED,
       );
     }
     if (!session.user.isActive) {
       throw new ApplicationException(
         ERROR_CODES.AUTH_USER_INACTIVE,
-        'User account is inactive',
+        'Conta de usuário inativa',
         HttpStatus.UNAUTHORIZED,
       );
     }
@@ -380,7 +425,7 @@ export class AuthService {
   private invalidRefreshToken(): ApplicationException {
     return new ApplicationException(
       ERROR_CODES.AUTH_INVALID_TOKEN,
-      'Refresh token is invalid or expired',
+      'Token de renovação inválido ou expirado',
       HttpStatus.UNAUTHORIZED,
     );
   }

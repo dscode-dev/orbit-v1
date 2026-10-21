@@ -150,7 +150,7 @@ describe('InventoryService ProductSupplier relationship', () => {
         context,
       ),
     ).rejects.toEqual(
-      new ApplicationException(ERROR_CODES.SUPPLIER_NOT_FOUND, 'Supplier is inactive', HttpStatus.CONFLICT),
+      new ApplicationException(ERROR_CODES.SUPPLIER_NOT_FOUND, 'Fornecedor inativo', HttpStatus.CONFLICT),
     );
     expect(tx.productSupplier.upsert).not.toHaveBeenCalled();
   });

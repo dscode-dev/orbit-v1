@@ -229,7 +229,7 @@ export class AssignmentsService {
     if (!assignment) {
       throw new ApplicationException(
         ERROR_CODES.ASSIGNMENT_NOT_FOUND,
-        'Assignment was not found',
+        'Atribuição não encontrada',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -255,7 +255,7 @@ export class AssignmentsService {
       if (existing) {
         throw new ApplicationException(
           ERROR_CODES.ASSIGNMENT_INVALID_TRANSITION,
-          'Operation already has a primary assignment',
+          'Este atendimento já tem um técnico responsável',
           HttpStatus.CONFLICT,
         );
       }
@@ -310,7 +310,7 @@ export class AssignmentsService {
       if (transition.count !== 1) {
         throw new ApplicationException(
           ERROR_CODES.ASSIGNMENT_INVALID_TRANSITION,
-          'Assignment changed while reassignment was being processed',
+          'A atribuição mudou durante a reatribuição; tente novamente',
           HttpStatus.CONFLICT,
         );
       }
@@ -480,7 +480,7 @@ export class AssignmentsService {
       if (transition.count !== 1) {
         throw new ApplicationException(
           ERROR_CODES.ASSIGNMENT_INVALID_TRANSITION,
-          'Assignment transition conflicted with another update',
+          'Outra atualização alterou esta atribuição; tente novamente',
           HttpStatus.CONFLICT,
         );
       }
@@ -692,7 +692,7 @@ export class AssignmentsService {
       if (transition.count !== 1) {
         throw new ApplicationException(
           ERROR_CODES.ASSIGNMENT_INVALID_TRANSITION,
-          'Assignment transition conflicted with another update',
+          'Outra atualização alterou esta atribuição; tente novamente',
           HttpStatus.CONFLICT,
         );
       }
@@ -713,7 +713,7 @@ export class AssignmentsService {
         if (operationTransition.count !== 1) {
           throw new ApplicationException(
             ERROR_CODES.OPERATION_NOT_FOUND,
-            'Operation could not be synchronized with assignment',
+            'Não foi possível sincronizar o atendimento com a atribuição',
             HttpStatus.CONFLICT,
           );
         }
@@ -770,22 +770,43 @@ export class AssignmentsService {
     forcedAssignee?: string,
     gateVisibility = false,
   ): Prisma.AssignmentWhereInput {
+    // Os filtros vão num AND: vários deles escrevem na chave `operation` e, num
+    // único objeto literal, o último sobrescreveria os anteriores.
+    const and: Prisma.AssignmentWhereInput[] = [];
+    if (query.customerId) and.push({ operation: { customerId: query.customerId } });
+    if (query.equipmentId) and.push({ operation: { equipmentId: query.equipmentId } });
+    const scheduled = this.scheduledWindow(query);
+    if (scheduled) and.push(scheduled);
+    // App do operador: só demandas autorizadas pela gestão. Itens já aceitos/
+    // em andamento/concluídos permanecem visíveis (histórico e execução).
+    if (gateVisibility) {
+      and.push({ status: { notIn: [AssignmentStatus.CANCELED, AssignmentStatus.REJECTED] } });
+      and.push({ OR: [{ operatorVisible: true }, { status: { not: AssignmentStatus.ASSIGNED } }] });
+    }
     return {
       ...(query.operationId ? { operationId: query.operationId } : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(forcedAssignee ? { assignedTo: forcedAssignee } : query.assignedTo ? { assignedTo: query.assignedTo } : {}),
-      ...(query.customerId ? { operation: { customerId: query.customerId } } : {}),
-      ...(query.equipmentId ? { operation: { equipmentId: query.equipmentId } } : {}),
-      // App do operador: só demandas autorizadas pela gestão. Itens já aceitos/
-      // em andamento/concluídos permanecem visíveis (histórico e execução).
-      ...(gateVisibility
-        ? {
-            AND: [
-              { status: { notIn: [AssignmentStatus.CANCELED, AssignmentStatus.REJECTED] } },
-              { OR: [{ operatorVisible: true }, { status: { not: AssignmentStatus.ASSIGNED } }] },
-            ],
-          }
-        : {}),
+      ...(and.length > 0 ? { AND: and } : {}),
+    };
+  }
+
+  /**
+   * Recorte de janela da Agenda. Espelha a data que o calendário usa para
+   * posicionar o atendimento: `scheduledFor` quando existe, `assignedAt` caso
+   * contrário.
+   */
+  private scheduledWindow(query: ListAssignmentsQueryDto): Prisma.AssignmentWhereInput | null {
+    if (!query.scheduledFrom && !query.scheduledTo) return null;
+    const range = {
+      ...(query.scheduledFrom ? { gte: new Date(query.scheduledFrom) } : {}),
+      ...(query.scheduledTo ? { lte: new Date(query.scheduledTo) } : {}),
+    };
+    return {
+      OR: [
+        { operation: { scheduledFor: range } },
+        { operation: { scheduledFor: null }, assignedAt: range },
+      ],
     };
   }
 
@@ -794,7 +815,7 @@ export class AssignmentsService {
     if (!assignment) {
       throw new ApplicationException(
         ERROR_CODES.ASSIGNMENT_NOT_FOUND,
-        'Assignment was not found',
+        'Atribuição não encontrada',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -858,7 +879,7 @@ export class AssignmentsService {
     if (!assignment) {
       throw new ApplicationException(
         ERROR_CODES.ASSIGNMENT_NOT_FOUND,
-        'Assignment was not found',
+        'Atribuição não encontrada',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -870,7 +891,7 @@ export class AssignmentsService {
     if (!operation) {
       throw new ApplicationException(
         ERROR_CODES.OPERATION_NOT_FOUND,
-        'Operation was not found',
+        'Atendimento não encontrado',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -884,7 +905,7 @@ export class AssignmentsService {
     if (!user || !user.isActive || user.disabledAt || user.role === Role.VIEWER) {
       throw new ApplicationException(
         ERROR_CODES.OPERATION_OPERATOR_INVALID,
-        'Assigned operator must exist, be active and have an operational role',
+        'O operador atribuído precisa existir, estar ativo e ter perfil operacional',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -894,7 +915,7 @@ export class AssignmentsService {
     if (actor.role === Role.OPERATOR && assignment.assignedTo !== actor.id) {
       throw new ApplicationException(
         ERROR_CODES.ASSIGNMENT_OPERATOR_FORBIDDEN,
-        'Operators can only access their own assignments',
+        'O operador só acessa os próprios atendimentos',
         HttpStatus.FORBIDDEN,
       );
     }
@@ -904,7 +925,7 @@ export class AssignmentsService {
     if (assignment.assignedTo !== actor.id) {
       throw new ApplicationException(
         ERROR_CODES.ASSIGNMENT_OPERATOR_FORBIDDEN,
-        'Only the assigned operator can execute this transition',
+        'Somente o técnico atribuído pode executar esta ação',
         HttpStatus.FORBIDDEN,
       );
     }
@@ -943,7 +964,7 @@ export class AssignmentsService {
     if (!allowed.includes(current)) {
       throw new ApplicationException(
         ERROR_CODES.ASSIGNMENT_INVALID_TRANSITION,
-        'Assignment transition is not allowed from the current status',
+        'Esta ação não é permitida a partir do status atual',
         HttpStatus.CONFLICT,
       );
     }

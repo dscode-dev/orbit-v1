@@ -267,7 +267,7 @@ export class SignaturesService {
   ): Promise<SignatureResponse> {
     return this.prisma.$transaction(async (tx) => {
       const organization = await tx.organization.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } });
-      if (!organization) throw new ApplicationException(ERROR_CODES.ORGANIZATION_NOT_FOUND, 'Organization was not found', HttpStatus.NOT_FOUND);
+      if (!organization) throw new ApplicationException(ERROR_CODES.ORGANIZATION_NOT_FOUND, 'Organização não encontrada', HttpStatus.NOT_FOUND);
       await this.assertOwnerLinkAvailable(tx, dto.userId ?? null);
       if (dto.isDefault) await tx.signature.updateMany({ where: { organizationId: organization.id, isDefault: true }, data: { isDefault: false } });
       const created = await tx.signature.create({
@@ -440,7 +440,7 @@ export class SignaturesService {
     if (!signature.imageStorageKey) {
       throw new ApplicationException(
         ERROR_CODES.SIGNATURE_IMAGE_REQUIRED,
-        'Signature image was not uploaded',
+        'A imagem de assinatura não foi enviada',
         HttpStatus.CONFLICT,
       );
     }
@@ -490,7 +490,7 @@ export class SignaturesService {
     if (!signature || (!options.includeDeleted && signature.deletedAt)) {
       throw new ApplicationException(
         ERROR_CODES.SIGNATURE_NOT_FOUND,
-        'Signature was not found',
+        'Assinatura não encontrada',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -507,21 +507,21 @@ export class SignaturesService {
     if (!file) {
       throw new ApplicationException(
         ERROR_CODES.SIGNATURE_IMAGE_REQUIRED,
-        'Signature image file is required',
+        'O arquivo da imagem de assinatura é obrigatório',
         HttpStatus.BAD_REQUEST,
       );
     }
     if (file.size <= 0 || file.size > MAX_SIGNATURE_IMAGE_SIZE_BYTES) {
       throw new ApplicationException(
         ERROR_CODES.UPLOAD_FILE_TOO_LARGE,
-        'Signature image is empty or exceeds the 2 MiB limit',
+        'A imagem de assinatura está vazia ou excede o limite de 2 MiB',
         HttpStatus.BAD_REQUEST,
       );
     }
     if (!SIGNATURE_IMAGE_MIME_TYPES.includes(file.mimetype as never)) {
       throw new ApplicationException(
         ERROR_CODES.UPLOAD_INVALID_MIME_TYPE,
-        'Signature image MIME type is not allowed',
+        'Tipo MIME da imagem de assinatura não permitido',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -529,14 +529,14 @@ export class SignaturesService {
     if (!SIGNATURE_IMAGE_EXTENSIONS.includes(extension as never)) {
       throw new ApplicationException(
         ERROR_CODES.UPLOAD_INVALID_EXTENSION,
-        'Signature image extension is not allowed',
+        'Extensão da imagem de assinatura não permitida',
         HttpStatus.BAD_REQUEST,
       );
     }
     if (!this.hasValidBinarySignature(file.buffer, file.mimetype)) {
       throw new ApplicationException(
         ERROR_CODES.UPLOAD_INVALID_MIME_TYPE,
-        'Signature image binary signature is invalid',
+        'A assinatura binária da imagem de assinatura é inválida',
         HttpStatus.BAD_REQUEST,
       );
     }

@@ -177,7 +177,7 @@ export class DocumentEngineService {
     if (!document.operationId) {
       throw new ApplicationException(
         ERROR_CODES.DOCUMENT_NOT_FOUND,
-        'Document is not linked to an operation or budget',
+        'O documento não está vinculado a um atendimento ou orçamento',
         HttpStatus.CONFLICT,
       );
     }
@@ -196,7 +196,7 @@ export class DocumentEngineService {
     if (!template) {
       throw new ApplicationException(
         ERROR_CODES.TEMPLATE_NOT_FOUND,
-        'Document template was not found',
+        'Modelo de documento não encontrado',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -229,7 +229,7 @@ export class DocumentEngineService {
     if (!operation) {
       throw new ApplicationException(
         ERROR_CODES.OPERATION_NOT_FOUND,
-        'Operation was not found',
+        'Atendimento não encontrado',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -355,7 +355,7 @@ export class DocumentEngineService {
       if (!document.budgetId && !document.operationId) {
         throw new ApplicationException(
           ERROR_CODES.DOCUMENT_NOT_FOUND,
-          'Document is not linked to an operation or budget',
+          'O documento não está vinculado a um atendimento ou orçamento',
           HttpStatus.CONFLICT,
         );
       }
@@ -401,7 +401,7 @@ export class DocumentEngineService {
           await this.assets.delete(stored.storageKey).catch(() => undefined);
           throw new ApplicationException(
             ERROR_CODES.DOCUMENT_RENDER_FAILED,
-            'Document changed while rendering; retry the render request',
+            'O documento mudou durante a geração; gere novamente',
             HttpStatus.CONFLICT,
           );
         }
@@ -466,7 +466,7 @@ export class DocumentEngineService {
       if (error instanceof ApplicationException) throw error;
       throw new ApplicationException(
         ERROR_CODES.DOCUMENT_RENDER_FAILED,
-        'Document rendering failed',
+        'Não foi possível gerar o documento',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -483,7 +483,7 @@ export class DocumentEngineService {
     if (!document.storageKey || !document.mimeType || !document.fileSize) {
       throw new ApplicationException(
         ERROR_CODES.DOCUMENT_DOWNLOAD_NOT_READY,
-        'Document has not been rendered yet',
+        'O documento ainda não foi gerado',
         HttpStatus.CONFLICT,
       );
     }
@@ -492,7 +492,7 @@ export class DocumentEngineService {
     if (!renderedFingerprint || renderedFingerprint !== currentBlueprint.metadata.sourceFingerprint) {
       throw new ApplicationException(
         ERROR_CODES.DOCUMENT_STALE,
-        'Document is outdated because its source changed; render it again before downloading',
+        'O documento está desatualizado porque os dados mudaram; gere novamente antes de baixar',
         HttpStatus.CONFLICT,
         {
           documentId: document.id,
@@ -509,7 +509,7 @@ export class DocumentEngineService {
       if (error instanceof ApplicationException) throw error;
       throw new ApplicationException(
         ERROR_CODES.DOCUMENT_DOWNLOAD_NOT_READY,
-        'Document binary is not available',
+        'O arquivo do documento não está disponível',
         HttpStatus.CONFLICT,
       );
     }
@@ -545,7 +545,7 @@ export class DocumentEngineService {
     if (!document) {
       throw new ApplicationException(
         ERROR_CODES.DOCUMENT_NOT_FOUND,
-        'Budget document was not rendered yet',
+        'O PDF do orçamento ainda não foi gerado',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -561,7 +561,7 @@ export class DocumentEngineService {
     if (forbidden) {
       throw new ApplicationException(
         ERROR_CODES.DOCUMENT_FORBIDDEN_TYPE,
-        'The actor cannot access this financial document type',
+        'Seu perfil não tem acesso a este tipo de documento financeiro',
         HttpStatus.FORBIDDEN,
       );
     }
@@ -658,7 +658,7 @@ export class DocumentEngineService {
     if (!document) {
       throw new ApplicationException(
         ERROR_CODES.DOCUMENT_NOT_FOUND,
-        'Document was not found',
+        'Documento não encontrado',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -673,7 +673,7 @@ export class DocumentEngineService {
     if (!budget) {
       throw new ApplicationException(
         ERROR_CODES.BUDGET_NOT_FOUND,
-        'Budget was not found',
+        'Orçamento não encontrado',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -685,7 +685,7 @@ export class DocumentEngineService {
     if (blockedStatuses.includes(status)) {
       throw new ApplicationException(
         ERROR_CODES.BUDGET_INVALID_STATUS,
-        'Canceled or rejected budgets cannot be rendered',
+        'Orçamentos cancelados ou recusados não geram PDF',
         HttpStatus.CONFLICT,
       );
     }
@@ -708,7 +708,7 @@ export class DocumentEngineService {
     if (!document.operationId) {
       throw new ApplicationException(
         ERROR_CODES.DOCUMENT_NOT_FOUND,
-        'Document is not linked to an operation or budget',
+        'O documento não está vinculado a um atendimento ou orçamento',
         HttpStatus.CONFLICT,
       );
     }

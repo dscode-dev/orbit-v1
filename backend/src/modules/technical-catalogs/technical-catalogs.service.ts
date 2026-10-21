@@ -273,7 +273,7 @@ export class TechnicalCatalogsService {
     if (new Set(ids).size !== ids.length) {
       throw new ApplicationException(
         ERROR_CODES.TECHNICAL_CATALOG_INVALID_ORDER,
-        'Catalog order cannot contain duplicate identifiers',
+        'A ordenação do catálogo não pode conter identificadores duplicados',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -283,7 +283,7 @@ export class TechnicalCatalogsService {
     if (count !== ids.length) {
       throw new ApplicationException(
         ERROR_CODES.TECHNICAL_CATALOG_INVALID_ORDER,
-        'Every catalog item must belong to the same organization and type',
+        'Todos os itens de catálogo devem pertencer à mesma organização e ao mesmo tipo',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -331,14 +331,14 @@ export class TechnicalCatalogsService {
     if (type === TechnicalCatalogType.CHECKLIST && !maintenanceType) {
       throw new ApplicationException(
         ERROR_CODES.TECHNICAL_CATALOG_INVALID_TYPE,
-        'Checklist catalog items require a maintenance type',
+        'Itens de catálogo do tipo checklist exigem um tipo de manutenção',
         HttpStatus.BAD_REQUEST,
       );
     }
     if (type !== TechnicalCatalogType.CHECKLIST && maintenanceType) {
       throw new ApplicationException(
         ERROR_CODES.TECHNICAL_CATALOG_INVALID_TYPE,
-        'Maintenance type is only available for checklist catalog items',
+        'O tipo de manutenção só se aplica a itens de catálogo do tipo checklist',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -352,7 +352,7 @@ export class TechnicalCatalogsService {
     if (!organization) {
       throw new ApplicationException(
         ERROR_CODES.ORGANIZATION_NOT_FOUND,
-        'Organization was not found',
+        'Organização não encontrada',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -370,7 +370,7 @@ export class TechnicalCatalogsService {
     if (!catalog) {
       throw new ApplicationException(
         ERROR_CODES.TECHNICAL_CATALOG_NOT_FOUND,
-        'Technical catalog item was not found',
+        'Item de catálogo técnico não encontrado',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -381,7 +381,7 @@ export class TechnicalCatalogsService {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
       throw new ApplicationException(
         ERROR_CODES.TECHNICAL_CATALOG_CONFLICT,
-        'An active catalog item with the same title already exists',
+        'Já existe um item de catálogo ativo com o mesmo título',
         HttpStatus.CONFLICT,
       );
     }

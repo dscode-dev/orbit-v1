@@ -213,7 +213,7 @@ export class CustomerPortalService {
         audience: this.config.jwtAudience,
       });
     } catch {
-      throw new ApplicationException(ERROR_CODES.AUTH_INVALID_TOKEN, 'Customer token is invalid or expired', HttpStatus.UNAUTHORIZED);
+      throw new ApplicationException(ERROR_CODES.AUTH_INVALID_TOKEN, 'Token do cliente inválido ou expirado', HttpStatus.UNAUTHORIZED);
     }
     if (payload.type !== 'customer-access' || !payload.sid) throw this.invalidToken();
     const session = await this.prisma.customerPortalRefreshToken.findFirst({

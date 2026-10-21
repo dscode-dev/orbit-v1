@@ -107,7 +107,7 @@ export class PricingService {
   ): Promise<ProductPricingWithRelations> {
     const product = await this.productOrThrow(productId);
     if (!product.isActive) {
-      throw new ApplicationException(ERROR_CODES.PRODUCT_NOT_FOUND, 'Product is inactive', HttpStatus.CONFLICT);
+      throw new ApplicationException(ERROR_CODES.PRODUCT_NOT_FOUND, 'Produto inativo', HttpStatus.CONFLICT);
     }
     const organization = await this.organizationOrThrow();
     const period = this.parsePeriod(dto.validFrom, dto.validUntil);
@@ -174,7 +174,7 @@ export class PricingService {
           },
         });
         if (deactivated.count !== 1) {
-          throw new ApplicationException(ERROR_CODES.PRICING_OVERLAP, 'Pricing revision conflicted with another revision', HttpStatus.CONFLICT);
+          throw new ApplicationException(ERROR_CODES.PRICING_OVERLAP, 'A revisão da precificação conflitou com outra revisão', HttpStatus.CONFLICT);
         }
         const revision = await tx.productPricing.create({
           data: {
@@ -281,7 +281,7 @@ export class PricingService {
       orderBy: [{ validFrom: 'desc' }, { createdAt: 'desc' }],
     });
     if (!pricing) {
-      throw new ApplicationException(ERROR_CODES.PRICING_NOT_FOUND, 'Active pricing was not found', HttpStatus.NOT_FOUND);
+      throw new ApplicationException(ERROR_CODES.PRICING_NOT_FOUND, 'Precificação ativa não encontrada', HttpStatus.NOT_FOUND);
     }
     return {
       pricingId: pricing.id,
@@ -323,7 +323,7 @@ export class PricingService {
     if (overlap) {
       throw new ApplicationException(
         ERROR_CODES.PRICING_OVERLAP,
-        'Pricing period overlaps an active pricing record',
+        'O período informado se sobrepõe a uma precificação ativa',
         HttpStatus.CONFLICT,
       );
     }
@@ -375,28 +375,28 @@ export class PricingService {
     if (period.validUntil && period.validUntil <= period.validFrom) {
       throw new ApplicationException(
         ERROR_CODES.PRICING_INVALID_PERIOD,
-        'Pricing validity end must be after start',
+        'O fim da vigência deve ser posterior ao início',
         HttpStatus.BAD_REQUEST,
       );
     }
     if (prices.salePrice.lt(prices.minimumSalePrice)) {
       throw new ApplicationException(
         ERROR_CODES.PRICING_INVALID_MARGIN,
-        'Sale price cannot be lower than minimum sale price',
+        'O preço de venda não pode ser menor que o preço mínimo de venda',
         HttpStatus.BAD_REQUEST,
       );
     }
     if (prices.suggestedSalePrice.lt(prices.minimumSalePrice)) {
       throw new ApplicationException(
         ERROR_CODES.PRICING_INVALID_MARGIN,
-        'Suggested sale price cannot be lower than minimum sale price',
+        'O preço de venda sugerido não pode ser menor que o preço mínimo de venda',
         HttpStatus.BAD_REQUEST,
       );
     }
     if (prices.salePrice.lt(prices.averageCost) || prices.marginPercentage.lt(0)) {
       throw new ApplicationException(
         ERROR_CODES.PRICING_INVALID_MARGIN,
-        'Pricing would produce an inconsistent negative margin',
+        'A precificação resultaria em margem negativa inconsistente',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -409,7 +409,7 @@ export class PricingService {
   private async pricingOrThrow(id: string): Promise<ProductPricingWithRelations> {
     const pricing = await this.prisma.productPricing.findUnique({ where: { id }, include: PRICING_INCLUDE });
     if (!pricing) {
-      throw new ApplicationException(ERROR_CODES.PRICING_NOT_FOUND, 'Pricing record was not found', HttpStatus.NOT_FOUND);
+      throw new ApplicationException(ERROR_CODES.PRICING_NOT_FOUND, 'Precificação não encontrada', HttpStatus.NOT_FOUND);
     }
     return pricing;
   }
@@ -417,7 +417,7 @@ export class PricingService {
   private async productOrThrow(id: string): Promise<{ id: string; sku: string; isActive: boolean }> {
     const product = await this.prisma.product.findUnique({ where: { id }, select: { id: true, sku: true, isActive: true } });
     if (!product) {
-      throw new ApplicationException(ERROR_CODES.PRODUCT_NOT_FOUND, 'Product was not found', HttpStatus.NOT_FOUND);
+      throw new ApplicationException(ERROR_CODES.PRODUCT_NOT_FOUND, 'Produto não encontrado', HttpStatus.NOT_FOUND);
     }
     return product;
   }
@@ -428,7 +428,7 @@ export class PricingService {
       select: { id: true },
     });
     if (!organization) {
-      throw new ApplicationException(ERROR_CODES.ORGANIZATION_NOT_FOUND, 'Organization was not found', HttpStatus.NOT_FOUND);
+      throw new ApplicationException(ERROR_CODES.ORGANIZATION_NOT_FOUND, 'Organização não encontrada', HttpStatus.NOT_FOUND);
     }
     return organization;
   }
@@ -466,7 +466,7 @@ export class PricingService {
     ) {
       throw new ApplicationException(
         ERROR_CODES.PRICING_OVERLAP,
-        'Pricing period overlaps an active pricing record',
+        'O período informado se sobrepõe a uma precificação ativa',
         HttpStatus.CONFLICT,
       );
     }
@@ -476,7 +476,7 @@ export class PricingService {
     ) {
       throw new ApplicationException(
         ERROR_CODES.PRICING_OVERLAP,
-        'Pricing period overlaps an active pricing record',
+        'O período informado se sobrepõe a uma precificação ativa',
         HttpStatus.CONFLICT,
       );
     }

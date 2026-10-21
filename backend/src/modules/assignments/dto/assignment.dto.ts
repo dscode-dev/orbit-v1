@@ -1,6 +1,6 @@
 import { AssignmentStatus } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
-import { ArrayMaxSize, ArrayUnique, IsArray, IsEnum, IsInt, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min } from 'class-validator';
+import { ArrayMaxSize, ArrayUnique, IsArray, IsEnum, IsInt, IsISO8601, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min } from 'class-validator';
 
 const trim = (value: unknown): unknown => (typeof value === 'string' ? value.trim() : value);
 
@@ -12,6 +12,13 @@ export class ListAssignmentsQueryDto {
   @IsOptional() @IsUUID('4') customerId?: string;
   @IsOptional() @IsUUID('4') equipmentId?: string;
   @IsOptional() @IsEnum(AssignmentStatus) status?: AssignmentStatus;
+  /**
+   * Janela de agenda. Filtra pela data em que o atendimento aparece no
+   * calendário: `operation.scheduledFor`, ou `assignedAt` quando não há
+   * agendamento. Sem esses parâmetros o comportamento é o anterior.
+   */
+  @IsOptional() @IsISO8601() scheduledFrom?: string;
+  @IsOptional() @IsISO8601() scheduledTo?: string;
 }
 
 export class CreateAssignmentDto {

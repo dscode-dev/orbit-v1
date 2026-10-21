@@ -231,7 +231,7 @@ export class DocumentConfigurationService implements OnModuleInit {
     if (!organization || !settings) {
       throw new ApplicationException(
         ERROR_CODES.ORGANIZATION_NOT_FOUND,
-        'Organization foundation is required for document configuration',
+        'Cadastre a organização antes de configurar documentos',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -253,7 +253,7 @@ export class DocumentConfigurationService implements OnModuleInit {
     if (!template) {
       throw new ApplicationException(
         ERROR_CODES.NOT_FOUND,
-        'Document template was not found',
+        'Modelo de documento não encontrado',
         HttpStatus.NOT_FOUND,
       );
     }

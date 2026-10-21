@@ -83,7 +83,7 @@ export class DocumentRendererService {
           if (block.height > this.layout.availableHeight()) {
             throw new ApplicationException(
               ERROR_CODES.DOCUMENT_SIZE_LIMIT_EXCEEDED,
-              'A document block exceeds the available page height',
+              'Um bloco do documento ultrapassa a altura útil da página',
               HttpStatus.BAD_REQUEST,
             );
           }
@@ -107,7 +107,7 @@ export class DocumentRendererService {
     if (pages.length > DOCUMENT_MAX_PAGES) {
       throw new ApplicationException(
         ERROR_CODES.DOCUMENT_SIZE_LIMIT_EXCEEDED,
-        'Document exceeds the maximum number of pages',
+        'O documento ultrapassa o número máximo de páginas',
         HttpStatus.BAD_REQUEST,
       );
     }

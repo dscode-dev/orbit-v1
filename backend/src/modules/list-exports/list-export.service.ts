@@ -87,8 +87,8 @@ export class ListExportService {
     });
   }
 
-  async equipments(query: EquipmentsPdfExportQueryDto): Promise<PdfExportResult> {
-    const where = this.equipmentWhere(query);
+  async equipments(query: EquipmentsPdfExportQueryDto, actor: AuthenticatedUser): Promise<PdfExportResult> {
+    const where = { AND: [this.equipmentWhere(query), this.access.equipmentScope(actor)] };
     const total = await this.prisma.equipment.count({ where });
     this.assertLimit(total);
     const rows = await this.prisma.equipment.findMany({
@@ -361,7 +361,7 @@ export class ListExportService {
     if (total > EXPORT_LIMIT) {
       throw new ApplicationException(
         ERROR_CODES.BAD_REQUEST,
-        `Export exceeds the ${EXPORT_LIMIT} record limit. Narrow the filters and try again.`,
+        `A exportação excede o limite de ${EXPORT_LIMIT} registros. Refine os filtros e tente novamente.`,
         HttpStatus.BAD_REQUEST,
         { limit: EXPORT_LIMIT, total },
       );

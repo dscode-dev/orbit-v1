@@ -46,7 +46,7 @@ export class LocalStorageProvider implements StorageProviderContract, OnModuleIn
     } catch {
       throw new ApplicationException(
         ERROR_CODES.STORAGE_FILE_NOT_FOUND,
-        'Stored file was not found',
+        'Arquivo armazenado não encontrado',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -71,7 +71,7 @@ export class LocalStorageProvider implements StorageProviderContract, OnModuleIn
     if (!filePath.startsWith(`${this.rootPath}/`) && filePath !== this.rootPath) {
       throw new ApplicationException(
         ERROR_CODES.BAD_REQUEST,
-        'Invalid storage key',
+        'Chave de armazenamento inválida',
         HttpStatus.BAD_REQUEST,
       );
     }

@@ -537,6 +537,10 @@ model User {
   isActive                        Boolean                 @default(true) @map("is_active")
   disabledAt                      DateTime?               @map("disabled_at") @db.Timestamptz(3)
   lastLoginAt                     DateTime?               @map("last_login_at") @db.Timestamptz(3)
+  /// Tentativas de senha erradas seguidas. Zera em todo login bem-sucedido.
+  failedLoginAttempts             Int                     @default(0) @map("failed_login_attempts")
+  /// Enquanto estiver no futuro, o login é recusado mesmo com a senha certa.
+  lockedUntil                     DateTime?               @map("locked_until") @db.Timestamptz(3)
   createdAt                       DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt                       DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
   refreshTokens                   RefreshToken[]

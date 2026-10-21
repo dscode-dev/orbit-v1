@@ -564,7 +564,7 @@ export class MaintenancePlanningService {
     if (!plan)
       throw new ApplicationException(
         ERROR_CODES.MAINTENANCE_PLAN_NOT_FOUND,
-        'Maintenance plan was not found',
+        'Plano de manutenção não encontrado',
         HttpStatus.NOT_FOUND,
       );
     return plan;
@@ -580,7 +580,7 @@ export class MaintenancePlanningService {
     if (!execution)
       throw new ApplicationException(
         ERROR_CODES.MAINTENANCE_EXECUTION_NOT_FOUND,
-        'Maintenance execution was not found',
+        'Execução de manutenção não encontrada',
         HttpStatus.NOT_FOUND,
       );
     return execution;
@@ -594,7 +594,7 @@ export class MaintenancePlanningService {
     if (!equipment)
       throw new ApplicationException(
         ERROR_CODES.EQUIPMENT_NOT_FOUND,
-        'Equipment was not found',
+        'Equipamento não encontrado',
         HttpStatus.NOT_FOUND,
       );
   }
@@ -610,13 +610,13 @@ export class MaintenancePlanningService {
     if (!operation)
       throw new ApplicationException(
         ERROR_CODES.OPERATION_NOT_FOUND,
-        'Operation was not found',
+        'Atendimento não encontrado',
         HttpStatus.NOT_FOUND,
       );
     if (operation.equipmentId !== equipmentId) {
       throw new ApplicationException(
         ERROR_CODES.MAINTENANCE_OPERATION_MISMATCH,
-        'Operation does not belong to the maintenance equipment',
+        'O atendimento não pertence ao equipamento da manutenção',
         HttpStatus.BAD_REQUEST,
       );
     }

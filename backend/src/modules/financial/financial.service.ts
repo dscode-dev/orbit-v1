@@ -476,7 +476,7 @@ export class FinancialService {
     return this.runSerializable(async () => this.prisma.$transaction(async (tx) => {
       const current = await tx.financialEntry.findFirst({ where: { id, deletedAt: null }, include: ENTRY_INCLUDE });
       if (!current) {
-        throw new ApplicationException(ERROR_CODES.FINANCIAL_ENTRY_NOT_FOUND, 'Financial entry was not found', HttpStatus.NOT_FOUND);
+        throw new ApplicationException(ERROR_CODES.FINANCIAL_ENTRY_NOT_FOUND, 'Lançamento financeiro não encontrado', HttpStatus.NOT_FOUND);
       }
       this.assertPayable(current.status);
       const transition = await tx.financialEntry.updateMany({
@@ -526,7 +526,7 @@ export class FinancialService {
     return this.runSerializable(async () => this.prisma.$transaction(async (tx) => {
       const current = await tx.financialEntry.findFirst({ where: { id, deletedAt: null }, include: ENTRY_INCLUDE });
       if (!current) {
-        throw new ApplicationException(ERROR_CODES.FINANCIAL_ENTRY_NOT_FOUND, 'Financial entry was not found', HttpStatus.NOT_FOUND);
+        throw new ApplicationException(ERROR_CODES.FINANCIAL_ENTRY_NOT_FOUND, 'Lançamento financeiro não encontrado', HttpStatus.NOT_FOUND);
       }
       this.assertCancelable(current.status);
       const transition = await tx.financialEntry.updateMany({
@@ -667,7 +667,7 @@ export class FinancialService {
   private async accountOrThrow(id: string): Promise<Prisma.FinancialAccountGetPayload<{ include: typeof ACCOUNT_INCLUDE }>> {
     const account = await this.prisma.financialAccount.findFirst({ where: { id, deletedAt: null }, include: ACCOUNT_INCLUDE });
     if (!account) {
-      throw new ApplicationException(ERROR_CODES.FINANCIAL_ACCOUNT_NOT_FOUND, 'Financial account was not found', HttpStatus.NOT_FOUND);
+      throw new ApplicationException(ERROR_CODES.FINANCIAL_ACCOUNT_NOT_FOUND, 'Conta financeira não encontrada', HttpStatus.NOT_FOUND);
     }
     return account;
   }
@@ -675,7 +675,7 @@ export class FinancialService {
   private async categoryOrThrow(id: string): Promise<Prisma.FinancialCategoryGetPayload<{ include: typeof CATEGORY_INCLUDE }>> {
     const category = await this.prisma.financialCategory.findFirst({ where: { id, deletedAt: null }, include: CATEGORY_INCLUDE });
     if (!category) {
-      throw new ApplicationException(ERROR_CODES.FINANCIAL_CATEGORY_NOT_FOUND, 'Financial category was not found', HttpStatus.NOT_FOUND);
+      throw new ApplicationException(ERROR_CODES.FINANCIAL_CATEGORY_NOT_FOUND, 'Categoria financeira não encontrada', HttpStatus.NOT_FOUND);
     }
     return category;
   }
@@ -683,7 +683,7 @@ export class FinancialService {
   private async entryOrThrow(id: string): Promise<EntryWithRelations> {
     const entry = await this.prisma.financialEntry.findFirst({ where: { id, deletedAt: null }, include: ENTRY_INCLUDE });
     if (!entry) {
-      throw new ApplicationException(ERROR_CODES.FINANCIAL_ENTRY_NOT_FOUND, 'Financial entry was not found', HttpStatus.NOT_FOUND);
+      throw new ApplicationException(ERROR_CODES.FINANCIAL_ENTRY_NOT_FOUND, 'Lançamento financeiro não encontrado', HttpStatus.NOT_FOUND);
     }
     return entry;
   }
@@ -695,17 +695,17 @@ export class FinancialService {
     entryType: FinancialEntryType,
   ): Promise<void> {
     const account = await this.prisma.financialAccount.findFirst({ where: { id: accountId, organizationId, active: true, deletedAt: null }, select: { id: true } });
-    if (!account) throw new ApplicationException(ERROR_CODES.FINANCIAL_ACCOUNT_NOT_FOUND, 'Financial account was not found or inactive', HttpStatus.NOT_FOUND);
+    if (!account) throw new ApplicationException(ERROR_CODES.FINANCIAL_ACCOUNT_NOT_FOUND, 'Conta financeira não encontrada ou inativa', HttpStatus.NOT_FOUND);
     // Categoria é opcional no fluxo simplificado; só valida quando informada.
     if (!categoryId) return;
     const category = await this.prisma.financialCategory.findFirst({ where: { id: categoryId, organizationId, active: true, deletedAt: null }, select: { id: true, type: true } });
-    if (!category) throw new ApplicationException(ERROR_CODES.FINANCIAL_CATEGORY_NOT_FOUND, 'Financial category was not found or inactive', HttpStatus.NOT_FOUND);
+    if (!category) throw new ApplicationException(ERROR_CODES.FINANCIAL_CATEGORY_NOT_FOUND, 'Categoria financeira não encontrada ou inativa', HttpStatus.NOT_FOUND);
     if (
       (entryType === FinancialEntryType.RECEIVABLE && category.type !== FinancialCategoryType.INCOME) ||
       (entryType === FinancialEntryType.PAYABLE && category.type !== FinancialCategoryType.EXPENSE) ||
       (entryType === FinancialEntryType.TRANSFER && category.type !== FinancialCategoryType.TRANSFER)
     ) {
-      throw new ApplicationException(ERROR_CODES.FINANCIAL_INVALID_RELATIONSHIP, 'Financial category type does not match entry type', HttpStatus.BAD_REQUEST);
+      throw new ApplicationException(ERROR_CODES.FINANCIAL_INVALID_RELATIONSHIP, 'O tipo da categoria financeira não corresponde ao tipo do lançamento', HttpStatus.BAD_REQUEST);
     }
   }
 
@@ -730,25 +730,25 @@ export class FinancialService {
 
   private assertWritable(entry: EntryWithRelations): void {
     if (entry.status === FinancialEntryStatus.PAID || entry.status === FinancialEntryStatus.CANCELED) {
-      throw new ApplicationException(ERROR_CODES.FINANCIAL_ENTRY_INVALID_STATE, 'Final financial entries cannot be edited', HttpStatus.CONFLICT);
+      throw new ApplicationException(ERROR_CODES.FINANCIAL_ENTRY_INVALID_STATE, 'Lançamentos financeiros finalizados não podem ser editados', HttpStatus.CONFLICT);
     }
   }
 
   private assertPayable(status: FinancialEntryStatus): void {
     if (status === FinancialEntryStatus.PAID) {
-      throw new ApplicationException(ERROR_CODES.FINANCIAL_ENTRY_INVALID_STATE, 'Financial entry is already paid', HttpStatus.CONFLICT);
+      throw new ApplicationException(ERROR_CODES.FINANCIAL_ENTRY_INVALID_STATE, 'O lançamento financeiro já está pago', HttpStatus.CONFLICT);
     }
     if (status === FinancialEntryStatus.CANCELED) {
-      throw new ApplicationException(ERROR_CODES.FINANCIAL_ENTRY_INVALID_STATE, 'Canceled financial entries cannot be paid', HttpStatus.CONFLICT);
+      throw new ApplicationException(ERROR_CODES.FINANCIAL_ENTRY_INVALID_STATE, 'Lançamentos financeiros cancelados não podem ser pagos', HttpStatus.CONFLICT);
     }
   }
 
   private assertCancelable(status: FinancialEntryStatus): void {
     if (status === FinancialEntryStatus.CANCELED) {
-      throw new ApplicationException(ERROR_CODES.FINANCIAL_ENTRY_INVALID_STATE, 'Financial entry is already canceled', HttpStatus.CONFLICT);
+      throw new ApplicationException(ERROR_CODES.FINANCIAL_ENTRY_INVALID_STATE, 'O lançamento financeiro já está cancelado', HttpStatus.CONFLICT);
     }
     if (status === FinancialEntryStatus.PAID) {
-      throw new ApplicationException(ERROR_CODES.FINANCIAL_ENTRY_INVALID_STATE, 'Paid financial entries cannot be canceled in V1', HttpStatus.CONFLICT);
+      throw new ApplicationException(ERROR_CODES.FINANCIAL_ENTRY_INVALID_STATE, 'Lançamentos financeiros pagos não podem ser cancelados nesta versão', HttpStatus.CONFLICT);
     }
   }
 
@@ -874,7 +874,7 @@ export class FinancialService {
   private async organizationId(): Promise<string> {
     const organization = await this.prisma.organization.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } });
     if (!organization) {
-      throw new ApplicationException(ERROR_CODES.ORGANIZATION_NOT_FOUND, 'Organization was not found', HttpStatus.NOT_FOUND);
+      throw new ApplicationException(ERROR_CODES.ORGANIZATION_NOT_FOUND, 'Organização não encontrada', HttpStatus.NOT_FOUND);
     }
     return organization.id;
   }

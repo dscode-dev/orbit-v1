@@ -207,7 +207,7 @@ export class MaintenanceChecklistTemplatesService {
     if (!organization) {
       throw new ApplicationException(
         ERROR_CODES.ORGANIZATION_NOT_FOUND,
-        'Organization was not found',
+        'Organização não encontrada',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -222,7 +222,7 @@ export class MaintenanceChecklistTemplatesService {
     if (!template) {
       throw new ApplicationException(
         ERROR_CODES.MAINTENANCE_CHECKLIST_TEMPLATE_NOT_FOUND,
-        'Maintenance checklist template was not found',
+        'Modelo de checklist de manutenção não encontrado',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -233,7 +233,7 @@ export class MaintenanceChecklistTemplatesService {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
       throw new ApplicationException(
         ERROR_CODES.MAINTENANCE_CHECKLIST_TEMPLATE_CONFLICT,
-        'An equal checklist item already exists for this maintenance type',
+        'Já existe um item de checklist igual para este tipo de manutenção',
         HttpStatus.CONFLICT,
       );
     }

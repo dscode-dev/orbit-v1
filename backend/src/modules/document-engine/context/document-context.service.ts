@@ -371,7 +371,7 @@ export class DocumentContextService {
     if (!operation) {
       throw new ApplicationException(
         ERROR_CODES.OPERATION_NOT_FOUND,
-        'Operation was not found',
+        'Atendimento não encontrado',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -492,14 +492,14 @@ export class DocumentContextService {
     if (!template) {
       throw new ApplicationException(
         ERROR_CODES.TEMPLATE_NOT_FOUND,
-        'Document template was not found',
+        'Modelo de documento não encontrado',
         HttpStatus.NOT_FOUND,
       );
     }
     if (!template.isActive) {
       throw new ApplicationException(
         ERROR_CODES.TEMPLATE_INACTIVE,
-        'Document template is inactive and cannot be previewed',
+        'Este modelo de documento está inativo e não pode ser pré-visualizado',
         HttpStatus.CONFLICT,
       );
     }
@@ -547,7 +547,7 @@ export class DocumentContextService {
     if (!budget) {
       throw new ApplicationException(
         ERROR_CODES.BUDGET_NOT_FOUND,
-        'Budget was not found',
+        'Orçamento não encontrado',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -715,14 +715,14 @@ export class DocumentContextService {
     if (signatures.length === 0) {
       throw new ApplicationException(
         ERROR_CODES.SIGNATURE_NOT_FOUND,
-        'Document template requires a fixed signature, but no active signature is configured',
+        'O modelo exige assinatura fixa, mas não há assinatura ativa configurada',
         HttpStatus.CONFLICT,
       );
     }
     if (signatures.some((signature) => !signature.active)) {
       throw new ApplicationException(
         ERROR_CODES.SIGNATURE_INACTIVE,
-        'Configured signature is inactive',
+        'A assinatura configurada está inativa',
         HttpStatus.CONFLICT,
       );
     }
@@ -733,7 +733,7 @@ export class DocumentContextService {
     ) {
       throw new ApplicationException(
         ERROR_CODES.SIGNATURE_IMAGE_REQUIRED,
-        'Configured signature image was not uploaded',
+        'A assinatura configurada está sem imagem enviada',
         HttpStatus.CONFLICT,
       );
     }
@@ -1001,7 +1001,7 @@ export class DocumentContextService {
     if (!match) {
       throw new ApplicationException(
         ERROR_CODES.DOCUMENT_RENDER_FAILED,
-        'Execution signature must be a PNG or JPEG data URL',
+        'A assinatura da execução precisa ser PNG ou JPEG',
         HttpStatus.CONFLICT,
       );
     }
@@ -1012,7 +1012,7 @@ export class DocumentContextService {
     if (!this.isValidSignatureBinary(buffer, mimeType)) {
       throw new ApplicationException(
         ERROR_CODES.DOCUMENT_RENDER_FAILED,
-        'Execution signature binary is invalid',
+        'A imagem da assinatura da execução é inválida',
         HttpStatus.CONFLICT,
       );
     }

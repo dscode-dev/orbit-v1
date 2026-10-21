@@ -179,7 +179,7 @@ export class OrganizationService {
     if (!org) {
       throw new ApplicationException(
         ERROR_CODES.ORGANIZATION_NOT_FOUND,
-        'Organization was not found.',
+        'Organização não encontrada.',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -242,7 +242,7 @@ export class OrganizationService {
     if (!settings) {
       throw new ApplicationException(
         ERROR_CODES.ORGANIZATION_NOT_FOUND,
-        'Organization settings were not found',
+        'Configurações da organização não encontradas',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -435,7 +435,7 @@ export class OrganizationService {
     if (existing.isSystem) {
       throw new ApplicationException(
         ERROR_CODES.SYSTEM_TEMPLATE_PROTECTED,
-        'System document templates cannot be deleted',
+        'Modelos de documento do sistema não podem ser excluídos',
         HttpStatus.CONFLICT,
       );
     }
@@ -544,7 +544,7 @@ export class OrganizationService {
     if (!organization) {
       throw new ApplicationException(
         ERROR_CODES.ORGANIZATION_NOT_FOUND,
-        'Organization was not found. Run the initial seed before using organization endpoints.',
+        'Organização não encontrada. Rode a carga inicial antes de usar estes recursos.',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -559,7 +559,7 @@ export class OrganizationService {
     if (!template) {
       throw new ApplicationException(
         ERROR_CODES.NOT_FOUND,
-        'Document template was not found',
+        'Modelo de documento não encontrado',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -583,7 +583,7 @@ export class OrganizationService {
       if (requiresSignature || signatureId) {
         throw new ApplicationException(
           ERROR_CODES.VALIDATION_ERROR,
-          'Signature mode NONE cannot require or reference a signature',
+          'O modo "sem assinatura" não aceita exigir nem referenciar uma assinatura',
           HttpStatus.BAD_REQUEST,
         );
       }
@@ -593,7 +593,7 @@ export class OrganizationService {
     if (!requiresSignature) {
       throw new ApplicationException(
         ERROR_CODES.VALIDATION_ERROR,
-        'Signature configuration requires requiresSignature=true',
+        'Para configurar assinatura, marque que o documento exige assinatura',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -602,7 +602,7 @@ export class OrganizationService {
       if (!signatureId) {
         throw new ApplicationException(
           ERROR_CODES.VALIDATION_ERROR,
-          'FIXED and HYBRID signature modes require signatureId',
+          'Os modos de assinatura fixa e híbrida exigem uma assinatura selecionada',
           HttpStatus.BAD_REQUEST,
         );
       }
@@ -613,14 +613,14 @@ export class OrganizationService {
       if (!signature || signature.deletedAt) {
         throw new ApplicationException(
           ERROR_CODES.SIGNATURE_NOT_FOUND,
-          'Signature was not found',
+          'Assinatura não encontrada',
           HttpStatus.NOT_FOUND,
         );
       }
       if (!signature.active) {
         throw new ApplicationException(
           ERROR_CODES.SIGNATURE_INACTIVE,
-          'Inactive signatures cannot be assigned to templates',
+          'Assinaturas inativas não podem ser usadas em modelos',
           HttpStatus.CONFLICT,
         );
       }
@@ -642,7 +642,7 @@ export class OrganizationService {
     ) {
       throw new ApplicationException(
         ERROR_CODES.SIGNATURE_NOT_FOUND,
-        'Every institutional signature must exist, be active and have an uploaded image',
+        'Toda assinatura institucional precisa existir, estar ativa e ter imagem enviada',
         HttpStatus.CONFLICT,
       );
     }
@@ -657,7 +657,7 @@ export class OrganizationService {
     if (!asset) {
       throw new ApplicationException(
         ERROR_CODES.NOT_FOUND,
-        'Brand asset was not found',
+        'Arquivo de identidade visual não encontrado',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -668,14 +668,14 @@ export class OrganizationService {
     if (!file) {
       throw new ApplicationException(
         ERROR_CODES.UPLOAD_FILE_REQUIRED,
-        'A file field is required',
+        'Envie um arquivo',
         HttpStatus.BAD_REQUEST,
       );
     }
     if (file.size > MAX_BRAND_ASSET_SIZE_BYTES) {
       throw new ApplicationException(
         ERROR_CODES.UPLOAD_FILE_TOO_LARGE,
-        'Uploaded file exceeds the maximum allowed size',
+        'O arquivo ultrapassa o tamanho máximo permitido',
         HttpStatus.BAD_REQUEST,
         { maxBytes: MAX_BRAND_ASSET_SIZE_BYTES },
       );
@@ -683,7 +683,7 @@ export class OrganizationService {
     if (!ALLOWED_BRAND_ASSET_MIME_TYPES.includes(file.mimetype as never)) {
       throw new ApplicationException(
         ERROR_CODES.UPLOAD_INVALID_MIME_TYPE,
-        'Uploaded file MIME type is not allowed',
+        'Tipo de arquivo não permitido',
         HttpStatus.BAD_REQUEST,
         { allowedMimeTypes: ALLOWED_BRAND_ASSET_MIME_TYPES },
       );
@@ -692,7 +692,7 @@ export class OrganizationService {
     if (!this.hasValidBinarySignature(file.buffer, file.mimetype)) {
       throw new ApplicationException(
         ERROR_CODES.UPLOAD_INVALID_MIME_TYPE,
-        'Uploaded file binary signature is invalid',
+        'O conteúdo do arquivo não corresponde ao tipo informado',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -703,7 +703,7 @@ export class OrganizationService {
     if (!ALLOWED_BRAND_ASSET_EXTENSIONS.includes(extension as never)) {
       throw new ApplicationException(
         ERROR_CODES.UPLOAD_INVALID_EXTENSION,
-        'Uploaded file extension is not allowed',
+        'Extensão de arquivo não permitida',
         HttpStatus.BAD_REQUEST,
         { allowedExtensions: ALLOWED_BRAND_ASSET_EXTENSIONS },
       );

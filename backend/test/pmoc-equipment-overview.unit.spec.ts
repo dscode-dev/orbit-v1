@@ -33,15 +33,20 @@ describe('PMOC equipment overview', () => {
         };
       }
     ).planOverview.bind(service);
-    const completedAt = new Date('2026-07-15T15:00:00.000Z');
-    const nextDate = new Date('2026-08-15T12:00:00.000Z');
+    // Datas relativas a "agora": com datas fixas o próximo agendamento vira
+    // passado com o tempo e o status esperado (UP_TO_DATE) muda para OVERDUE.
+    const day = 24 * 60 * 60 * 1000;
+    const scheduledAt = new Date(Date.now() - 45 * day);
+    const completedAt = new Date(Date.now() - 44 * day);
+    const nextDate = new Date(Date.now() + 30 * day);
+    const planEndDate = new Date(Date.now() + 365 * day);
 
     const overview = project(
       {
         id: 'plan',
         plannedExecutionCount: 12,
         equipments: [{ equipment: { id: 'equipment-1' } }],
-        endDate: new Date('2027-07-01T00:00:00.000Z'),
+        endDate: planEndDate,
         active: true,
         generationMode: PmocGenerationMode.MANUAL,
         operationalStatus: PmocOperationalStatus.ACTIVE,
@@ -55,7 +60,7 @@ describe('PMOC equipment overview', () => {
           executionNumber: 1,
           equipmentExecutionNumber: 1,
           status: PmocExecutionRequestStatus.GENERATED,
-          scheduledFor: new Date('2026-07-15T12:00:00.000Z'),
+          scheduledFor: scheduledAt,
           generatedAt: completedAt,
           cancelledAt: null,
           maintenanceExecution: {

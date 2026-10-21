@@ -54,7 +54,7 @@ export class SalesService {
 
   async create(dto: CreateSaleDto, actor: AuthenticatedUser, context: AuditContext): Promise<SaleRecord> {
     const organization = await this.prisma.organization.findFirst({ orderBy: { createdAt: 'asc' } });
-    if (!organization) throw new ApplicationException(ERROR_CODES.ORGANIZATION_NOT_FOUND, 'Organization was not found', HttpStatus.NOT_FOUND);
+    if (!organization) throw new ApplicationException(ERROR_CODES.ORGANIZATION_NOT_FOUND, 'Organização não encontrada', HttpStatus.NOT_FOUND);
     await this.validateRelations(dto.customerId, dto.customerAddressId);
     const soldAt = new Date(dto.soldAt);
     const items = await this.snapshotItems(dto.items, soldAt);
@@ -99,7 +99,7 @@ export class SalesService {
 
   async cancel(id: string, actor: AuthenticatedUser, context: AuditContext): Promise<SaleRecord> {
     const current = await this.saleOrThrow(id);
-    if (current.status === SaleStatus.CANCELED) throw new ApplicationException(ERROR_CODES.SALE_INVALID_STATE, 'Sale is already canceled', HttpStatus.CONFLICT);
+    if (current.status === SaleStatus.CANCELED) throw new ApplicationException(ERROR_CODES.SALE_INVALID_STATE, 'A venda já está cancelada', HttpStatus.CONFLICT);
     await this.prisma.$transaction(async (tx) => {
       await tx.sale.update({ where: { id }, data: { status: SaleStatus.CANCELED, canceledAt: new Date() } });
       await this.history(tx, id, actor.id, SaleHistoryAction.CANCELED, { previousStatus: current.status });
@@ -110,7 +110,7 @@ export class SalesService {
 
   async receiptPrefill(id: string): Promise<unknown> {
     const sale = await this.saleOrThrow(id);
-    if (sale.status !== SaleStatus.COMPLETED) throw new ApplicationException(ERROR_CODES.SALE_INVALID_STATE, 'Only completed sales can originate receipts', HttpStatus.CONFLICT);
+    if (sale.status !== SaleStatus.COMPLETED) throw new ApplicationException(ERROR_CODES.SALE_INVALID_STATE, 'Somente vendas concluídas podem originar recibos', HttpStatus.CONFLICT);
     const itemDescription = sale.items
       .map((item) => `${String(item.quantity)} ${item.unit} — ${item.description}`)
       .join('\n');
@@ -143,11 +143,11 @@ export class SalesService {
     }));
   }
 
-  private totals(items: Array<{ total: string }>, discount: number): SaleTotals { const subtotal = items.reduce((sum, item) => sum + Number(item.total), 0); if (discount > subtotal) throw new ApplicationException(ERROR_CODES.BAD_REQUEST, 'Discount cannot exceed sale subtotal', HttpStatus.BAD_REQUEST); return { subtotal: subtotal.toFixed(2), discount: discount.toFixed(2), total: (subtotal - discount).toFixed(2) }; }
+  private totals(items: Array<{ total: string }>, discount: number): SaleTotals { const subtotal = items.reduce((sum, item) => sum + Number(item.total), 0); if (discount > subtotal) throw new ApplicationException(ERROR_CODES.BAD_REQUEST, 'O desconto não pode exceder o subtotal da venda', HttpStatus.BAD_REQUEST); return { subtotal: subtotal.toFixed(2), discount: discount.toFixed(2), total: (subtotal - discount).toFixed(2) }; }
   private warranty(days: number | undefined, startsAt: string | undefined, soldAt: Date): SaleWarranty { if (!days) return { warrantyDays: null, warrantyStartsAt: null, warrantyEndsAt: null }; const start = startsAt ? new Date(startsAt) : soldAt; const end = new Date(start); end.setUTCDate(end.getUTCDate() + days); return { warrantyDays: days, warrantyStartsAt: start, warrantyEndsAt: end }; }
-  private async validateRelations(customerId: string, addressId?: string): Promise<void> { const customer = await this.prisma.customer.findFirst({ where: { id: customerId, isActive: true } }); if (!customer) throw new ApplicationException(ERROR_CODES.CUSTOMER_NOT_FOUND, 'Customer was not found or is inactive', HttpStatus.NOT_FOUND); if (addressId && !(await this.prisma.customerAddress.findFirst({ where: { id: addressId, customerId } }))) throw new ApplicationException(ERROR_CODES.SALE_INVALID_RELATIONSHIP, 'Address does not belong to customer', HttpStatus.CONFLICT); }
-  private async saleOrThrow(id: string): Promise<SaleRecord> { const sale = await this.prisma.sale.findUnique({ where: { id }, include: INCLUDE }); if (!sale) throw new ApplicationException(ERROR_CODES.SALE_NOT_FOUND, 'Sale was not found', HttpStatus.NOT_FOUND); return sale; }
-  private assertDraft(sale: SaleRecord): void { if (sale.status !== SaleStatus.DRAFT) throw new ApplicationException(ERROR_CODES.SALE_INVALID_STATE, 'Only draft sales can be changed', HttpStatus.CONFLICT); }
+  private async validateRelations(customerId: string, addressId?: string): Promise<void> { const customer = await this.prisma.customer.findFirst({ where: { id: customerId, isActive: true } }); if (!customer) throw new ApplicationException(ERROR_CODES.CUSTOMER_NOT_FOUND, 'Cliente não encontrado ou inativo', HttpStatus.NOT_FOUND); if (addressId && !(await this.prisma.customerAddress.findFirst({ where: { id: addressId, customerId } }))) throw new ApplicationException(ERROR_CODES.SALE_INVALID_RELATIONSHIP, 'O endereço não pertence ao cliente', HttpStatus.CONFLICT); }
+  private async saleOrThrow(id: string): Promise<SaleRecord> { const sale = await this.prisma.sale.findUnique({ where: { id }, include: INCLUDE }); if (!sale) throw new ApplicationException(ERROR_CODES.SALE_NOT_FOUND, 'Venda não encontrada', HttpStatus.NOT_FOUND); return sale; }
+  private assertDraft(sale: SaleRecord): void { if (sale.status !== SaleStatus.DRAFT) throw new ApplicationException(ERROR_CODES.SALE_INVALID_STATE, 'Somente vendas em rascunho podem ser alteradas', HttpStatus.CONFLICT); }
   private async history(tx: Prisma.TransactionClient, saleId: string, actorId: string, action: SaleHistoryAction, metadata: Record<string, unknown>): Promise<void> { await tx.saleHistory.create({ data: { saleId, actorId, action, metadata: metadata as Prisma.InputJsonValue } }); }
   private async audit(tx: Prisma.TransactionClient, action: string, actor: AuthenticatedUser, context: AuditContext, metadata: Record<string, unknown>): Promise<void> { await tx.auditLog.create({ data: { action, resource: SALE_RESOURCE, actor: actor.id, metadata: { requestId: context.requestId, ip: context.ip, userAgent: context.userAgent, ...metadata } } }); }
 }

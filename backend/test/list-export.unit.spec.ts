@@ -8,7 +8,9 @@ describe('ListExportService', () => {
   const access = {
     operationScope: jest.fn().mockReturnValue({}),
     documentScope: jest.fn().mockReturnValue({}),
+    equipmentScope: jest.fn().mockReturnValue({}),
   };
+  const owner = { id: 'owner-1', role: 'OWNER' } as never;
   it('generates a real PDF for operations using active filters', async () => {
     const prisma = {
       organization: {
@@ -59,7 +61,7 @@ describe('ListExportService', () => {
     };
     const service = new ListExportService(prisma as never, new PdfEngineService(), access as never);
 
-    await expect(service.equipments({})).rejects.toThrow('Export exceeds the 500 record limit');
+    await expect(service.equipments({}, owner)).rejects.toThrow('A exportação excede o limite de 500 registros');
     expect(prisma.equipment.findMany).not.toHaveBeenCalled();
   });
 

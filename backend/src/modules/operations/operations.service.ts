@@ -397,7 +397,7 @@ export class OperationsService {
     if (photos.length > MAX_OPERATION_PHOTOS) {
       throw new ApplicationException(
         ERROR_CODES.OPERATION_PHOTO_INVALID,
-        `A maximum of ${MAX_OPERATION_PHOTOS} photos is allowed`,
+        `São permitidas no máximo ${MAX_OPERATION_PHOTOS} fotos`,
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -408,7 +408,7 @@ export class OperationsService {
     if (dto.sourceSaleId && !sourceSale) {
       throw new ApplicationException(
         ERROR_CODES.SALE_INVALID_RELATIONSHIP,
-        'Completed sale does not belong to the selected customer',
+        'A venda concluída não pertence ao cliente selecionado',
         HttpStatus.CONFLICT,
       );
     }
@@ -688,7 +688,7 @@ export class OperationsService {
     if (!existing)
       throw new ApplicationException(
         ERROR_CODES.OPERATION_NOT_FOUND,
-        'Operation was not found',
+        'Atendimento não encontrado',
         HttpStatus.NOT_FOUND,
       );
     if (actor.role === Role.OPERATOR) {
@@ -819,7 +819,7 @@ export class OperationsService {
     if (existing._count.photos + photos.length > MAX_OPERATION_PHOTOS) {
       throw new ApplicationException(
         ERROR_CODES.OPERATION_PHOTO_INVALID,
-        `A maximum of ${MAX_OPERATION_PHOTOS} photos is allowed per Operation`,
+        `São permitidas no máximo ${MAX_OPERATION_PHOTOS} fotos por atendimento`,
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -1078,7 +1078,7 @@ export class OperationsService {
     if (!operation) {
       throw new ApplicationException(
         ERROR_CODES.OPERATION_NOT_FOUND,
-        'Operation was not found',
+        'Atendimento não encontrado',
         HttpStatus.NOT_FOUND,
       );
     }
@@ -1162,7 +1162,7 @@ export class OperationsService {
       select: { id: true, number: true, status: true },
     });
     if (!operation) {
-      throw new ApplicationException(ERROR_CODES.OPERATION_NOT_FOUND, 'Operation was not found', HttpStatus.NOT_FOUND);
+      throw new ApplicationException(ERROR_CODES.OPERATION_NOT_FOUND, 'Atendimento não encontrado', HttpStatus.NOT_FOUND);
     }
     if (operation.status === OperationStatus.COMPLETED) {
       throw new ApplicationException(
@@ -1225,7 +1225,7 @@ export class OperationsService {
       select: { id: true, number: true, status: true },
     });
     if (!operation) {
-      throw new ApplicationException(ERROR_CODES.OPERATION_NOT_FOUND, 'Operation was not found', HttpStatus.NOT_FOUND);
+      throw new ApplicationException(ERROR_CODES.OPERATION_NOT_FOUND, 'Atendimento não encontrado', HttpStatus.NOT_FOUND);
     }
     if (operation.status !== OperationStatus.CANCELED) {
       throw new ApplicationException(ERROR_CODES.OPERATION_INVALID_TRANSITION, 'Somente operações canceladas podem ser reativadas', HttpStatus.CONFLICT);
@@ -1349,7 +1349,7 @@ export class OperationsService {
         if (!operation) {
           throw new ApplicationException(
             ERROR_CODES.OPERATION_NOT_FOUND,
-            'Operation was not found',
+            'Atendimento não encontrado',
             HttpStatus.NOT_FOUND,
           );
         }
@@ -1524,12 +1524,12 @@ export class OperationsService {
         if (!exists)
           throw new ApplicationException(
             ERROR_CODES.OPERATION_NOT_FOUND,
-            'Operation was not found',
+            'Atendimento não encontrado',
             HttpStatus.NOT_FOUND,
           );
         throw new ApplicationException(
           ERROR_CODES.OPERATION_INVALID_TRANSITION,
-          'Only operations awaiting review can be approved',
+          'Somente atendimentos aguardando revisão podem ser aprovados',
           HttpStatus.CONFLICT,
           { status: exists.status },
         );
@@ -1567,7 +1567,7 @@ export class OperationsService {
     if (!photo)
       throw new ApplicationException(
         ERROR_CODES.OPERATION_PHOTO_NOT_FOUND,
-        'Operation photo was not found',
+        'Foto do atendimento não encontrada',
         HttpStatus.NOT_FOUND,
       );
     const stored = await this.storage.get(photo.storageKey);
@@ -1629,7 +1629,7 @@ export class OperationsService {
     if ((month === undefined) !== (year === undefined)) {
       throw new ApplicationException(
         ERROR_CODES.OPERATION_REFERENCE_PERIOD_INVALID,
-        'Reference month and year must be provided together',
+        'Informe mês e ano de referência juntos',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -1680,7 +1680,7 @@ export class OperationsService {
     if (uniqueIds.length !== items.length) {
       throw new ApplicationException(
         ERROR_CODES.OPERATION_EQUIPMENT_INVALID,
-        'Inspected equipment cannot be duplicated',
+        'Não repita o mesmo equipamento inspecionado',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -1700,7 +1700,7 @@ export class OperationsService {
     if (byId.size !== uniqueIds.length) {
       throw new ApplicationException(
         ERROR_CODES.OPERATION_EQUIPMENT_INVALID,
-        'Every inspected equipment must be active and belong to the Operation customer',
+        'Todo equipamento inspecionado precisa estar ativo e pertencer ao cliente do atendimento',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -1779,7 +1779,7 @@ export class OperationsService {
     if (count !== ids.length) {
       throw new ApplicationException(
         ERROR_CODES.OPERATION_EQUIPMENT_INVALID,
-        'Every checklist equipment must be active and belong to the Operation customer',
+        'Todo equipamento do checklist precisa estar ativo e pertencer ao cliente do atendimento',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -1796,7 +1796,7 @@ export class OperationsService {
     if (!match)
       throw new ApplicationException(
         ERROR_CODES.OPERATION_PHOTO_INVALID,
-        'Signature must be a PNG or JPEG data URL',
+        'A assinatura precisa ser PNG ou JPEG',
         HttpStatus.BAD_REQUEST,
       );
 
@@ -1804,7 +1804,7 @@ export class OperationsService {
     if (!OPERATION_SIGNATURE_MIME_TYPES.includes(mimeType as never))
       throw new ApplicationException(
         ERROR_CODES.OPERATION_PHOTO_INVALID,
-        'Signature MIME type is not allowed',
+        'Formato de imagem não permitido para a assinatura',
         HttpStatus.BAD_REQUEST,
       );
 
@@ -1813,13 +1813,13 @@ export class OperationsService {
     if (buffer.length === 0 || buffer.length > MAX_OPERATION_SIGNATURE_SIZE_BYTES)
       throw new ApplicationException(
         ERROR_CODES.OPERATION_PHOTO_INVALID,
-        'Signature is empty or exceeds the 2 MiB limit',
+        'A assinatura está vazia ou ultrapassa 2 MiB',
         HttpStatus.BAD_REQUEST,
       );
     if (!this.isValidSignatureBinary(buffer, mimeType))
       throw new ApplicationException(
         ERROR_CODES.OPERATION_PHOTO_INVALID,
-        'Signature binary is invalid',
+        'A imagem da assinatura é inválida',
         HttpStatus.BAD_REQUEST,
       );
 
@@ -1855,7 +1855,7 @@ export class OperationsService {
     if (!customer)
       throw new ApplicationException(
         ERROR_CODES.CUSTOMER_NOT_FOUND,
-        'Customer was not found',
+        'Cliente não encontrado',
         HttpStatus.NOT_FOUND,
       );
     if (addressId) {
@@ -1866,7 +1866,7 @@ export class OperationsService {
       if (!address)
         throw new ApplicationException(
           ERROR_CODES.VALIDATION_ERROR,
-          'Address does not belong to the selected customer',
+          'O endereço não pertence ao cliente selecionado',
           HttpStatus.BAD_REQUEST,
         );
     }
@@ -1878,7 +1878,7 @@ export class OperationsService {
       if (!equipment)
         throw new ApplicationException(
           ERROR_CODES.VALIDATION_ERROR,
-          'Equipment does not belong to the selected customer',
+          'O equipamento não pertence ao cliente selecionado',
           HttpStatus.BAD_REQUEST,
         );
     }
@@ -1899,7 +1899,7 @@ export class OperationsService {
     if (actor.role !== Role.OWNER && actor.role !== Role.MANAGER) {
       throw new ApplicationException(
         ERROR_CODES.FORBIDDEN,
-        'Only OWNER and MANAGER users can delegate operations',
+        'Somente owner e gestor podem delegar atendimentos',
         HttpStatus.FORBIDDEN,
       );
     }
@@ -1911,7 +1911,7 @@ export class OperationsService {
     if (!operator || !operator.isActive || operator.disabledAt) {
       throw new ApplicationException(
         ERROR_CODES.OPERATION_OPERATOR_INVALID,
-        'Assigned operator must exist and be active',
+        'O operador atribuído precisa existir e estar ativo',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -1922,7 +1922,7 @@ export class OperationsService {
     ) {
       throw new ApplicationException(
         ERROR_CODES.OPERATION_OPERATOR_INVALID,
-        'Assigned operator must have an operational role',
+        'O operador atribuído precisa ter perfil operacional',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -1938,7 +1938,7 @@ export class OperationsService {
     if (!operation)
       throw new ApplicationException(
         ERROR_CODES.OPERATION_NOT_FOUND,
-        'Operation was not found',
+        'Atendimento não encontrado',
         HttpStatus.NOT_FOUND,
       );
     const { signatureData: privateSignature, assignments, ...safeOperation } = operation;
@@ -2036,14 +2036,14 @@ export class OperationsService {
   private async photoOrThrow(photoId: string): Promise<{ id: string; operationId: string; storageKey: string; caption: string | null }> {
     const photo = await this.prisma.operationPhoto.findUnique({ where: { id: photoId } });
     if (!photo) {
-      throw new ApplicationException(ERROR_CODES.OPERATION_PHOTO_NOT_FOUND, 'Operation photo was not found', HttpStatus.NOT_FOUND);
+      throw new ApplicationException(ERROR_CODES.OPERATION_PHOTO_NOT_FOUND, 'Foto do atendimento não encontrada', HttpStatus.NOT_FOUND);
     }
     return photo;
   }
 
   private assertPhotoManagement(actor: AuthenticatedUser): void {
     if (actor.role !== Role.OWNER && actor.role !== Role.MANAGER) {
-      throw new ApplicationException(ERROR_CODES.FORBIDDEN, 'Only OWNER and MANAGER can manage historical evidence', HttpStatus.FORBIDDEN);
+      throw new ApplicationException(ERROR_CODES.FORBIDDEN, 'Somente owner e gestor podem gerenciar evidências do histórico', HttpStatus.FORBIDDEN);
     }
   }
 

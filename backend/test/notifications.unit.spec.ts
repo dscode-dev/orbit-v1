@@ -60,7 +60,7 @@ describe('NotificationsService', () => {
     const service = new NotificationsService(prisma as never);
 
     await expect(service.markRead('55555555-5555-4555-8555-555555555555', actor as never)).rejects.toThrow(
-      'Notification was not found',
+      'Notificação não encontrada',
     );
     expect(prisma.notification.update).not.toHaveBeenCalled();
   });
