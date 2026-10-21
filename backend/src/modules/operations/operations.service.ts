@@ -247,6 +247,12 @@ export class OperationsService {
     const filters: Prisma.OperationWhereInput[] = [];
     if (query.equipmentId) filters.push({ OR: [{ equipmentId: query.equipmentId }, { inspectedEquipments: { some: { equipmentId: query.equipmentId } } }] });
     if (query.status === 'CANCELED') filters.push({ OR: [{ status: 'CANCELED' }, { cancellations: { some: { status: 'REQUESTED' } } }] });
+    // Cancelado sai da listagem padrão e volta só pelo filtro "Canceladas".
+    // Cancelamento apenas solicitado (REQUESTED) continua visível: o owner
+    // ainda precisa aprovar ou recusar.
+    if (query.excludeCanceled && query.status !== 'CANCELED') {
+      filters.push({ status: { not: 'CANCELED' } });
+    }
     const where: Prisma.OperationWhereInput = {
       ...this.access.operationScope(actor),
       // Recibo/RVT são apenas relatórios — não poluem a lista de Operações da

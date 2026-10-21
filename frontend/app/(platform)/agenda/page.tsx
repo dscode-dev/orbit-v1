@@ -105,7 +105,14 @@ export default function AgendaPage() {
   // 100 primeiros registros eram de outra época.
   const assignments = useQuery(
     async (signal) => {
-      const range = { scheduledFrom: gridStart.toISOString(), scheduledTo: gridEnd.toISOString() };
+      const range = {
+        scheduledFrom: gridStart.toISOString(),
+        scheduledTo: gridEnd.toISOString(),
+        // Só a atribuição do responsável: um atendimento com auxiliares tem uma
+        // atribuição por técnico e apareceria repetido no dia.
+        isPrimary: true,
+        excludeCanceledOperations: true,
+      };
       const first = await assignmentsApi.listAssignments({ ...range, page: 1, limit: AGENDA_PAGE_SIZE, signal });
       const pages = Math.min(first.pagination.totalPages, AGENDA_MAX_PAGES);
       if (pages <= 1) return first;

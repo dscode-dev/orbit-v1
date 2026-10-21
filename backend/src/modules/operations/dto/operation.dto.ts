@@ -45,6 +45,12 @@ export class ListOperationsQueryDto {
   @IsOptional() @IsUUID('4') operatorId?: string;
   @IsOptional() @IsString() type?: OperationType;
   @IsOptional() @IsEnum(OperationStatus) status?: OperationStatus;
+  /**
+   * `true` omite atendimentos cancelados da listagem. A tela de Operações usa
+   * isso no filtro "Todas"; o cancelado só aparece pelo filtro "Canceladas".
+   * Ignorado quando `status` é informado (o próprio status já recorta).
+   */
+  @IsOptional() @IsBoolean() @Transform(({ value }) => value === 'true' || value === true) excludeCanceled?: boolean;
 }
 
 export class OperationStatsQueryDto {

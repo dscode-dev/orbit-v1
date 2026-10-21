@@ -49,6 +49,8 @@ export function listOperations(params?: {
   operatorId?: string;
   type?: OperationType;
   status?: OperationStatus;
+  /** `true` omite cancelados — o filtro "Canceladas" os traz de volta. */
+  excludeCanceled?: boolean;
   signal?: AbortSignal;
 }): Promise<Paginated<OperationSummary>> {
   const { signal, ...query } = params ?? {};
@@ -62,6 +64,8 @@ export function exportOperationsPdf(params?: {
   operatorId?: string;
   type?: OperationType;
   status?: OperationStatus;
+  /** `true` omite cancelados, espelhando o filtro da tela. */
+  excludeCanceled?: boolean;
   signal?: AbortSignal;
 }): Promise<{ blob: Blob; filename: string | null }> {
   const { signal, ...query } = params ?? {};

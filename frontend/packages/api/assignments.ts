@@ -19,6 +19,10 @@ export type ListAssignmentsParams = {
   /** Janela de agenda (ISO): recorta pela data em que o atendimento aparece no calendário. */
   scheduledFrom?: string;
   scheduledTo?: string;
+  /** `true` devolve só a atribuição do técnico responsável (uma linha por atendimento). */
+  isPrimary?: boolean;
+  /** `true` omite atribuições de atendimentos cancelados. */
+  excludeCanceledOperations?: boolean;
   signal?: AbortSignal;
 };
 

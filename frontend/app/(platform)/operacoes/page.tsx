@@ -75,6 +75,8 @@ function OperacoesInner() {
         limit,
         search: debounced || undefined,
         status: status === "all" ? undefined : status,
+        // Cancelado só aparece pelo filtro "Canceladas".
+        excludeCanceled: status === "all" || undefined,
         customerId,
         equipmentId,
         signal,
@@ -154,6 +156,7 @@ function OperacoesInner() {
                 operationApi.exportOperationsPdf({
                   search: debounced || undefined,
                   status: status === "all" ? undefined : status,
+                  excludeCanceled: status === "all" || undefined,
                   customerId,
                   equipmentId,
                 })
