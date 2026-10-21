@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 
-import { AssignmentStatus, Prisma } from '@prisma/client';
+import { AssignmentStatus, OperationStatus, Prisma } from '@prisma/client';
 import { AssignmentsService } from '../src/modules/assignments/assignments.service';
 import type { ListAssignmentsQueryDto } from '../src/modules/assignments/dto/assignment.dto';
 
@@ -27,6 +27,10 @@ describe('janela de agenda na listagem de assignments', () => {
         ) => Prisma.AssignmentWhereInput;
       }
     ).listWhere(query, forcedAssignee, gateVisibility);
+  }
+
+  function andFilters(where: Prisma.AssignmentWhereInput): Prisma.AssignmentWhereInput[] {
+    return (where.AND as Prisma.AssignmentWhereInput[] | undefined) ?? [];
   }
 
   it('sem parâmetros de janela, não restringe por data', () => {
@@ -61,6 +65,25 @@ describe('janela de agenda na listagem de assignments', () => {
       { operation: { customerId: '11111111-1111-4111-8111-111111111111' } },
       { operation: { equipmentId: '22222222-2222-4222-8222-222222222222' } },
     ]);
+  });
+
+  it('isPrimary devolve só a atribuição do técnico responsável', () => {
+    // Um atendimento com auxiliares tem uma atribuição por técnico; sem esse
+    // recorte a Agenda repetia o mesmo atendimento no dia.
+    expect(andFilters(listWhere({ isPrimary: true }))).toContainEqual({ isPrimary: true });
+  });
+
+  it('excludeCanceledOperations omite atendimentos cancelados', () => {
+    expect(andFilters(listWhere({ excludeCanceledOperations: true }))).toContainEqual({
+      operation: { status: { not: OperationStatus.CANCELED } },
+    });
+  });
+
+  it('sem as flags, nenhum dos dois recortes é aplicado', () => {
+    const where = listWhere({ scheduledFrom: '2026-10-01T00:00:00.000Z' });
+    const serialized = JSON.stringify(andFilters(where));
+    expect(serialized).not.toContain('isPrimary');
+    expect(serialized).not.toContain('CANCELED');
   });
 
   it('preserva o gate de visibilidade do app do operador junto da janela', () => {

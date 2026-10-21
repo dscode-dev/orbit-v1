@@ -286,7 +286,11 @@ export class ListExportService {
       ...(query.equipmentId ? { equipmentId: query.equipmentId } : {}),
       ...(query.operatorId ? { operatorId: query.operatorId } : {}),
       ...(query.type ? { type: query.type } : {}),
-      ...(query.status ? { status: query.status } : {}),
+      ...(query.status
+        ? { status: query.status }
+        : query.excludeCanceled
+          ? { status: { not: OperationStatus.CANCELED } }
+          : {}),
       ...(query.search ? { OR: [{ customer: { name: { contains: query.search, mode: 'insensitive' } } }, { equipment: { name: { contains: query.search, mode: 'insensitive' } } }, { operator: { name: { contains: query.search, mode: 'insensitive' } } }] } : {}),
     };
   }

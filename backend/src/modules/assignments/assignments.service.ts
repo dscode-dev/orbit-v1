@@ -775,6 +775,14 @@ export class AssignmentsService {
     const and: Prisma.AssignmentWhereInput[] = [];
     if (query.customerId) and.push({ operation: { customerId: query.customerId } });
     if (query.equipmentId) and.push({ operation: { equipmentId: query.equipmentId } });
+    // Um atendimento tem no máximo uma atribuição primária (`create` rejeita a
+    // segunda), então isso rende exatamente uma linha por atendimento.
+    if (query.isPrimary !== undefined) and.push({ isPrimary: query.isPrimary });
+    // Cancelamento apenas solicitado pelo operador (REQUESTED) continua
+    // aparecendo: o atendimento segue de pé até o owner aprovar.
+    if (query.excludeCanceledOperations) {
+      and.push({ operation: { status: { not: OperationStatus.CANCELED } } });
+    }
     const scheduled = this.scheduledWindow(query);
     if (scheduled) and.push(scheduled);
     // App do operador: só demandas autorizadas pela gestão. Itens já aceitos/

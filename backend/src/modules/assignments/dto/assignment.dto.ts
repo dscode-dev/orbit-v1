@@ -1,6 +1,6 @@
 import { AssignmentStatus } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
-import { ArrayMaxSize, ArrayUnique, IsArray, IsEnum, IsInt, IsISO8601, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min } from 'class-validator';
+import { ArrayMaxSize, ArrayUnique, IsArray, IsBoolean, IsEnum, IsInt, IsISO8601, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min } from 'class-validator';
 
 const trim = (value: unknown): unknown => (typeof value === 'string' ? value.trim() : value);
 
@@ -19,6 +19,13 @@ export class ListAssignmentsQueryDto {
    */
   @IsOptional() @IsISO8601() scheduledFrom?: string;
   @IsOptional() @IsISO8601() scheduledTo?: string;
+  /**
+   * `true` devolve só a atribuição do técnico responsável. A Agenda usa isso
+   * para não repetir o mesmo atendimento uma vez por auxiliar.
+   */
+  @IsOptional() @IsBoolean() @Transform(({ value }) => value === 'true' || value === true) isPrimary?: boolean;
+  /** `true` omite atribuições de atendimentos já cancelados. */
+  @IsOptional() @IsBoolean() @Transform(({ value }) => value === 'true' || value === true) excludeCanceledOperations?: boolean;
 }
 
 export class CreateAssignmentDto {
