@@ -4,14 +4,17 @@
  * Agenda (Platform) — calendário mensal de produção.
  *
  * Navegação por mês/ano/Hoje; a agenda é uma visão de Assignments reais.
- * Eventos clicáveis abrem um Drawer lateral. Layout de célula com
- * altura fixa: nada ultrapassa os limites; excedente vira "+N mais".
+ * Eventos clicáveis abrem o OperationDetailDrawer (a mesma visão completa da
+ * página de Operações). A célula cresce para acomodar os atendimentos do dia
+ * até INLINE_PER_CELL; acima disso o excedente vira uma reticência clicável
+ * que abre a lista do dia.
  */
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AlarmClock, AlertTriangle, CalendarClock, Check, ChevronLeft, ChevronRight, Calendar as CalendarIcon, CircleCheck, Plus, ShieldCheck, Wrench, X } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { OperationCreationDrawer } from "@platform/components/operation-creation-drawer";
+import { OperationDetailDrawer } from "@platform/components/operation-detail-drawer";
 import { Drawer } from "@erp/ui/drawer";
 import { ConfirmDialog } from "@erp/ui/confirm-dialog";
 import { Gate } from "@erp/ui/auth/gate";
@@ -47,7 +50,16 @@ const STATE_COLOR: Record<AssignmentStatus, string> = {
 
 const MONTHS = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 const WEEKDAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
-const MAX_PER_CELL = 3;
+/**
+ * Quantos atendimentos aparecem direto na célula do dia. A linha do grid cresce
+ * para caber todos; acima disso o resto fica atrás da reticência, para um dia
+ * atipicamente cheio não esticar o mês inteiro.
+ */
+const INLINE_PER_CELL = 10;
+/** Paginação da janela do mês: 100 é o teto aceito pelo backend. */
+const AGENDA_PAGE_SIZE = 100;
+/** Teto de segurança — 10 páginas cobrem 1.000 atendimentos no mês. */
+const AGENDA_MAX_PAGES = 10;
 
 function startOfMonth(d: Date) { return new Date(d.getFullYear(), d.getMonth(), 1); }
 /** Monday-based index 0..6. */
@@ -88,8 +100,22 @@ export default function AgendaPage() {
   );
 
   // Assignments are the execution layer of Operations; Agenda is only a calendar view.
+  // A janela do grid é recortada no servidor e paginada até o fim: antes vinha
+  // a página 1 de todo o histórico, e um mês podia aparecer vazio só porque os
+  // 100 primeiros registros eram de outra época.
   const assignments = useQuery(
-    (signal) => assignmentsApi.listAssignments({ limit: 100, signal }),
+    async (signal) => {
+      const range = { scheduledFrom: gridStart.toISOString(), scheduledTo: gridEnd.toISOString() };
+      const first = await assignmentsApi.listAssignments({ ...range, page: 1, limit: AGENDA_PAGE_SIZE, signal });
+      const pages = Math.min(first.pagination.totalPages, AGENDA_MAX_PAGES);
+      if (pages <= 1) return first;
+      const rest = await Promise.all(
+        Array.from({ length: pages - 1 }, (_, index) =>
+          assignmentsApi.listAssignments({ ...range, page: index + 2, limit: AGENDA_PAGE_SIZE, signal }),
+        ),
+      );
+      return { ...first, items: [...first.items, ...rest.flatMap((page) => page.items)] };
+    },
     [gridStart.getTime(), gridEnd.getTime()],
   );
 
@@ -185,12 +211,12 @@ export default function AgendaPage() {
               const inMonth = date.getMonth() === cursor.getMonth();
               const isToday = sameDay(date, today);
               const items = byDay.get(dayKey(date)) ?? [];
-              const visible = items.slice(0, MAX_PER_CELL);
+              const visible = items.length > INLINE_PER_CELL ? items.slice(0, INLINE_PER_CELL) : items;
               const extra = items.length - visible.length;
               return (
                 <div
                   key={dayKey(date)}
-                  className={`min-h-[116px] h-[116px] border-b border-r border-[var(--color-border)] p-1.5 flex flex-col overflow-hidden ${inMonth ? "" : "bg-[var(--color-muted)]/20"}`}
+                  className={`min-h-[116px] border-b border-r border-[var(--color-border)] p-1.5 flex flex-col ${inMonth ? "" : "bg-[var(--color-muted)]/20"}`}
                 >
                   <div className="flex items-center justify-between px-0.5">
                     <span className={`text-[12px] tabular-nums ${isToday ? "h-6 w-6 grid place-items-center rounded-full bg-[var(--color-primary)] text-white font-semibold" : inMonth ? "text-[var(--color-foreground)]" : "text-[var(--color-muted-foreground)]"}`}>
@@ -202,7 +228,7 @@ export default function AgendaPage() {
                       <div className="skeleton h-4" /><div className="skeleton h-4 w-2/3" />
                     </div>
                   ) : (
-                    <div className="mt-1 space-y-1 overflow-hidden">
+                    <div className="mt-1 space-y-1">
                       {visible.map((ev) => (
                         <button
                           key={ev.id}
@@ -217,8 +243,15 @@ export default function AgendaPage() {
                         </button>
                       ))}
                       {extra > 0 && (
-                        <button type="button" onClick={() => setDayList({ date, items })} className="w-full text-left px-1.5 text-[11px] font-medium text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]">
-                          +{extra} mais
+                        <button
+                          type="button"
+                          onClick={() => setDayList({ date, items })}
+                          title={`Ver todos os ${items.length} atendimentos deste dia`}
+                          aria-label={`Ver todos os ${items.length} atendimentos de ${date.toLocaleDateString("pt-BR")}`}
+                          className="flex w-full items-center gap-1 rounded-[4px] px-1.5 py-0.5 text-left text-[var(--color-muted-foreground)] transition hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]"
+                        >
+                          <span aria-hidden className="text-[15px] font-bold leading-none tracking-widest">…</span>
+                          <span className="text-[10px] font-medium">mais {extra}</span>
                         </button>
                       )}
                     </div>
@@ -236,21 +269,13 @@ export default function AgendaPage() {
         </div>
       )}
 
-      {/* Event drawer */}
-      <Drawer open={selected !== null} onClose={() => setSelected(null)} eyebrow="Atendimento" title={selected ? `OP-${String(selected.operation.number).padStart(6, "0")}` : ""} width="max-w-md">
-        {selected && (
-          <div className="space-y-4">
-            <StatusPill status={ASSIGNMENT_STATUS_PILL[selected.status]} label={ASSIGNMENT_STATUS_LABEL[selected.status]} />
-            <div>
-              <h3 className="font-semibold">{selected.operation.customer?.name ?? "Cliente não informado"}</h3>
-              <p className="text-sm text-[var(--color-muted-foreground)]">{selected.operation.equipment?.name ?? "Sem equipamento"} · {selected.assignee.name}</p>
-            </div>
-            <div className="text-sm text-[var(--color-muted-foreground)]">
-              {new Date(selected.operation.scheduledFor ?? selected.assignedAt).toLocaleString("pt-BR")}
-            </div>
-          </div>
-        )}
-      </Drawer>
+      {/* Visão completa da operação — mesma usada na página de Operações. */}
+      <OperationDetailDrawer
+        open={selected !== null}
+        operationId={selected?.operationId ?? null}
+        onClose={() => setSelected(null)}
+        onChanged={() => assignments.refetch()}
+      />
       <OperationCreationDrawer open={createOpen} mode="schedule" onClose={() => setCreateOpen(false)} onCreated={() => assignments.refetch()} />
 
       {/* "+N mais" day drawer */}

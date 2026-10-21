@@ -16,6 +16,9 @@ export type ListAssignmentsParams = {
   customerId?: string;
   equipmentId?: string;
   status?: AssignmentStatus;
+  /** Janela de agenda (ISO): recorta pela data em que o atendimento aparece no calendário. */
+  scheduledFrom?: string;
+  scheduledTo?: string;
   signal?: AbortSignal;
 };
 

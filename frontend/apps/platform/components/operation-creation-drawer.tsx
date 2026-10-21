@@ -7,7 +7,6 @@ import { MultiSelect } from "@erp/ui/multi-select";
 import { SkeletonList } from "@erp/ui/skeletons";
 import { EmptyState } from "@erp/ui/empty-state";
 import { StatusChip } from "@erp/ui/status-chip";
-import { TechnicalCatalogSelector } from "@erp/ui/technical-catalog/technical-catalog-selector";
 import {
   ApiClientError,
   customersApi,
@@ -15,7 +14,6 @@ import {
   equipmentsApi,
   operationApi,
   pmocApi,
-  technicalCatalogsApi,
   useQuery,
   type CreateOperationPayload,
   type DocumentCatalogItem,
@@ -39,7 +37,7 @@ import {
 } from "./entity-select";
 
 type Mode = "operation" | "schedule" | "service" | "work-order";
-type Step = 0 | 1 | 2 | 3 | 4;
+type Step = 0 | 1 | 2 | 3;
 // Snapshot serializável do formulário para o rascunho local (OS avulsa).
 type OperationDraftSnapshot = {
   step: Step;
@@ -65,7 +63,9 @@ type PmocOperationDraft = {
   prefill: CreateOperationPayload;
 };
 
-const STEPS = ["Cliente", "Escopo", "Execução", "Checklist", "Confirmar"];
+const STEPS = ["Cliente", "Escopo", "Execução", "Confirmar"];
+/** Índice do último step (Confirmar) — usado na navegação e no clamp do rascunho. */
+const LAST_STEP = 3 as const;
 
 const ATTENDANCE_DOCUMENT_TYPES: DocumentKind[] = [
   "WORK_ORDER",
@@ -229,7 +229,9 @@ export function OperationCreationDrawer({
     checklist.length > 0;
 
   function applySnapshot(value: OperationDraftSnapshot) {
-    setStep(value.step);
+    // Rascunho salvo antes da remoção do step de checklist pode trazer step 4;
+    // sem o clamp o drawer abriria com o corpo vazio.
+    setStep(Math.min(value.step, LAST_STEP) as Step);
     setCustomerId(value.customerId);
     setAddressId(value.addressId);
     setEquipmentId(value.equipmentId);
@@ -323,7 +325,7 @@ export function OperationCreationDrawer({
     step === 0 ? Boolean(customerId)
     : step === 1 ? true
     : step === 2 ? Boolean(type) && (mode === "schedule" ? Boolean(scheduledFor) : true)
-    : true; // checklist é opcional (depende do que houver em Catálogos Técnicos)
+    : true; // Confirmar: nada a validar além do que já passou
 
   async function submit() {
     setSaving(true);
@@ -445,8 +447,8 @@ export function OperationCreationDrawer({
                 )}
               </button>
             )}
-            {step < 4 ? (
-              <button onClick={() => setStep((s) => Math.min(4, s + 1) as Step)} disabled={!canNext} className={primaryBtn}>
+            {step < LAST_STEP ? (
+              <button onClick={() => setStep((s) => Math.min(LAST_STEP, s + 1) as Step)} disabled={!canNext} className={primaryBtn}>
                 Avançar <ChevronRight className="h-4 w-4" />
               </button>
             ) : (
@@ -716,22 +718,6 @@ export function OperationCreationDrawer({
             )}
             {step === 3 && (
               <div className="space-y-3">
-                <p className="text-caption">
-                  {isPmocOperation
-                    ? "Revise os procedimentos herdados do PMOC. Cada item selecionado será entregue ao técnico para execução em todos os equipamentos cobertos."
-                    : <>Selecione os checks que o operador deverá seguir. Os itens vêm de <strong>Catálogos Técnicos</strong> para o documento <strong>{DOCUMENT_KIND_LABEL[documentType]}</strong>; você também pode adicionar itens personalizados.</>}
-                </p>
-                <TechnicalCatalogSelector
-                  type="CHECKLIST"
-                  workflow={technicalCatalogsApi.documentWorkflow(documentType)}
-                  label="Item de checklist"
-                  values={checklist}
-                  onChange={setChecklist}
-                />
-              </div>
-            )}
-            {step === 4 && (
-              <div className="space-y-3">
                 <Field label="Defeito ou solicitação"><textarea value={reportedIssue} onChange={(event) => setReportedIssue(event.target.value)} className={`${inputCls} min-h-24 py-2`} autoFocus /></Field>
                 <Field label="Serviços previstos ou executados"><textarea value={serviceDescription} onChange={(event) => setServiceDescription(event.target.value)} className={`${inputCls} min-h-28 py-2`} placeholder="Um item por linha" /></Field>
                 <Field label="Observações"><textarea value={observations} onChange={(event) => setObservations(event.target.value)} className={`${inputCls} min-h-24 py-2`} /></Field>
@@ -741,7 +727,9 @@ export function OperationCreationDrawer({
                   <div><strong>Valor do serviço:</strong> {serviceValue.trim() ? Number(serviceValue).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "Não informado"}</div>
                   <div><strong>Documento:</strong> {DOCUMENT_KIND_LABEL[documentType]}</div>
                   <div><strong>Agenda:</strong> {scheduledFor ? new Date(scheduledFor).toLocaleString("pt-BR") : "não definida"}</div>
-                  <div><strong>Checklist:</strong> {checklist.length} item(ns)</div>
+                  {checklist.length > 0 && (
+                    <div><strong>Checklist:</strong> {checklist.length} item(ns) herdado(s)</div>
+                  )}
                   <div><strong>Equipamentos:</strong> {equipmentIds.length}</div>
                 </div>
               </div>

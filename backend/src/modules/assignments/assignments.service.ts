@@ -770,22 +770,43 @@ export class AssignmentsService {
     forcedAssignee?: string,
     gateVisibility = false,
   ): Prisma.AssignmentWhereInput {
+    // Os filtros vão num AND: vários deles escrevem na chave `operation` e, num
+    // único objeto literal, o último sobrescreveria os anteriores.
+    const and: Prisma.AssignmentWhereInput[] = [];
+    if (query.customerId) and.push({ operation: { customerId: query.customerId } });
+    if (query.equipmentId) and.push({ operation: { equipmentId: query.equipmentId } });
+    const scheduled = this.scheduledWindow(query);
+    if (scheduled) and.push(scheduled);
+    // App do operador: só demandas autorizadas pela gestão. Itens já aceitos/
+    // em andamento/concluídos permanecem visíveis (histórico e execução).
+    if (gateVisibility) {
+      and.push({ status: { notIn: [AssignmentStatus.CANCELED, AssignmentStatus.REJECTED] } });
+      and.push({ OR: [{ operatorVisible: true }, { status: { not: AssignmentStatus.ASSIGNED } }] });
+    }
     return {
       ...(query.operationId ? { operationId: query.operationId } : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(forcedAssignee ? { assignedTo: forcedAssignee } : query.assignedTo ? { assignedTo: query.assignedTo } : {}),
-      ...(query.customerId ? { operation: { customerId: query.customerId } } : {}),
-      ...(query.equipmentId ? { operation: { equipmentId: query.equipmentId } } : {}),
-      // App do operador: só demandas autorizadas pela gestão. Itens já aceitos/
-      // em andamento/concluídos permanecem visíveis (histórico e execução).
-      ...(gateVisibility
-        ? {
-            AND: [
-              { status: { notIn: [AssignmentStatus.CANCELED, AssignmentStatus.REJECTED] } },
-              { OR: [{ operatorVisible: true }, { status: { not: AssignmentStatus.ASSIGNED } }] },
-            ],
-          }
-        : {}),
+      ...(and.length > 0 ? { AND: and } : {}),
+    };
+  }
+
+  /**
+   * Recorte de janela da Agenda. Espelha a data que o calendário usa para
+   * posicionar o atendimento: `scheduledFor` quando existe, `assignedAt` caso
+   * contrário.
+   */
+  private scheduledWindow(query: ListAssignmentsQueryDto): Prisma.AssignmentWhereInput | null {
+    if (!query.scheduledFrom && !query.scheduledTo) return null;
+    const range = {
+      ...(query.scheduledFrom ? { gte: new Date(query.scheduledFrom) } : {}),
+      ...(query.scheduledTo ? { lte: new Date(query.scheduledTo) } : {}),
+    };
+    return {
+      OR: [
+        { operation: { scheduledFor: range } },
+        { operation: { scheduledFor: null }, assignedAt: range },
+      ],
     };
   }
 
