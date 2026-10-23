@@ -37,6 +37,15 @@ export class AssignmentsController {
     return this.assignments.my(query, actor);
   }
 
+  @Roles(Role.OWNER)
+  @Get('agenda')
+  agenda(
+    @Query() query: ListAssignmentsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<unknown> {
+    return this.assignments.agenda(query, actor);
+  }
+
   // Demandas aguardando o owner autorizar a exibição no app do operador.
   @Roles(Role.OWNER, Role.MANAGER)
   @Get('pending-authorization')

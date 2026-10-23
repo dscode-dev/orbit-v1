@@ -36,6 +36,12 @@ export function listMyAssignments(params?: Omit<ListAssignmentsParams, "assigned
   return api.get<Paginated<Assignment>>("/assignments/my", { query, signal });
 }
 
+/** Global mobile calendar. The backend authorizes only OWNER. */
+export function listOwnerAgenda(params?: { page?: number; limit?: number; signal?: AbortSignal }): Promise<Paginated<Assignment>> {
+  const { signal, ...query } = params ?? {};
+  return api.get<Paginated<Assignment>>("/assignments/agenda", { query, signal });
+}
+
 export function getAssignment(id: string, opts?: { signal?: AbortSignal }): Promise<Assignment> {
   return api.get<Assignment>(`/assignments/${id}`, opts);
 }

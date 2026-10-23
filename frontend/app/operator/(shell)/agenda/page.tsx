@@ -10,7 +10,9 @@ import Link from "next/link";
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, ChevronRight as Arrow, Clock } from "lucide-react";
 import { StatusPill } from "@erp/ui/status-pill";
 import { ErrorState } from "@erp/ui/states";
-import { assignmentsApi, useQuery, type Assignment, type AssignmentStatus } from "@erp/api";
+import { useQuery, type Assignment, type AssignmentStatus, type Role } from "@erp/api";
+import { useAuth } from "@erp/ui/auth/auth-provider";
+import { loadOperatorAgenda } from "@operator/lib/agenda";
 import { ASSIGNMENT_STATUS_LABEL, ASSIGNMENT_STATUS_PILL } from "@erp/ui/assignments/assignment-shared";
 
 const STATE_COLOR: Record<AssignmentStatus, string> = {
@@ -33,11 +35,17 @@ function dayKey(d: Date) { return `${d.getFullYear()}-${d.getMonth()}-${d.getDat
 function sameDay(a: Date, b: Date) { return dayKey(a) === dayKey(b); }
 
 export default function OperatorAgendaPage() {
+  const { role, session } = useAuth();
+  return <AgendaCalendar key={`${session?.user.id}:${role}`} role={role} />;
+}
+
+function AgendaCalendar({ role }: { role: Role | null }) {
+  const isOwner = role === "OWNER";
   const today = useMemo(() => new Date(), []);
   const [cursor, setCursor] = useState(() => startOfMonth(new Date()));
   const [selected, setSelected] = useState<Date>(() => new Date());
 
-  const assignments = useQuery((signal) => assignmentsApi.listMyAssignments({ limit: 100, signal }), []);
+  const assignments = useQuery((signal) => loadOperatorAgenda(role, signal), [role]);
 
   // 6-week grid (Monday-first) covering the visible month.
   const gridStart = useMemo(() => {
@@ -57,11 +65,11 @@ export default function OperatorAgendaPage() {
   );
 
   const scheduled = useMemo(
-    () => (assignments.data?.items ?? []).filter((item) => Boolean(item.operation.scheduledFor)),
+    () => (assignments.data ?? []).filter((item) => Boolean(item.operation.scheduledFor)),
     [assignments.data],
   );
   const unscheduled = useMemo(
-    () => (assignments.data?.items ?? []).filter(
+    () => (assignments.data ?? []).filter(
       (item) => !item.operation.scheduledFor && !["COMPLETED", "CANCELED", "REJECTED"].includes(item.status),
     ),
     [assignments.data],
@@ -102,6 +110,7 @@ export default function OperatorAgendaPage() {
       <header className="flex items-end justify-between gap-3">
         <div>
           <h1 className="text-[22px] font-semibold tracking-tight">Agenda</h1>
+          {isOwner && <p className="text-caption">Todos os técnicos</p>}
           <p className="text-caption">{monthCount} atendimento(s) em {MONTHS[cursor.getMonth()].toLowerCase()}.</p>
         </div>
         <button type="button" onClick={goToday} className="h-9 shrink-0 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 text-sm font-medium active:scale-[0.97]">
@@ -186,7 +195,7 @@ export default function OperatorAgendaPage() {
           </div>
         ) : (
           <ul className="space-y-2">
-            {selectedItems.map((item) => <AgendaRow key={item.id} assignment={item} />)}
+            {selectedItems.map((item) => <AgendaRow key={item.id} assignment={item} showAssignee={isOwner} />)}
           </ul>
         )}
       </section>
@@ -196,7 +205,7 @@ export default function OperatorAgendaPage() {
         <section className="space-y-2">
           <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">Sem data definida ({unscheduled.length})</h2>
           <ul className="space-y-2">
-            {unscheduled.slice(0, 5).map((item) => <AgendaRow key={item.id} assignment={item} />)}
+            {(isOwner ? unscheduled : unscheduled.slice(0, 5)).map((item) => <AgendaRow key={item.id} assignment={item} showAssignee={isOwner} />)}
           </ul>
         </section>
       )}
@@ -205,7 +214,7 @@ export default function OperatorAgendaPage() {
 }
 
 /** Linha de agenda: horário + cliente/equipamento + status. */
-function AgendaRow({ assignment }: { assignment: Assignment }) {
+function AgendaRow({ assignment, showAssignee = false }: { assignment: Assignment; showAssignee?: boolean }) {
   const op = assignment.operation;
   const time = op.scheduledFor
     ? new Date(op.scheduledFor).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
@@ -224,6 +233,7 @@ function AgendaRow({ assignment }: { assignment: Assignment }) {
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-medium truncate">{op.customer?.name ?? `OP-${String(op.number).padStart(6, "0")}`}</span>
           <span className="block text-caption truncate">{op.equipment?.name ?? "Sem equipamento"} · OP-{String(op.number).padStart(6, "0")}</span>
+          {showAssignee && <span className="block text-caption truncate">Técnico: {assignment.assignee.name}</span>}
         </span>
         <StatusPill status={ASSIGNMENT_STATUS_PILL[assignment.status]} label={ASSIGNMENT_STATUS_LABEL[assignment.status]} />
         <Arrow className="h-4 w-4 shrink-0 text-[var(--color-muted-foreground)]" />

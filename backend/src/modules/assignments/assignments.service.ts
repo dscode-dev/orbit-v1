@@ -114,6 +114,29 @@ export class AssignmentsService {
     return buildPaginatedResponse(items, total, query.page, query.limit);
   }
 
+  /** Mobile overview: only OWNER can view every operator, including unreleased demands. */
+  async agenda(query: ListAssignmentsQueryDto, actor: AuthenticatedUser): Promise<unknown> {
+    if (actor.role !== Role.OWNER) {
+      throw new ApplicationException(ERROR_CODES.FORBIDDEN, 'Somente o proprietário pode visualizar a agenda de todos os técnicos', HttpStatus.FORBIDDEN);
+    }
+    const where: Prisma.AssignmentWhereInput = {
+      ...this.listWhere({ ...query, assignedTo: undefined }),
+      // Auxiliaries share the same operation; show each appointment once.
+      isPrimary: true,
+    };
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.assignment.findMany({
+        where,
+        skip: (query.page - 1) * query.limit,
+        take: query.limit,
+        orderBy: [{ assignedAt: 'desc' }, { id: 'desc' }],
+        include: ASSIGNMENT_INCLUDE,
+      }),
+      this.prisma.assignment.count({ where }),
+    ]);
+    return buildPaginatedResponse(items, total, query.page, query.limit);
+  }
+
   async my(query: ListAssignmentsQueryDto, actor: AuthenticatedUser): Promise<unknown> {
     const where = this.listWhere(query, actor.id, actor.role === Role.OPERATOR);
     const [items, total] = await this.prisma.$transaction([
