@@ -536,6 +536,7 @@ export function AtendimentoWizard({
           onClose={() => router.push('/operator')}
           canCreatePmoc={Boolean(isOwner)}
           onCreatePmoc={() => setDocumentType('PMOC')}
+          onCreateBudget={isOwner ? () => router.push('/operator/orcamento') : undefined}
         />
       </>
     );
@@ -787,7 +788,7 @@ export function AtendimentoWizard({
 
 /* ---------- Steps ---------- */
 
-function AttendanceTypeStep({ onSelect, onClose, canCreatePmoc = false, onCreatePmoc }: { onSelect: (type: DocumentKind) => void; onClose: () => void; canCreatePmoc?: boolean; onCreatePmoc?: () => void }) {
+function AttendanceTypeStep({ onSelect, onClose, canCreatePmoc = false, onCreatePmoc, onCreateBudget }: { onSelect: (type: DocumentKind) => void; onClose: () => void; canCreatePmoc?: boolean; onCreatePmoc?: () => void; onCreateBudget?: () => void }) {
   return (
     <div className="min-h-dvh px-4 py-5">
       <div className="mx-auto max-w-lg space-y-5">
@@ -812,6 +813,13 @@ function AttendanceTypeStep({ onSelect, onClose, canCreatePmoc = false, onCreate
             <button type="button" onClick={onCreatePmoc} className="flex w-full items-center gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-left active:scale-[0.99]">
               <span className="grid h-11 w-11 place-items-center rounded-[var(--radius-md)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]"><CalendarClock className="h-5 w-5" /></span>
               <span className="min-w-0 flex-1"><span className="block font-semibold">Executar PMOC</span><span className="block text-xs text-[var(--color-muted-foreground)]">Atender um equipamento de um plano já configurado</span></span>
+              <ChevronRight className="h-5 w-5 text-[var(--color-muted-foreground)]" />
+            </button>
+          )}
+          {onCreateBudget && (
+            <button type="button" onClick={onCreateBudget} className="flex w-full items-center gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-left active:scale-[0.99]">
+              <span className="grid h-11 w-11 place-items-center rounded-[var(--radius-md)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]"><FilePlus2 className="h-5 w-5" /></span>
+              <span className="min-w-0 flex-1"><span className="block font-semibold">Criar orçamento</span><span className="block text-xs text-[var(--color-muted-foreground)]">Preparar, aprovar e compartilhar uma proposta</span></span>
               <ChevronRight className="h-5 w-5 text-[var(--color-muted-foreground)]" />
             </button>
           )}

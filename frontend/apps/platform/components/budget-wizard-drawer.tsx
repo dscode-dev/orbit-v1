@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { Drawer } from "@erp/ui/drawer";
 import { MultiSelect } from "@erp/ui/multi-select";
@@ -38,14 +38,21 @@ export function BudgetWizardDrawer({
   onSaved,
   budget = null,
   initialOperationId = null,
+  presentation = "drawer",
+  allowApproval = false,
 }: {
   open: boolean;
   onClose: () => void;
-  onSaved: (budget: Budget) => void;
+  onSaved: (budget: Budget, action?: "save" | "approve") => void;
   budget?: Budget | null;
   initialOperationId?: string | null;
+  /** Mobile reuses every field and validation in a full-page shell. */
+  presentation?: "drawer" | "page";
+  allowApproval?: boolean;
 }) {
   const [step, setStep] = useState(0);
+  const persistedId = useRef<string | null>(budget?.id ?? null);
+  const submitting = useRef(false);
   const [origin, setOrigin] = useState<"MANUAL" | "WORK_ORDER">("MANUAL");
   const [operationId, setOperationId] = useState("");
   const [customerId, setCustomerId] = useState("");
@@ -98,6 +105,7 @@ export function BudgetWizardDrawer({
 
   useEffect(() => {
     if (!open) return;
+    persistedId.current = budget?.id ?? null;
     setStep(0); setOrigin(budget?.operationId || initialOperationId ? "WORK_ORDER" : "MANUAL"); setOperationId(budget?.operationId ?? initialOperationId ?? "");
     setCustomerId(budget?.customerId ?? ""); setAddressId(budget?.customerAddressId ?? ""); setEquipmentIds(budget?.equipments?.map((item) => item.equipmentId) ?? (budget?.equipmentId ? [budget.equipmentId] : []));
     setTitle(budget?.title ?? "Orçamento de manutenção"); setDescription(budget?.description ?? ""); setIssuedAt(budget?.issuedAt?.slice(0, 10) ?? today());
@@ -150,6 +158,10 @@ export function BudgetWizardDrawer({
     if (!amountEdited) setAmountInWords(brlAmountInWords(Math.max(total, 0)));
   }, [amountEdited, total]);
 
+  useEffect(() => {
+    if (presentation === "page") window.scrollTo({ top: 0 });
+  }, [step, presentation]);
+
   function canContinue(): boolean {
     if (step === 0) return origin === "MANUAL" || Boolean(operationId);
     if (step === 1) return Boolean(customerId && title.trim() && issuedAt && introduction.trim());
@@ -161,7 +173,9 @@ export function BudgetWizardDrawer({
     return true;
   }
 
-  async function submit() {
+  async function submit(action: "save" | "approve" = "save") {
+    if (submitting.current || !canContinue()) return;
+    submitting.current = true;
     setSaving(true); setError(null);
     try {
       const payload: BudgetPayload = {
@@ -185,25 +199,41 @@ export function BudgetWizardDrawer({
         status: "DRAFT",
         items: items.map((item, index) => ({ ...item, sortOrder: index })),
       };
-      let saved = budget
-        ? await budgetsApi.updateBudget(budget.id, payload)
+      let saved = persistedId.current
+        ? await budgetsApi.updateBudget(persistedId.current, payload)
         : await budgetsApi.createBudget(payload);
+      // Keep the identity even if selecting the signature fails, so retry never creates a second budget.
+      persistedId.current = saved.id;
       if (!saved.document?.id) saved = await budgetsApi.getBudget(saved.id);
+      if (!saved.document?.id) throw new Error("O documento do orçamento ainda não está disponível. Tente salvar novamente.");
       if (saved.document?.id) {
         await documentsApi.selectHandoffTechnicalSignature(saved.document.id, technicalSignatureId);
         saved = await budgetsApi.getBudget(saved.id);
       }
-      onSaved(saved);
+      onSaved(saved, action);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Não foi possível criar o orçamento.");
     } finally {
+      submitting.current = false;
       setSaving(false);
     }
   }
 
-  return <Drawer open={open} onClose={onClose} eyebrow="Orçamento" title={budget ? `Editar ORC-${String(budget.number).padStart(6, "0")}` : "Novo orçamento"} width="max-w-5xl" footer={<><button onClick={onClose} className={secondaryBtn}>Cancelar</button>{step > 0 && <button onClick={() => setStep((value) => value - 1)} disabled={saving} className={secondaryBtn}><ChevronLeft className="h-4 w-4" /> Voltar</button>}{step < STEPS.length - 1 ? <button onClick={() => setStep((value) => value + 1)} disabled={!canContinue()} className={primaryBtn}>Continuar <ChevronRight className="h-4 w-4" /></button> : <button onClick={submit} disabled={saving || !canContinue()} className={primaryBtn}>{saving ? "Salvando…" : budget ? "Salvar alterações" : "Salvar orçamento"}</button>}</>}>
-    <div className="space-y-5">
-      {error && <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{error}</div>}
+  const close = () => { if (!submitting.current) onClose(); };
+  const footer = <>
+    <button type="button" onClick={close} disabled={saving} className={secondaryBtn}>Cancelar</button>
+    {step > 0 && <button type="button" onClick={() => setStep((value) => value - 1)} disabled={saving} className={secondaryBtn}><ChevronLeft className="h-4 w-4" /> Voltar</button>}
+    {step < STEPS.length - 1
+      ? <button type="button" onClick={() => setStep((value) => value + 1)} disabled={saving || !canContinue()} className={`${primaryBtn} ${presentation === "page" ? "col-span-2" : ""}`}>Continuar <ChevronRight className="h-4 w-4" /></button>
+      : <>
+          <button type="button" onClick={() => void submit("save")} disabled={saving || !canContinue()} className={allowApproval ? secondaryBtn : primaryBtn}>{saving ? "Salvando…" : budget ? "Salvar alterações" : allowApproval ? "Salvar rascunho" : "Salvar orçamento"}</button>
+          {allowApproval && <button type="button" onClick={() => void submit("approve")} disabled={saving || !canContinue()} className={`${primaryBtn} ${presentation === "page" ? "col-span-2" : ""}`}>Salvar e aprovar</button>}
+        </>}
+  </>;
+
+  return <BudgetWizardFrame open={open} onClose={close} presentation={presentation} title={budget ? `Editar ORC-${String(budget.number).padStart(6, "0")}` : "Novo orçamento"} footer={footer}>
+    <fieldset disabled={saving} className="min-w-0 space-y-5">
+      {error && <div role="alert" className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{error}</div>}
       <div className="flex gap-2 overflow-x-auto pb-1">{STEPS.map((label, index) => <span key={label} className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-xs ${index === step ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]" : index < step ? "border-[var(--color-success)]/40 text-[var(--color-success)]" : "border-[var(--color-border)] text-[var(--color-muted-foreground)]"}`}>{index + 1}. {label}</span>)}</div>
 
       {step === 0 && <OriginStep origin={origin} setOrigin={setOrigin} operationId={operationId} setOperationId={setOperationId} operations={operations.data?.items ?? []} />}
@@ -220,8 +250,24 @@ export function BudgetWizardDrawer({
       {step === 4 && <div className="grid gap-4 md:grid-cols-2"><Summary services={services} materials={materials} serviceDiscount={serviceDiscountValue} materialDiscount={materialDiscountValue} total={total} /><Field label="Valor por extenso"><textarea value={amountInWords} onChange={(event) => { setAmountInWords(event.target.value); setAmountEdited(true); }} className={`${inputCls} min-h-28 py-2`} /><span className="text-caption">Gerado automaticamente e editável.</span></Field></div>}
       {step === 5 && <Conditions validityDays={validityDays} setValidityDays={setValidityDays} paymentMethods={paymentMethods} setPaymentMethods={setPaymentMethods} commercialNotes={commercialNotes} setCommercialNotes={setCommercialNotes} observations={observations} setObservations={setObservations} />}
       {step === 6 && <Signatures signatures={signatures.data?.items ?? []} selected={selectedSignature} technicalSignatureId={technicalSignatureId} setTechnicalSignatureId={setTechnicalSignatureId} />}
-    </div>
-  </Drawer>;
+    </fieldset>
+  </BudgetWizardFrame>;
+}
+
+function BudgetWizardFrame({ open, onClose, presentation, title, footer, children }: {
+  open: boolean; onClose: () => void; presentation: "drawer" | "page";
+  title: string; footer: ReactNode; children: ReactNode;
+}) {
+  if (presentation === "drawer") return <Drawer open={open} onClose={onClose} eyebrow="Orçamento" title={title} width="max-w-5xl" footer={footer}>{children}</Drawer>;
+  if (!open) return null;
+  return <div className="min-h-dvh flex flex-col">
+    <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-[var(--color-border)] bg-[var(--color-background)] px-4 py-3">
+      <div><p className="text-caption uppercase tracking-wider">Orçamento</p><h1 className="text-xl font-semibold">{title}</h1></div>
+      <button type="button" onClick={onClose} aria-label="Voltar aos atendimentos" className={secondaryBtn}><ChevronLeft className="h-4 w-4" /> Sair</button>
+    </header>
+    <main className="flex-1 min-w-0 p-4">{children}</main>
+    <footer className="sticky bottom-0 z-10 grid grid-cols-2 gap-2 border-t border-[var(--color-border)] bg-[var(--color-background)] p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">{footer}</footer>
+  </div>;
 }
 
 function OriginStep({ origin, setOrigin, operationId, setOperationId, operations }: { origin: "MANUAL" | "WORK_ORDER"; setOrigin: (value: "MANUAL" | "WORK_ORDER") => void; operationId: string; setOperationId: (value: string) => void; operations: Array<{ id: string; number: number; customer: { name: string } | null }> }) {
@@ -322,14 +368,14 @@ function BudgetItemsEditor({ type, items, onChange, catalog = [] }: { type: Budg
         <h4 className="text-sm font-semibold">{type === "SERVICE" ? "Serviços orçados" : "Materiais e fornecimentos"}</h4>
         <p className="text-caption">{type === "SERVICE" ? "Informe os serviços e seus valores." : "Use esta área somente para itens comerciais que possuem valor."}</p>
       </div>
-      <div className="grid gap-3 md:grid-cols-[1fr_90px_110px_160px_auto] md:items-end">
-        <label className="block space-y-1"><span className="text-xs font-medium text-[var(--color-muted-foreground)]">Descrição do {label}</span><input value={description} onChange={(event) => setDescription(event.target.value)} placeholder={type === "SERVICE" ? "Ex.: Limpeza completa do split" : "Ex.: Gás refrigerante R-410A"} className={inputCls} /></label>
-        <label className="block space-y-1"><span className="text-xs font-medium text-[var(--color-muted-foreground)]">Quantidade</span><input type="number" min="0.001" step="0.001" value={quantity} onChange={(event) => setQuantity(event.target.value)} className={inputCls} /></label>
-        <label className="block space-y-1"><span className="text-xs font-medium text-[var(--color-muted-foreground)]">Unidade</span><input value={unit} onChange={(event) => setUnit(event.target.value)} placeholder="UN" className={inputCls} /></label>
-        <label className="block space-y-1"><span className="text-xs font-medium text-[var(--color-muted-foreground)]">Valor unitário (R$)</span><input type="number" min="0" step="0.01" value={unitPrice} onChange={(event) => setUnitPrice(event.target.value)} placeholder="0,00" className={inputCls} /></label>
-        <button type="button" onClick={add} className={secondaryBtn}><Plus className="h-4 w-4" /> Adicionar</button>
+      <div className={type === "SERVICE" ? "grid grid-cols-[minmax(0,1fr)_minmax(0,0.75fr)_minmax(0,1.4fr)] items-end gap-3 sm:grid-cols-[90px_72px_140px_minmax(0,1fr)]" : "grid gap-3 md:grid-cols-[1fr_90px_110px_160px_auto] md:items-end"}>
+        <label className={`block min-w-0 space-y-1 ${type === "SERVICE" ? "col-span-3 sm:col-span-4" : ""}`}><span className="text-xs font-medium text-[var(--color-muted-foreground)]">Descrição do {label}</span>{type === "SERVICE" ? <textarea rows={3} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Ex.: Limpeza completa do split" className={`${inputCls} min-h-24 resize-y py-2`} /> : <input value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Ex.: Gás refrigerante R-410A" className={inputCls} />}</label>
+        <label className="block min-w-0 space-y-1"><span className="text-xs font-medium text-[var(--color-muted-foreground)]">Quantidade</span><input type="number" min="0.001" step="0.001" value={quantity} onChange={(event) => setQuantity(event.target.value)} className={inputCls} /></label>
+        <label className="block min-w-0 space-y-1"><span className="text-xs font-medium text-[var(--color-muted-foreground)]">Unidade</span><input value={unit} onChange={(event) => setUnit(event.target.value)} placeholder="UN" className={inputCls} /></label>
+        <label className="block min-w-0 space-y-1"><span className="text-xs font-medium text-[var(--color-muted-foreground)]">Valor unitário (R$)</span><input type="number" min="0" step="0.01" value={unitPrice} onChange={(event) => setUnitPrice(event.target.value)} placeholder="0,00" className={inputCls} /></label>
+        <button type="button" onClick={add} className={`${secondaryBtn} ${type === "SERVICE" ? "col-span-3 sm:col-span-1 sm:justify-self-start" : ""}`}><Plus className="h-4 w-4" /> Adicionar</button>
       </div>
-      {rows.length > 0 && <ul className="space-y-2">{rows.map(({ item, index }, position) => <li key={`${type}-${index}`} className="space-y-3 rounded-[var(--radius-md)] border border-[var(--color-border)] p-3"><div className="grid gap-2 md:grid-cols-[minmax(220px,1fr)_90px_100px_140px]"><input aria-label={`Descrição do ${label}`} value={item.description} onChange={(event) => update(index, { description: event.target.value })} className={inputCls} /><input aria-label="Quantidade" type="number" min="0.001" step="0.001" value={item.quantity} onChange={(event) => update(index, { quantity: Number(event.target.value) })} className={inputCls} /><input aria-label="Unidade" value={item.unit} onChange={(event) => update(index, { unit: event.target.value })} className={inputCls} /><input aria-label="Valor unitário" type="number" min="0" step="0.01" value={item.unitPrice} onChange={(event) => update(index, { unitPrice: Number(event.target.value) })} className={inputCls} /></div><div className="flex items-center justify-between gap-3"><strong>{formatNumber(item.quantity)} {item.unit} · {money(item.quantity * item.unitPrice)}</strong><div className="flex gap-1"><IconButton onClick={() => move(index, -1)} disabled={position === 0} label="Mover para cima"><ArrowUp className="h-4 w-4" /></IconButton><IconButton onClick={() => move(index, 1)} disabled={position === rows.length - 1} label="Mover para baixo"><ArrowDown className="h-4 w-4" /></IconButton><IconButton onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))} label="Remover" danger><Trash2 className="h-4 w-4" /></IconButton></div></div></li>)}</ul>}
+      {rows.length > 0 && <ul className="space-y-2">{rows.map(({ item, index }, position) => <li key={`${type}-${index}`} className="space-y-3 rounded-[var(--radius-md)] border border-[var(--color-border)] p-3"><div className={type === "SERVICE" ? "grid grid-cols-[minmax(0,1fr)_minmax(0,0.75fr)_minmax(0,1.4fr)] gap-2 sm:grid-cols-[90px_72px_minmax(0,1fr)]" : "grid gap-2 md:grid-cols-[minmax(220px,1fr)_90px_100px_140px]"}>{type === "SERVICE" ? <textarea aria-label={`Descrição do ${label}`} rows={3} value={item.description} onChange={(event) => update(index, { description: event.target.value })} className={`${inputCls} col-span-3 min-h-24 resize-y py-2`} /> : <input aria-label={`Descrição do ${label}`} value={item.description} onChange={(event) => update(index, { description: event.target.value })} className={inputCls} />}<input aria-label="Quantidade" type="number" min="0.001" step="0.001" value={item.quantity} onChange={(event) => update(index, { quantity: Number(event.target.value) })} className={inputCls} /><input aria-label="Unidade" value={item.unit} onChange={(event) => update(index, { unit: event.target.value })} className={inputCls} /><input aria-label="Valor unitário" type="number" min="0" step="0.01" value={item.unitPrice} onChange={(event) => update(index, { unitPrice: Number(event.target.value) })} className={`${inputCls} ${type === "SERVICE" ? "sm:max-w-[140px]" : ""}`} /></div><div className="flex items-center justify-between gap-3"><strong>{formatNumber(item.quantity)} {item.unit} · {money(item.quantity * item.unitPrice)}</strong><div className="flex gap-1"><IconButton onClick={() => move(index, -1)} disabled={position === 0} label="Mover para cima"><ArrowUp className="h-4 w-4" /></IconButton><IconButton onClick={() => move(index, 1)} disabled={position === rows.length - 1} label="Mover para baixo"><ArrowDown className="h-4 w-4" /></IconButton><IconButton onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))} label="Remover" danger><Trash2 className="h-4 w-4" /></IconButton></div></div></li>)}</ul>}
     </section>
   </div>;
 }
