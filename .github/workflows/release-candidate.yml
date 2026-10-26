@@ -83,4 +83,5 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run lint
+      - run: node --test test/operator-budget.test.mjs
       - run: npm run build
