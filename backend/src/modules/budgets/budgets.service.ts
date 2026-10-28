@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { AssetLifecycleEventType, BudgetHistoryAction, BudgetItemSource, BudgetItemType, BudgetStatus, DocumentTemplateType, NotificationType, OperationStatus, Prisma } from '@prisma/client';
+import { AssetLifecycleEventType, BudgetHistoryAction, BudgetItemSource, BudgetItemType, BudgetStatus, DocumentTemplateType, CustomerType, NotificationType, OperationStatus, Prisma } from '@prisma/client';
 import { BUDGET_AUDIT_ACTIONS, BUDGET_RESOURCE } from '../../shared/constants/budgets.constants';
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
@@ -8,7 +8,7 @@ import { buildPaginatedResponse, type PaginatedResponse } from '../../shared/typ
 import { LifecyclePublisher } from '../asset-lifecycle/lifecycle-publisher.service';
 import { PrismaService } from '../database/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import type { BudgetDecisionDto, BudgetItemInputDto, CreateBudgetDto, ListBudgetsQueryDto, UpdateBudgetDto } from './dto/budget.dto';
+import type { BudgetGuestCustomerDto, BudgetDecisionDto, BudgetItemInputDto, CreateBudgetDto, ListBudgetsQueryDto, UpdateBudgetDto } from './dto/budget.dto';
 
 export interface BudgetAuditContext {
   requestId: string;
@@ -19,7 +19,7 @@ export interface BudgetAuditContext {
 const BUDGET_INCLUDE = {
   organization: { select: { id: true, tradeName: true, legalName: true } },
   operation: { select: { id: true, number: true, type: true, status: true, equipmentId: true, customerId: true } },
-  customer: { select: { id: true, name: true, tradeName: true, email: true, phone: true } },
+  customer: { select: { id: true, type: true, name: true, tradeName: true, cpf: true, cnpj: true, email: true, phone: true, secondaryPhone: true, notes: true, isProvisional: true, provisionalExpiresAt: true } },
   customerAddress: true,
   equipment: { select: { id: true, name: true, tag: true, type: true, status: true } },
   equipments: {
@@ -119,10 +119,16 @@ export class BudgetsService {
 
   async create(dto: CreateBudgetDto, actor: AuthenticatedUser, context: BudgetAuditContext): Promise<BudgetWithRelations> {
     this.assertCreateStatus(dto.status);
-    const relations = await this.resolveRelations(dto);
-    const equipmentIds = await this.resolveBudgetEquipmentIds(dto, relations.equipmentId);
-    const equipmentRows = await this.resolveEquipmentRows(relations.customerId, equipmentIds);
-    const primaryEquipmentId = equipmentIds[0] ?? relations.equipmentId ?? null;
+    if (Boolean(dto.customerId) === Boolean(dto.guestCustomer)) {
+      throw new ApplicationException(ERROR_CODES.VALIDATION_ERROR, 'Selecione um cliente cadastrado ou informe um cliente avulso', HttpStatus.BAD_REQUEST);
+    }
+    if (dto.guestCustomer && (dto.operationId || dto.customerAddressId || dto.equipmentId || dto.equipmentIds?.length)) {
+      throw new ApplicationException(ERROR_CODES.BUDGET_INVALID_RELATIONSHIP, 'O cliente avulso não pode usar dados de outro cadastro', HttpStatus.BAD_REQUEST);
+    }
+    const existingRelations = dto.guestCustomer ? null : await this.resolveRelations({ ...dto, customerId: dto.customerId! });
+    const equipmentIds = await this.resolveBudgetEquipmentIds(dto, existingRelations?.equipmentId ?? null);
+    const equipmentRows = existingRelations ? await this.resolveEquipmentRows(existingRelations.customerId, equipmentIds) : [];
+    const primaryEquipmentId = equipmentIds[0] ?? existingRelations?.equipmentId ?? null;
     const items = await this.resolveSnapshotItems(dto.items);
     const totals = this.calculateTotals(items, {
       discount: dto.discount,
@@ -139,6 +145,7 @@ export class BudgetsService {
     const technicalSignatureId = await this.defaultTechnicalSignatureId();
 
     return this.prisma.$transaction(async (tx) => {
+      const relations = existingRelations ?? await this.createProvisionalRelationsTx(tx, dto.guestCustomer!, expirationDate);
       const budget = await tx.budget.create({
         data: {
           ...relations,
@@ -206,6 +213,9 @@ export class BudgetsService {
     const current = await this.budgetOrThrow(id);
     this.assertWritable(current);
     this.assertUpdateStatus(dto.status);
+    if (dto.guestCustomer && (!current.customer.isProvisional || (dto.customerId && dto.customerId !== current.customerId) || dto.operationId || dto.equipmentId || dto.equipmentIds?.length)) {
+      throw new ApplicationException(ERROR_CODES.BUDGET_INVALID_RELATIONSHIP, 'O cadastro avulso só pode ser alterado no próprio orçamento pendente', HttpStatus.BAD_REQUEST);
+    }
 
     const relations =
       dto.customerId || dto.customerAddressId !== undefined || dto.equipmentId !== undefined || dto.equipmentIds !== undefined || dto.operationId !== undefined
@@ -214,7 +224,7 @@ export class BudgetsService {
             customerId: dto.customerId ?? current.customerId,
             customerAddressId: dto.customerAddressId ?? current.customerAddressId ?? undefined,
             equipmentId: dto.equipmentId ?? current.equipmentId ?? undefined,
-          })
+          }, current.customer.isProvisional ? current.customerId : undefined)
         : undefined;
     // Substitui a lista de equipamentos quando explicitamente informada.
     const customerId = dto.customerId ?? current.customerId;
@@ -269,6 +279,20 @@ export class BudgetsService {
     this.assertDates(issuedAt, expirationDate);
 
     return this.prisma.$transaction(async (tx) => {
+      let provisionalAddressId = current.customerAddressId;
+      if (current.customer.isProvisional && (!dto.customerId || dto.customerId === current.customerId)) {
+        await tx.customer.update({ where: { id: current.customerId }, data: {
+          ...(dto.guestCustomer ? this.provisionalCustomerData(dto.guestCustomer) : {}),
+          provisionalExpiresAt: expirationDate,
+        } });
+        if (dto.guestCustomer?.address) {
+          const addressData = { ...dto.guestCustomer.address, zipCode: dto.guestCustomer.address.zipCode ?? '', isPrimary: true };
+          const address = provisionalAddressId
+            ? await tx.customerAddress.update({ where: { id: provisionalAddressId }, data: addressData })
+            : await tx.customerAddress.create({ data: { ...addressData, customerId: current.customerId } });
+          provisionalAddressId = address.id;
+        }
+      }
       if (items) {
         await tx.budgetItem.deleteMany({ where: { budgetId: id } });
       }
@@ -280,6 +304,7 @@ export class BudgetsService {
         where: { id },
         data: {
           ...(relations ?? {}),
+          ...(dto.guestCustomer ? { customerAddressId: provisionalAddressId } : {}),
           ...(primaryEquipmentId !== undefined ? { equipmentId: primaryEquipmentId } : {}),
           ...(equipmentRows ? { equipments: { createMany: { data: equipmentRows } } } : {}),
           ...(dto.title !== undefined ? { title: this.clean(dto.title) } : {}),
@@ -381,6 +406,12 @@ export class BudgetsService {
       if (transition.count !== 1) {
         throw new ApplicationException(ERROR_CODES.BUDGET_INVALID_STATUS, 'Outra alteração mudou este orçamento; tente novamente', HttpStatus.CONFLICT);
       }
+      const promoted = await tx.customer.updateMany({
+        where: { id: current.customerId, isProvisional: true },
+        data: { isProvisional: false, provisionalExpiresAt: null, isActive: true, pendingReview: false },
+      });
+      if (promoted.count) await this.auditTx(tx, 'BUDGET_CUSTOMER_REGISTERED', actor, context, { budgetId: id, customerId: current.customerId });
+      if (current.document?.renderedAt) await tx.operationDocument.update({ where: { id: current.document.id }, data: { editorialStatus: 'STALE' } });
       const budget = await tx.budget.findUniqueOrThrow({ where: { id }, include: BUDGET_INCLUDE });
       await this.createHistoryTx(tx, id, actor.id, BudgetHistoryAction.APPROVED, current.status, BudgetStatus.APPROVED, {
         observation: this.optionalClean(dto.observation),
@@ -509,20 +540,54 @@ export class BudgetsService {
     return this.page(items, total, query.page, query.limit);
   }
 
+  private provisionalCustomerData(input: BudgetGuestCustomerDto): Pick<Prisma.CustomerCreateInput, 'type' | 'name' | 'tradeName' | 'cpf' | 'cnpj' | 'email' | 'phone' | 'secondaryPhone' | 'notes'> {
+    return {
+      type: input.type, name: input.name, tradeName: input.tradeName || null,
+      cpf: input.type === CustomerType.PERSON ? input.cpf?.replace(/\D/g, '') || null : null,
+      cnpj: input.type === CustomerType.COMPANY ? input.cnpj?.replace(/\D/g, '') || null : null,
+      email: input.email || null, phone: input.phone || null, secondaryPhone: input.secondaryPhone || null, notes: input.notes || null,
+    };
+  }
+
+  private async createProvisionalRelationsTx(tx: Prisma.TransactionClient, input: BudgetGuestCustomerDto, expirationDate: Date): Promise<BudgetRelations> {
+    const organization = await tx.organization.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } });
+    if (!organization) throw new ApplicationException(ERROR_CODES.ORGANIZATION_NOT_FOUND, 'Organização não encontrada', HttpStatus.NOT_FOUND);
+    const cpf = input.type === CustomerType.PERSON ? input.cpf?.replace(/\D/g, '') : undefined;
+    const cnpj = input.type === CustomerType.COMPANY ? input.cnpj?.replace(/\D/g, '') : undefined;
+    const documents: Prisma.CustomerWhereInput[] = [];
+    if (cpf) documents.push({ cpf: { in: [cpf, cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')] } });
+    if (cnpj) documents.push({ cnpj: { in: [cnpj, cnpj.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5')] } });
+    if (documents.length && await tx.customer.findFirst({ where: { OR: documents }, select: { id: true } })) {
+      throw new ApplicationException(ERROR_CODES.VALIDATION_ERROR, 'Já existe um cadastro com este documento. Selecione o cliente cadastrado ou consulte o orçamento avulso existente.', HttpStatus.CONFLICT);
+    }
+    let customer: { id: string };
+    try {
+      customer = await tx.customer.create({ data: {
+        ...this.provisionalCustomerData(input),
+        isActive: false, isProvisional: true, provisionalExpiresAt: expirationDate,
+      }, select: { id: true } });
+    } catch (cause) {
+      if (cause instanceof Prisma.PrismaClientKnownRequestError && cause.code === 'P2002') throw new ApplicationException(ERROR_CODES.VALIDATION_ERROR, 'Já existe um cadastro com este documento', HttpStatus.CONFLICT);
+      throw cause;
+    }
+    const address = input.address ? await tx.customerAddress.create({ data: { ...input.address, zipCode: input.address.zipCode ?? '', customerId: customer.id, isPrimary: true }, select: { id: true } }) : null;
+    return { organizationId: organization.id, customerId: customer.id, customerAddressId: address?.id ?? null, operationId: null, equipmentId: null };
+  }
+
   private async resolveRelations(dto: {
     customerId: string;
     customerAddressId?: string;
     equipmentId?: string;
     operationId?: string;
-  }): Promise<BudgetRelations> {
+  }, provisionalCustomerId?: string): Promise<BudgetRelations> {
     const [organization, customer] = await Promise.all([
       this.prisma.organization.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } }),
-      this.prisma.customer.findUnique({ where: { id: dto.customerId }, select: { id: true, isActive: true } }),
+      this.prisma.customer.findUnique({ where: { id: dto.customerId }, select: { id: true, isActive: true, isProvisional: true } }),
     ]);
     if (!organization) {
       throw new ApplicationException(ERROR_CODES.ORGANIZATION_NOT_FOUND, 'Organização não encontrada', HttpStatus.NOT_FOUND);
     }
-    if (!customer?.isActive) {
+    if (!customer || (customer.isProvisional ? customer.id !== provisionalCustomerId : !customer.isActive)) {
       throw new ApplicationException(ERROR_CODES.CUSTOMER_NOT_FOUND, 'Cliente não encontrado ou inativo', HttpStatus.NOT_FOUND);
     }
 

@@ -24,10 +24,10 @@ function setup({ status = 'DRAFT', approvalFails = false, renderFails = false } 
   };
   const testedModule = { exports: {} };
   runInNewContext(compiled, { module: testedModule, exports: testedModule.exports, require: () => ({ budgetsApi }) });
-  return { complete: testedModule.exports.approveAndRenderOperatorBudget, calls, budgetsApi, state };
+  return { complete: testedModule.exports.confirmOperatorBudgetAcceptance, render: testedModule.exports.renderOperatorBudget, calls, budgetsApi, state };
 }
 
-test('approves before generating the official PDF and checkpoints the approval', async () => {
+test('records explicit customer acceptance before regenerating the PDF', async () => {
   const { complete, calls } = setup();
   await complete('budget-1', budget => { assert.equal(budget.status, 'APPROVED'); calls.push('checkpoint'); });
   assert.deepEqual(calls, ['get', 'approve', 'checkpoint', 'render']);
@@ -53,4 +53,21 @@ test('recovers an approval whose response was lost by reading the server decisio
   const { complete, calls } = setup({ status: 'APPROVED' });
   await complete('budget-1', () => calls.push('checkpoint'));
   assert.deepEqual(calls, ['get', 'checkpoint', 'render']);
+});
+
+
+test('generates a pending proposal without approving or changing the decision', async () => {
+  const { render, calls, state } = setup({ status: 'PENDING' });
+  await render('budget-1', budget => { assert.equal(budget.status, 'PENDING'); calls.push('loaded'); });
+  assert.deepEqual(calls, ['get', 'loaded', 'render']);
+  assert.equal(state.status, 'PENDING');
+});
+
+test('retries PDF generation on pending proposals without recording acceptance', async () => {
+  const { render, calls, budgetsApi, state } = setup({ status: 'PENDING', renderFails: true });
+  await assert.rejects(render('budget-1', () => {}), /PDF failed/);
+  budgetsApi.renderBudget = async () => { calls.push('render'); };
+  await render('budget-1', () => {});
+  assert.equal(calls.filter(call => call === 'approve').length, 0);
+  assert.equal(state.status, 'PENDING');
 });

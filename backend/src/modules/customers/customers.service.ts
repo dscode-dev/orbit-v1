@@ -91,7 +91,7 @@ export class CustomersService {
    * o operador depende dele (endereços) no atendimento avulso.
    */
   async list(query: ListCustomersQueryDto, actor: AuthenticatedUser): Promise<unknown> {
-    const where: Prisma.CustomerWhereInput = query.search
+    const search: Prisma.CustomerWhereInput = query.search
       ? {
           OR: [
             { name: { contains: query.search, mode: 'insensitive' } },
@@ -104,6 +104,7 @@ export class CustomersService {
           ],
         }
       : {};
+    const where: Prisma.CustomerWhereInput = { ...search, isProvisional: false };
     const [items, total] = await this.prisma.$transaction([
       this.prisma.customer.findMany({
         where,
@@ -123,11 +124,11 @@ export class CustomersService {
 
   async stats(): Promise<Record<string, number>> {
     const [total, active, inactive, people, companies] = await this.prisma.$transaction([
-      this.prisma.customer.count(),
-      this.prisma.customer.count({ where: { isActive: true } }),
-      this.prisma.customer.count({ where: { isActive: false } }),
-      this.prisma.customer.count({ where: { type: CustomerType.PERSON } }),
-      this.prisma.customer.count({ where: { type: CustomerType.COMPANY } }),
+      this.prisma.customer.count({ where: { isProvisional: false } }),
+      this.prisma.customer.count({ where: { isActive: true, isProvisional: false } }),
+      this.prisma.customer.count({ where: { isActive: false, isProvisional: false } }),
+      this.prisma.customer.count({ where: { type: CustomerType.PERSON, isProvisional: false } }),
+      this.prisma.customer.count({ where: { type: CustomerType.COMPANY, isProvisional: false } }),
     ]);
     return { total, active, inactive, people, companies };
   }
@@ -648,7 +649,7 @@ export class CustomersService {
     id: string,
   ): Promise<Prisma.CustomerGetPayload<{ include: typeof CUSTOMER_INCLUDE }>> {
     const customer = await this.prisma.customer.findUnique({
-      where: { id },
+      where: { id, isProvisional: false },
       include: CUSTOMER_INCLUDE,
     });
     if (!customer)

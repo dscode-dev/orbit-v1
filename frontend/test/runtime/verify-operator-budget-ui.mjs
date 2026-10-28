@@ -65,17 +65,20 @@ async function page(role = 'OWNER', { signatureFailures = 0, renderFailures = 0 
     else if (path === '/signatures/signature-1/download') result = { mimeType: 'image/png', contentBase64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=' };
     else if (path.includes('budget-material-descriptions') || path.includes('maintenance-checklists') || path.includes('technical-catalog')) result = [];
     else if (path === '/budgets' && method === 'POST') {
-      saved = { ...payload, id: 'budget-1', number: 1, status: 'DRAFT', total: 450, customer, document: { id: 'document-1', number: 'ORC-000001' }, items: payload.items };
+      const party = payload.guestCustomer ? { ...payload.guestCustomer, id: 'guest-1', isProvisional: true } : customer;
+      saved = { ...payload, customerId: party.id, customer: party, customerAddress: payload.guestCustomer?.address ?? null, id: 'budget-1', number: 1, status: payload.status ?? 'DRAFT', total: 450, subtotal: 500, serviceSubtotal: 500, materialSubtotal: 0, discount: 50, additional: 0, expirationDate: new Date(Date.now()+30*86400000).toISOString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), approvals: [], equipments: [], document: { id: 'document-1', number: 'ORC-000001', editorialStatus: 'DRAFT' }, items: payload.items };
       result = saved; status = 201;
-    } else if (path === '/budgets/budget-1' && method === 'PATCH') { saved = { ...saved, ...payload }; result = saved; }
+    } else if (path === '/budgets' && method === 'GET') result = paginated(saved ? [saved] : []);
+    else if (path === '/budgets/stats') result = { total: 0, pending: 0, approved: 0, rejected: 0, potentialRevenue: '0', averageTicket: '0' };
+    else if (path === '/budgets/budget-1' && method === 'PATCH') { saved = { ...saved, ...payload }; result = saved; }
     else if (path === '/budgets/budget-1') result = saved;
     else if (path === '/documents/document-1/handoff/technical-signature') {
       if (signatureFailures-- > 0) { status = 400; result = 'Assinatura indisponível. Tente novamente.'; }
       else result = {};
-    } else if (path === '/budgets/budget-1/approve') { saved.status = 'APPROVED'; result = saved; }
+    } else if (path === '/budgets/budget-1/approve') { saved.status = 'APPROVED'; saved.customer.isProvisional = false; result = saved; }
     else if (path === '/budgets/budget-1/render') {
       if (renderFailures-- > 0) { status = 500; result = 'Falha temporária ao gerar PDF'; }
-      else { result = { documentId: 'document-1' }; status = 201; }
+      else { saved.document.renderedAt = new Date().toISOString(); saved.document.editorialStatus = 'FINALIZED'; result = { documentId: 'document-1' }; status = 201; }
     } else if (path === '/budgets/budget-1/download') { result = '%PDF-1.4\nTest PDF\n%%EOF'; binary = true; }
     const headers = [
       { name: 'Content-Type', value: binary ? 'application/pdf' : 'application/json' },
@@ -114,7 +117,7 @@ async function page(role = 'OWNER', { signatureFailures = 0, renderFailures = 0 
     const marker = Math.random().toString(36);
     await evaluate(`window.__navigationMarker = ${JSON.stringify(marker)}`);
     await send('Page.navigate', { url: base + route });
-    await until(() => evaluate(`window.__navigationMarker !== ${JSON.stringify(marker)} && location.origin === ${JSON.stringify(new URL(base).origin)} && document.readyState === 'complete' && (${allowRedirect} || location.pathname === ${JSON.stringify(route)})`), route);
+    await until(() => evaluate(`window.__navigationMarker !== ${JSON.stringify(marker)} && location.origin === ${JSON.stringify(new URL(base).origin)} && document.readyState === 'complete' && (${allowRedirect} || location.pathname === ${JSON.stringify(new URL(base+route).pathname)})`), route);
   };
   const text = () => evaluate('document.body.innerText');
   const waitText = snippet => until(async () => (await text()).includes(snippet), snippet);
@@ -127,21 +130,28 @@ async function page(role = 'OWNER', { signatureFailures = 0, renderFailures = 0 
     el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true}));
   })()`);
   const next = async () => { await until(() => evaluate(`Array.from(document.querySelectorAll('button')).some(el=>el.textContent.trim()==='Continuar'&&!el.disabled)`), 'enabled Continue'); await click('Continuar'); await sleep(100); };
-  const fill = async ({ fromOperation = false } = {}) => {
-    await waitText('Criação manual');
+  const fill = async ({ fromOperation = false, guest = false, mobile = true } = {}) => {
+    await waitText('Cliente cadastrado');
+    if (guest) {
+      await evaluate(`Array.from(document.querySelectorAll('button')).find(el=>el.textContent.includes('Cliente avulso / não cadastrado')).click()`);
+      await waitText('Cadastro do cliente avulso');
+      await input('Razão social', 'Empresa avulsa da proposta');
+      await input('E-mail', 'novo@example.test');
+      await input('Telefone', '81999999999');
+    }
     if (fromOperation) {
       await evaluate(`Array.from(document.querySelectorAll('button')).find(el=>el.textContent.includes('A partir de uma OS concluída')).click()`);
       await waitText('OS-000023');
       await input('Ordem de Serviço concluída', 'operation-1');
     }
     await next(); await waitText('Dados gerais');
-    if (!fromOperation) {
+    if (!fromOperation && !guest) {
       await until(() => evaluate(`!!document.querySelector('button[aria-label="Cliente"]')`), 'customer picker');
       await evaluate(`document.querySelector('button[aria-label="Cliente"]').click()`);
       await waitText('Cliente de teste');
       await evaluate(`document.querySelector('[role="option"]').click()`);
     }
-    await until(() => evaluate(`Array.from(document.querySelectorAll('select option')).some(el=>el.value==='address-1')`), 'customer details');
+    if (!guest) await until(() => evaluate(`Array.from(document.querySelectorAll('select option')).some(el=>el.value==='address-1')`), 'customer details');
     await next(); await waitText('Serviços orçados');
     assert.equal(await evaluate(`Array.from(document.querySelectorAll('button')).find(el=>el.textContent.trim()==='Continuar').disabled`), true);
     await input('Descrição do serviço', 'Manutenção de campo');
@@ -153,8 +163,8 @@ async function page(role = 'OWNER', { signatureFailures = 0, renderFailures = 0 
     assert.ok((await text()).includes('450,00'));
     await next(); await waitText('Validade da proposta (dias)');
     await next(); await waitText('Assinatura técnica');
-    await until(() => evaluate(`Array.from(document.querySelectorAll('button')).some(el=>el.textContent.trim()==='Salvar e aprovar'&&!el.disabled)`), 'signature chosen');
-    assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true);
+    await until(() => evaluate(`Array.from(document.querySelectorAll('button')).some(el=>el.textContent.trim()===${JSON.stringify(mobile ? 'Concluir e gerar proposta' : 'Salvar orçamento')}&&!el.disabled)`), 'signature chosen');
+    if (mobile) assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true);
   };
   return { send, evaluate, navigate, text, waitText, click, input, fill, calls };
 }
@@ -169,12 +179,13 @@ try {
   assert.ok(buttons.findIndex(label=>label.includes('Criar orçamento')) > buttons.findIndex(label=>label.includes('Executar PMOC')));
   await owner.evaluate(`Array.from(document.querySelectorAll('button')).find(el=>el.textContent.includes('Criar orçamento')).click()`);
   await owner.fill();
-  await owner.click('Salvar e aprovar'); await owner.waitText('Assinatura indisponível');
-  await owner.click('Salvar e aprovar'); await owner.waitText('Falha temporária ao gerar PDF');
+  await owner.click('Concluir e gerar proposta'); await owner.waitText('Assinatura indisponível');
+  await owner.click('Concluir e gerar proposta'); await owner.waitText('Falha temporária ao gerar PDF');
   assert.equal(owner.calls.filter(call=>call.path==='/budgets'&&call.method==='POST').length,1);
-  await owner.click('Gerar PDF');
+  await owner.click('Gerar proposta PDF');
   await until(() => owner.evaluate(`Array.from(document.querySelectorAll('button')).some(el=>el.textContent.trim()==='Compartilhar'&&!el.disabled)`), 'ready to share');
-  assert.equal(owner.calls.filter(call=>call.path.endsWith('/approve')).length,1);
+  assert.equal(owner.calls.filter(call=>call.path.endsWith('/approve')).length,0);
+  assert.equal(owner.calls.find(call=>call.path==='/budgets'&&call.method==='POST').payload.status,'PENDING');
   await owner.click('Compartilhar');
   assert.equal(await owner.evaluate('window.__shares[0].name'), 'ORC-000001.pdf');
   await owner.click('Baixar PDF');
@@ -183,18 +194,66 @@ try {
   await owner.evaluate(`Object.defineProperty(navigator,'share',{configurable:true,value:undefined})`);
   await owner.click('Compartilhar'); await owner.waitText('PDF baixado.');
   assert.equal(owner.calls.filter(call=>call.path.endsWith('/download')).length,pdfRequests);
-  console.log('PASS owner menu order, seven shared steps, values, safe signature/PDF retries, download and sharing');
+  await owner.click('Confirmar aceite do cliente');
+  await owner.waitText('Confirmar aceite do cliente?');
+  assert.equal(owner.calls.filter(call=>call.path.endsWith('/approve')).length,0);
+  await owner.click('Cancelar');
+  assert.equal(owner.calls.filter(call=>call.path.endsWith('/approve')).length,0);
+  await owner.click('Confirmar aceite do cliente');
+  await owner.click('Sim, cliente aprovou');
+  await owner.waitText('Orçamento aprovado');
+  await until(() => owner.evaluate(`Array.from(document.querySelectorAll('button')).some(el=>el.textContent.trim()==='Baixar PDF'&&!el.disabled)`), 'accepted PDF ready');
+  assert.equal(owner.calls.filter(call=>call.path.endsWith('/approve')).length,1);
+  console.log('PASS pending PDF, safe retries, download/share, explicit acceptance and cancellation');
 
   const draft = await page();
   await draft.navigate('/operator/orcamento'); await draft.fill({ fromOperation: true });
-  await draft.click('Salvar rascunho'); await draft.waitText('Orçamento salvo como rascunho');
+  await draft.click('Salvar pendente'); await draft.waitText('Orçamento pendente de aceite');
   const creation = draft.calls.find(call=>call.path==='/budgets'&&call.method==='POST');
   assert.equal(creation.payload.operationId,'operation-1');
-  assert.equal(creation.payload.status,'DRAFT');
+  assert.equal(creation.payload.status,'PENDING');
   assert.ok(!draft.calls.some(call=>call.path.endsWith('/approve')||call.path.endsWith('/render')));
-  await draft.click('Aprovar e gerar PDF');
+  await draft.click('Gerar proposta PDF');
   await until(() => draft.evaluate(`Array.from(document.querySelectorAll('button')).some(el=>el.textContent.trim()==='Baixar PDF'&&!el.disabled)`), 'draft approved');
-  console.log('PASS completed OS origin, draft option, later approval and PDF');
+  assert.ok(!draft.calls.some(call=>call.path.endsWith('/approve')));
+  await draft.navigate('/operator/orcamento?budgetId=budget-1');
+  await draft.waitText('Orçamento pendente de aceite');
+  await draft.click('Confirmar aceite do cliente');
+  await draft.click('Sim, cliente aprovou');
+  await draft.waitText('Orçamento aprovado');
+  console.log('PASS completed OS origin, pending save, PDF without approval and later acceptance after reload');
+
+  const guest = await page();
+  currentPage = guest;
+  await guest.navigate('/operator/orcamento');
+  await guest.fill({ guest: true });
+  await guest.click('Concluir e gerar proposta');
+  await until(() => guest.evaluate(`Array.from(document.querySelectorAll('button')).some(el=>el.textContent.trim()==='Baixar PDF'&&!el.disabled)`), 'guest proposal PDF');
+  const guestCreation = guest.calls.find(call=>call.path==='/budgets'&&call.method==='POST');
+  assert.equal(guestCreation.payload.customerId,undefined);
+  assert.equal(guestCreation.payload.guestCustomer.name,'Empresa avulsa da proposta');
+  assert.ok(!guest.calls.some(call=>call.path.endsWith('/approve')||call.path==='/customers/guest-1'));
+  await guest.navigate('/operator/orcamento?budgetId=budget-1');
+  await guest.waitText('Orçamento pendente de aceite');
+  await guest.click('Editar proposta');
+  await guest.waitText('Cadastro do cliente avulso');
+  assert.equal(await guest.evaluate(`Array.from(document.querySelectorAll('input')).some(el=>el.value==='Empresa avulsa da proposta')`),true);
+  assert.ok(!guest.calls.some(call=>call.path==='/customers/guest-1'));
+  console.log('PASS mobile guest form, pending PDF, reload and editing without accessing the hidden customer endpoint');
+
+  const web = await page('MANAGER');
+  currentPage = web;
+  await web.send('Emulation.setDeviceMetricsOverride', {width:1280,height:900,deviceScaleFactor:1,mobile:false});
+  await web.navigate('/budgets');
+  await web.waitText('Novo orçamento');
+  await web.click('Novo orçamento');
+  await web.fill({ guest: true, mobile: false });
+  await web.click('Salvar orçamento');
+  await until(() => Promise.resolve(web.calls.some(call=>call.path==='/budgets'&&call.method==='POST')), 'web guest save');
+  const webCreation = web.calls.find(call=>call.path==='/budgets'&&call.method==='POST');
+  assert.equal(webCreation.payload.guestCustomer.name,'Empresa avulsa da proposta');
+  assert.ok(!web.calls.some(call=>call.path.endsWith('/approve')));
+  console.log('PASS shared guest wizard on the web for managers without automatic approval');
 
   const operator = await page('OPERATOR');
   currentPage = operator;

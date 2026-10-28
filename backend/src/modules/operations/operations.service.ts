@@ -1855,7 +1855,7 @@ export class OperationsService {
     equipmentId?: string,
   ): Promise<void> {
     const customer = await this.prisma.customer.findUnique({
-      where: { id: customerId },
+      where: { id: customerId, isProvisional: false },
       select: { id: true },
     });
     if (!customer)

@@ -1,3 +1,4 @@
+import { CreateCustomerDto, CustomerAddressDto } from '../../customers/dto/customer.dto';
 import {
   BudgetItemSource,
   BudgetItemType,
@@ -54,9 +55,14 @@ export class BudgetItemInputDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(999) sortOrder?: number;
 }
 
+export class BudgetGuestCustomerDto extends CreateCustomerDto {
+  @IsOptional() @ValidateNested() @Type(() => CustomerAddressDto) address?: CustomerAddressDto;
+}
+
 export class CreateBudgetDto {
   @IsOptional() @IsUUID('4') operationId?: string;
-  @IsUUID('4') customerId!: string;
+  @IsOptional() @IsUUID('4') customerId?: string;
+  @IsOptional() @ValidateNested() @Type(() => BudgetGuestCustomerDto) guestCustomer?: BudgetGuestCustomerDto;
   @IsOptional() @IsUUID('4') customerAddressId?: string;
   @IsOptional() @IsUUID('4') equipmentId?: string;
   @IsOptional() @IsArray() @ArrayUnique() @IsUUID('4', { each: true }) equipmentIds?: string[];
@@ -81,6 +87,7 @@ export class CreateBudgetDto {
 }
 
 export class UpdateBudgetDto {
+  @IsOptional() @ValidateNested() @Type(() => BudgetGuestCustomerDto) guestCustomer?: BudgetGuestCustomerDto;
   @IsOptional() @IsUUID('4') operationId?: string;
   @IsOptional() @IsUUID('4') customerId?: string;
   @IsOptional() @IsUUID('4') customerAddressId?: string;

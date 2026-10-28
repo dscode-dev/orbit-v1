@@ -504,6 +504,10 @@ function BudgetDocumentPanel({
     setLoading("download");
     setError(null);
     try {
+      if (!budget.document?.renderedAt || budget.document.editorialStatus === "STALE") {
+        const generated = await budgetsApi.renderBudget(budget.id);
+        setDocumentId(generated.documentId);
+      }
       const file = await budgetsApi.downloadBudget(budget.id);
       downloadDocumentFile(file);
     } catch (err) {

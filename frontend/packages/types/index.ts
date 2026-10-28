@@ -2570,7 +2570,7 @@ export type Budget = {
   canceledAt: string | null;
   createdAt: string;
   updatedAt: string;
-  customer?: Pick<Customer, 'id' | 'name' | 'tradeName' | 'email' | 'phone'>;
+  customer?: Pick<Customer, 'id' | 'name' | 'tradeName' | 'email' | 'phone'> & Partial<Pick<Customer, 'type' | 'cpf' | 'cnpj' | 'secondaryPhone' | 'notes'>> & { isProvisional?: boolean; provisionalExpiresAt?: string | null };
   customerAddress?: CustomerAddress | null;
   equipment?: Pick<EquipmentSummary, 'id' | 'name' | 'tag' | 'type' | 'status'> | null;
   operation?: {
@@ -2634,9 +2634,14 @@ export type BudgetItemPayload = {
   sortOrder?: number;
 };
 
+export type BudgetGuestCustomerPayload = CreateCustomerPayload & {
+  address?: { name: string; zipCode?: string; street: string; number: string; complement?: string; district: string; city: string; state: string };
+};
+
 export type BudgetPayload = {
   operationId?: string | null;
-  customerId: string;
+  customerId?: string;
+  guestCustomer?: BudgetGuestCustomerPayload;
   customerAddressId?: string | null;
   equipmentId?: string | null;
   equipmentIds?: string[];

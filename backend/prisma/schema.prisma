@@ -914,6 +914,9 @@ model Customer {
   secondaryPhone       String?                 @map("secondary_phone") @db.VarChar(30)
   notes                String?                 @db.Text
   isActive             Boolean                 @default(true) @map("is_active")
+  // Cliente avulso de orçamento: oculto da base até o aceite comercial.
+  isProvisional        Boolean                 @default(false) @map("is_provisional")
+  provisionalExpiresAt DateTime?               @map("provisional_expires_at") @db.Timestamptz(3)
   // Cadastro criado em campo (OS avulso) aguardando conclusão pelo owner.
   pendingReview        Boolean                 @default(false) @map("pending_review")
   disabledAt           DateTime?               @map("disabled_at") @db.Timestamptz(3)
@@ -936,6 +939,7 @@ model Customer {
   @@index([email])
   @@index([phone])
   @@index([isActive, type])
+  @@index([isProvisional, provisionalExpiresAt])
   @@map("customers")
 }
 
