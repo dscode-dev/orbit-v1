@@ -3,6 +3,7 @@
  * the operator wizard, the platform Operações screen and every produced document.
  */
 import type {
+  CustomerAddress,
   OperationDocumentStatus,
   OperationStatus,
   OperationType,
@@ -49,4 +50,11 @@ export const OPERATION_DOC_STATUS: Record<OperationDocumentStatus, { tone: ChipT
 /** Format the sequential Operation number as `OP-000001`. */
 export function operationCode(n: number): string {
   return `OP-${String(n).padStart(6, "0")}`;
+}
+
+/** Endereço completo para associar cada serviço ao seu local na OS. */
+export function operationServiceAddressLabel(address: Partial<Pick<CustomerAddress, 'street' | 'number' | 'district' | 'city' | 'state' | 'complement' | 'referencePoint'>> | null | undefined): string {
+  if (!address) return "Não informado";
+  return [address.street, address.number, address.complement, address.referencePoint, address.district,
+    [address.city, address.state].filter(Boolean).join('/')].filter(Boolean).join(', ') || "Não informado";
 }

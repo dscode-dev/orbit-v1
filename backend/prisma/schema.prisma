@@ -960,7 +960,8 @@ model CustomerAddress {
   updatedAt               DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
   customer                Customer                @relation(fields: [customerId], references: [id], onDelete: Cascade)
   equipments              Equipment[]
-  operations              Operation[]
+  operations              Operation[]             @relation("OperationPrimaryAddress")
+  secondaryOperations     Operation[]             @relation("OperationSecondaryAddress")
   budgets                 Budget[]
   sales                   Sale[]
   pmocDefaultAddressPlans PmocPlan[]
@@ -1173,6 +1174,8 @@ model Operation {
   number                          Int                                 @unique @default(autoincrement())
   customerId                      String                              @map("customer_id") @db.Uuid
   addressId                       String?                             @map("address_id") @db.Uuid
+  secondaryServiceType            String?                             @map("secondary_service_type")
+  secondaryAddressId              String?                             @map("secondary_address_id") @db.Uuid
   equipmentId                     String?                             @map("equipment_id") @db.Uuid
   operatorId                      String                              @map("operator_id") @db.Uuid
   type                            String
@@ -1227,7 +1230,8 @@ model Operation {
   createdAt                       DateTime                            @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt                       DateTime                            @updatedAt @map("updated_at") @db.Timestamptz(3)
   customer                        Customer                            @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  address                         CustomerAddress?                    @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  address                         CustomerAddress?                    @relation("OperationPrimaryAddress", fields: [addressId], references: [id], onDelete: SetNull)
+  secondaryAddress                CustomerAddress?                    @relation("OperationSecondaryAddress", fields: [secondaryAddressId], references: [id], onDelete: SetNull)
   equipment                       Equipment?                          @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
   operator                        User                                @relation(fields: [operatorId], references: [id], onDelete: Restrict)
   photos                          OperationPhoto[]

@@ -36,6 +36,10 @@ import {
   inputCls,
 } from "./entity-select";
 
+import { OperationSecondaryService, secondaryServiceComplete, secondaryServicePayload, type SecondaryServiceDraft } from "./operation-secondary-service";
+import { operationServiceAddressLabel } from "@erp/ui/operations/operation-shared";
+import { useServiceTypeLabel } from "@erp/ui/operations/use-service-type-label";
+
 type Mode = "operation" | "schedule" | "service" | "work-order";
 type Step = 0 | 1 | 2 | 3;
 // Snapshot serializável do formulário para o rascunho local (OS avulsa).
@@ -43,6 +47,7 @@ type OperationDraftSnapshot = {
   step: Step;
   customerId: string;
   addressId: string;
+  secondaryService?: SecondaryServiceDraft | null;
   equipmentId: string;
   equipmentIds: string[];
   operatorId: string;
@@ -137,6 +142,8 @@ export function OperationCreationDrawer({
   const [step, setStep] = useState<Step>(0);
   const [customerId, setCustomerId] = useState("");
   const [addressId, setAddressId] = useState("");
+  const [secondaryService, setSecondaryService] = useState<SecondaryServiceDraft | null>(null);
+  const serviceTypeLabel = useServiceTypeLabel();
   const [equipmentId, setEquipmentId] = useState("");
   const [equipmentIds, setEquipmentIds] = useState<string[]>([]);
   const [operatorId, setOperatorId] = useState("");
@@ -190,6 +197,7 @@ export function OperationCreationDrawer({
       step,
       customerId,
       addressId,
+      secondaryService,
       equipmentId,
       equipmentIds,
       operatorId,
@@ -208,6 +216,7 @@ export function OperationCreationDrawer({
       step,
       customerId,
       addressId,
+      secondaryService,
       equipmentId,
       equipmentIds,
       operatorId,
@@ -234,6 +243,7 @@ export function OperationCreationDrawer({
     setStep(Math.min(value.step, LAST_STEP) as Step);
     setCustomerId(value.customerId);
     setAddressId(value.addressId);
+    setSecondaryService(value.secondaryService ?? null);
     setEquipmentId(value.equipmentId);
     setEquipmentIds(value.equipmentIds);
     setOperatorId(value.operatorId);
@@ -261,6 +271,7 @@ export function OperationCreationDrawer({
     setStep(0);
     setCustomerId(activeInitialValues?.customerId ?? "");
     setAddressId(activeInitialValues?.addressId ?? "");
+    setSecondaryService(activeInitialValues?.secondaryServiceType ? { type: activeInitialValues.secondaryServiceType, addressId: activeInitialValues.secondaryAddressId ?? "", address: null } : null);
     setEquipmentId(activeInitialValues?.equipmentId ?? activeInitialValues?.inspectedEquipments?.[0]?.equipmentId ?? "");
     setEquipmentIds(
       activeInitialValues?.inspectedEquipments?.map((item) => item.equipmentId) ??
@@ -324,7 +335,7 @@ export function OperationCreationDrawer({
   const canNext =
     step === 0 ? Boolean(customerId)
     : step === 1 ? true
-    : step === 2 ? Boolean(type) && (mode === "schedule" ? Boolean(scheduledFor) : true)
+    : step === 2 ? Boolean(type) && (documentType !== "WORK_ORDER" || secondaryServiceComplete(secondaryService, addressId)) && (mode === "schedule" ? Boolean(scheduledFor) : true)
     : true; // Confirmar: nada a validar além do que já passou
 
   async function submit() {
@@ -335,6 +346,8 @@ export function OperationCreationDrawer({
         ...activeInitialValues,
         customerId,
         addressId: addressId || null,
+        ...secondaryServicePayload(documentType === "WORK_ORDER" ? secondaryService : null),
+        ...(documentType === "WORK_ORDER" ? { serviceTypes: [...new Set([type, ...(secondaryService?.type ? [secondaryService.type] : [])])] } : {}),
         equipmentId: equipmentId || null,
         inspectedEquipments: equipmentIds.map((id) => {
           const existing = activeInitialValues?.inspectedEquipments?.find((item) => item.equipmentId === id);
@@ -476,6 +489,7 @@ export function OperationCreationDrawer({
                     step: 0,
                     customerId: "",
                     addressId: "",
+                    secondaryService: null,
                     equipmentId: "",
                     equipmentIds: [],
                     operatorId: "",
@@ -600,7 +614,7 @@ export function OperationCreationDrawer({
                   </>
                 ) : (
                   <>
-                    <CustomerSelect value={customerId} onChange={(id) => { setCustomerId(id); setAddressId(""); setEquipmentId(""); setEquipmentIds([]); }} />
+                    <CustomerSelect value={customerId} onChange={(id) => { setCustomerId(id); setAddressId(""); setSecondaryService(null); setEquipmentId(""); setEquipmentIds([]); }} />
                     <CustomerAddressSelect customerId={customerId} value={addressId} onChange={setAddressId} />
                   </>
                 )}
@@ -638,7 +652,14 @@ export function OperationCreationDrawer({
             )}
             {step === 2 && (
               <div className="space-y-3">
-                <ServiceTypeSelect value={type} onChange={setType} />
+                <ServiceTypeSelect label={secondaryService ? "Tipo do serviço primário" : "Tipo de serviço"} value={type} onChange={setType} />
+                {documentType === "WORK_ORDER" && (
+                  <>
+                    {secondaryService && <CustomerAddressSelect label="Endereço do serviço primário" customerId={customerId} value={addressId} onChange={setAddressId} required />}
+                    <OperationSecondaryService customerId={customerId} value={secondaryService} onChange={setSecondaryService} />
+                    {secondaryService && !secondaryServiceComplete(secondaryService, addressId) && <p className="text-caption">Selecione o tipo e informe o endereço dos dois serviços para continuar.</p>}
+                  </>
+                )}
                 <Field label="Lembrete da próxima manutenção">
                   <select
                     value={maintenanceReminderIntervalMonths}
@@ -680,7 +701,7 @@ export function OperationCreationDrawer({
                   </p>
                 </Field>
                 <Field label="Documento solicitado">
-                  <select value={documentType} onChange={(event) => setDocumentType(event.target.value as DocumentKind)} className={inputCls} disabled={documentTypeLocked || intent === "edit"}>
+                  <select value={documentType} onChange={(event) => { setDocumentType(event.target.value as DocumentKind); setSecondaryService(null); }} className={inputCls} disabled={documentTypeLocked || intent === "edit"}>
                     {(documentTypeLocked ? (["PMOC"] as DocumentKind[]) : ATTENDANCE_DOCUMENT_TYPES).map((item) => (
                       <option key={item} value={item}>{DOCUMENT_KIND_LABEL[item]}</option>
                     ))}
@@ -723,7 +744,12 @@ export function OperationCreationDrawer({
                 <Field label="Observações"><textarea value={observations} onChange={(event) => setObservations(event.target.value)} className={`${inputCls} min-h-24 py-2`} /></Field>
                 <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-sm">
                   <div><strong>Cliente:</strong> {customerId ? "selecionado" : "—"}</div>
-                  <div><strong>Tipo:</strong> {type}</div>
+                  <div><strong>{secondaryService ? "Serviço primário:" : "Tipo:"}</strong> {serviceTypeLabel(type)}</div>
+                  {secondaryService && <>
+                    <div><strong>Endereço primário:</strong> {operationServiceAddressLabel(customer.data?.addresses.find((item) => item.id === addressId))}</div>
+                    <div><strong>Serviço secundário:</strong> {serviceTypeLabel(secondaryService.type)}</div>
+                    <div><strong>Endereço secundário:</strong> {operationServiceAddressLabel(secondaryService.address ?? customer.data?.addresses.find((item) => item.id === secondaryService.addressId))}</div>
+                  </>}
                   <div><strong>Valor do serviço:</strong> {serviceValue.trim() ? Number(serviceValue).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "Não informado"}</div>
                   <div><strong>Documento:</strong> {DOCUMENT_KIND_LABEL[documentType]}</div>
                   <div><strong>Agenda:</strong> {scheduledFor ? new Date(scheduledFor).toLocaleString("pt-BR") : "não definida"}</div>

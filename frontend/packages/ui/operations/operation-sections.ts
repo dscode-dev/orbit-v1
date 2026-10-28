@@ -1,3 +1,4 @@
+import { operationServiceAddressLabel } from "@erp/ui/operations/operation-shared";
 /**
  * Operation sections — the reusable foundation shared by every document.
  *
@@ -34,7 +35,7 @@ function fmtDate(iso: string | null): string {
 function addressLabel(op: OperationDetail): string {
   const a = op.address;
   if (!a) return "—";
-  return [a.street, a.number, a.district, a.city].filter(Boolean).join(", ") || a.name || "Endereço";
+  return operationServiceAddressLabel(a);
 }
 
 /** Build the full ordered section list for an operation. */
@@ -51,10 +52,14 @@ export function buildOperationSections(
       fields: [
         { label: "Operação", value: operationCode(op.number) },
         { label: "Cliente", value: op.customer?.name ?? "—" },
-        { label: "Endereço", value: addressLabel(op) },
+        { label: op.secondaryServiceType ? "Endereço do serviço primário" : "Endereço", value: addressLabel(op) },
+        ...(op.secondaryServiceType ? [
+          { label: "Serviço secundário", value: resolveTypeLabel ? resolveTypeLabel(op.secondaryServiceType) : OPERATION_TYPE_LABEL[op.secondaryServiceType] },
+          { label: "Endereço do serviço secundário", value: operationServiceAddressLabel(op.secondaryAddress) },
+        ] : []),
         { label: "Equipamento", value: op.equipment?.name ?? "Sem equipamento" },
         { label: "Operador", value: op.operator?.name ?? "—" },
-        { label: "Tipo", value: typeLabel },
+        { label: op.secondaryServiceType ? "Serviço primário" : "Tipo", value: typeLabel },
         { label: "Status", value: OPERATION_STATUS[op.status].label },
         { label: "Início", value: fmtDate(op.startedAt) },
         { label: "Conclusão", value: fmtDate(op.completedAt) },

@@ -64,13 +64,13 @@ function customerOption(customer: { id: string; name: string; tradeName?: string
   };
 }
 
-export function CustomerAddressSelect({ customerId, value, onChange }: { customerId: string; value: string; onChange: (id: string) => void }) {
+export function CustomerAddressSelect({ customerId, value, onChange, label = "Endereço", required = false }: { customerId: string; value: string; onChange: (id: string, address?: CustomerAddress) => void; label?: string; required?: boolean }) {
   const detail = useQuery((signal) => (customerId ? customersApi.getCustomer(customerId, { signal }) : Promise.resolve(null)), [customerId]);
   const addresses = detail.data?.addresses ?? [];
   return (
-    <Field label="Endereço">
-      <select value={value} onChange={(event) => onChange(event.target.value)} className={inputCls} disabled={!customerId}>
-        <option value="">Sem endereço específico</option>
+    <Field label={label}>
+      <select aria-label={label} required={required} value={value} onChange={(event) => onChange(event.target.value, addresses.find((address) => address.id === event.target.value))} className={inputCls} disabled={!customerId}>
+        <option value="">{required ? "Selecione o endereço" : "Sem endereço específico"}</option>
         {addresses.map((address) => <option key={address.id} value={address.id}>{addressLabel(address)}</option>)}
       </select>
     </Field>
@@ -185,7 +185,7 @@ export function AuxiliaryOperatorSelect({
   );
 }
 
-export function ServiceTypeSelect({ value, onChange }: { value: OperationType; onChange: (value: OperationType) => void }) {
+export function ServiceTypeSelect({ value, onChange, label = "Tipo de serviço", allowEmpty = false }: { value: OperationType; onChange: (value: OperationType) => void; label?: string; allowEmpty?: boolean }) {
   // Opções vêm do catálogo editável (aba "Tipo de Serviço" em Catálogos Técnicos);
   // enquanto carrega, usa os 4 tipos do sistema como fallback.
   const types = useQuery((signal) => serviceTypesApi.list({ activeOnly: true, signal }), []);
@@ -200,8 +200,9 @@ export function ServiceTypeSelect({ value, onChange }: { value: OperationType; o
     return fromCatalog.length ? fromCatalog : SERVICE_TYPES;
   }, [types.data, value]);
   return (
-    <Field label="Tipo de serviço">
-      <select value={value} onChange={(event) => onChange(event.target.value as OperationType)} className={inputCls}>
+    <Field label={label}>
+      <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value as OperationType)} className={inputCls}>
+        {allowEmpty && <option value="">Selecione o tipo de serviço</option>}
         {options.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
       </select>
     </Field>

@@ -1222,6 +1222,8 @@ export type OperationCancellation = {
 };
 
 export type OperationSummary = {
+  secondaryServiceType?: OperationType | null;
+  secondaryAddressId?: string | null;
   id: string;
   number: number;
   type: OperationType;
@@ -1271,6 +1273,7 @@ export type OperationDetail = Omit<OperationSummary, 'equipment'> & {
     assignee: Pick<TeamUser, 'id' | 'name' | 'role'>;
   }>;
   address: CustomerAddress | null;
+  secondaryAddress?: CustomerAddress | null;
   equipment: {
     id: string;
     name: string;
@@ -1444,7 +1447,23 @@ export type OperatorExecutionOperations = Paginated<OperatorExecutionOperation> 
   view: 'HISTORY' | 'AGENDA';
 };
 
+/** Novo local cadastrado atomicamente com a OS no cliente selecionado. */
+export type OperationServiceAddressInput = {
+  name: string;
+  zipCode?: string;
+  street: string;
+  number: string;
+  complement?: string;
+  referencePoint?: string;
+  district: string;
+  city: string;
+  state: string;
+};
+
 export type CreateOperationPayload = {
+  secondaryServiceType?: OperationType | null;
+  secondaryAddressId?: string | null;
+  secondaryAddress?: OperationServiceAddressInput | null;
   customerId: string;
   sourceSaleId?: string | null;
   addressId?: string | null;

@@ -1,3 +1,4 @@
+import { operationServiceAddressLabel } from "@erp/ui/operations/operation-shared";
 import Link from "next/link";
 import { ChevronRight, Clock, MapPin, Wrench } from "lucide-react";
 import type { Assignment } from "@erp/types";
@@ -45,6 +46,12 @@ export function AssignmentCard({ assignment, compact = false }: { assignment: As
         </div>
         <StatusPill status={ASSIGNMENT_STATUS_PILL[assignment.status]} label={ASSIGNMENT_STATUS_LABEL[assignment.status]} />
       </div>
+      {op.secondaryServiceType && (
+        <div className="mt-2 space-y-1 text-xs text-[var(--color-muted-foreground)]">
+          <p className="font-medium text-[var(--color-primary)]">2 serviços nesta OS</p>
+          {!compact && <p><strong>Endereço secundário:</strong> {operationServiceAddressLabel(op.secondaryAddress)}</p>}
+        </div>
+      )}
       {!compact && (
         <>
           <div className="mt-3 grid gap-2 text-sm text-[var(--color-muted-foreground)]">
