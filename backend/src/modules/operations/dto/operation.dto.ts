@@ -1,3 +1,4 @@
+import { CustomerAddressDto } from '../../customers/dto/customer.dto';
 import {
   DocumentTemplateType,
   MaintenanceChecklistResult,
@@ -150,6 +151,11 @@ export class OperationInspectedEquipmentDto {
 }
 
 export class CreateOperationDto {
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120)
+  secondaryServiceType?: string | null;
+  @IsOptional() @IsUUID('4') secondaryAddressId?: string | null;
+  @IsOptional() @ValidateNested() @Type(() => CustomerAddressDto)
+  secondaryAddress?: CustomerAddressDto | null;
   @IsOptional() @IsUUID('4') sourceSaleId?: string;
   @IsUUID('4') customerId!: string;
   @IsOptional() @IsUUID('4') addressId?: string;
@@ -301,6 +307,11 @@ export class CreateOperationDto {
 }
 
 export class UpdateOperationDto {
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120)
+  secondaryServiceType?: string | null;
+  @IsOptional() @IsUUID('4') secondaryAddressId?: string | null;
+  @IsOptional() @ValidateNested() @Type(() => CustomerAddressDto)
+  secondaryAddress?: CustomerAddressDto | null;
   @IsOptional() @IsUUID('4') customerId?: string;
   @IsOptional() @IsUUID('4') addressId?: string | null;
   @IsOptional() @IsUUID('4') equipmentId?: string | null;

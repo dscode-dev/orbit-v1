@@ -24,6 +24,7 @@ const DOCUMENT_CONTEXT_OPERATION_INCLUDE = {
     },
   },
   address: true,
+  secondaryAddress: true,
   equipment: {
     include: {
       customer: { select: { id: true, name: true } },
@@ -300,6 +301,7 @@ export interface DocumentSignatureContext {
 
 export interface DocumentContext {
   kind: 'operation';
+  serviceTypeLabels?: Record<string, string>;
   operation: DocumentContextOperation;
   configuration: DocumentConfiguration;
   template: DocumentConfigurationTemplate | null;
@@ -376,6 +378,12 @@ export class DocumentContextService {
       );
     }
 
+    const serviceTypeLabels = operation.secondaryServiceType
+      ? Object.fromEntries((await this.prisma.serviceType.findMany({
+          where: { organizationId: configuration.organization.id, key: { in: [operation.type, operation.secondaryServiceType] } },
+          select: { key: true, label: true },
+        })).map((item) => [item.key, item.label]))
+      : undefined;
     const template = configuration.defaultTemplate;
     const handoff = operation.documents.find((document) => document.type === type) ?? null;
     const signature = await this.resolveSignature(
@@ -417,6 +425,7 @@ export class DocumentContextService {
 
     return {
       kind: 'operation',
+      serviceTypeLabels,
       operation,
       configuration,
       template,

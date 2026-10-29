@@ -41,6 +41,7 @@ const ASSIGNMENT_INCLUDE = {
     include: {
       customer: { select: { id: true, name: true, tradeName: true, phone: true, secondaryPhone: true } },
       address: true,
+      secondaryAddress: true,
       equipment: { select: { id: true, name: true, tag: true, type: true } },
       operator: { select: { id: true, name: true } },
       documents: { orderBy: { createdAt: 'asc' as const } },

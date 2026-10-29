@@ -98,6 +98,9 @@ export function updateOperation(
       CreateOperationPayload,
       | 'customerId'
       | 'addressId'
+      | 'secondaryServiceType'
+      | 'secondaryAddressId'
+      | 'secondaryAddress'
       | 'equipmentId'
       | 'type'
       | 'serviceTypes'

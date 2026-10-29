@@ -1,5 +1,7 @@
 "use client";
 
+import { operationServiceAddressLabel } from "@erp/ui/operations/operation-shared";
+
 /**
  * ExecucaoWizard — execução guiada de uma Operation atribuída ao operador.
  *
@@ -30,7 +32,7 @@ import {
   type OperationPart, type Product,
 } from "@erp/api";
 import { DOCUMENT_KIND_LABEL } from "@erp/types";
-import { serviceTypeLabel } from "@operator/lib/service-types";
+import { useServiceTypeLabel } from "@erp/ui/operations/use-service-type-label";
 import { OperatorSignatureChoice } from "@operator/components/operator-signature";
 import { OperatorDocumentSuccessView } from "@operator/features/atendimento/atendimento-wizard";
 import {
@@ -910,6 +912,7 @@ function RevisaoStep({
   onSignerRole: (v: string) => void;
   onSignature: (v: string | null) => void;
 }) {
+  const serviceTypeLabel = useServiceTypeLabel();
   const reviewChecklist = type === "TECHNICAL_REPORT"
     ? maintenanceChecklist.map((item) => ({
         label: `${item.maintenanceType === "WEEKLY" ? "Semanal" : "Semestral"} · ${item.description}`,
@@ -918,9 +921,7 @@ function RevisaoStep({
       }))
     : checklist;
   const done = reviewChecklist.filter((c) => c.done).length;
-  const address = operation.address
-    ? [operation.address.street, operation.address.number, operation.address.city].filter(Boolean).join(", ")
-    : "—";
+  const address = operationServiceAddressLabel(operation.address);
   return (
     <div className="space-y-4">
       <div className="rounded-[var(--radius-md)] border border-[var(--color-info)]/30 bg-[var(--color-info)]/10 px-3 py-2 text-sm text-[var(--color-info)] flex items-start gap-2">
@@ -931,7 +932,12 @@ function RevisaoStep({
       <ReviewCard title="Identificação" icon={<Building2 className="h-4 w-4" />}>
         <ReviewRow label="Operação" value={`OP-${String(operation.number).padStart(6, "0")}`} />
         <ReviewRow label="Cliente" value={operation.customer?.name ?? "—"} />
-        <ReviewRow label="Endereço" value={address} icon={<MapPin className="h-3.5 w-3.5" />} />
+        <ReviewRow label={operation.secondaryServiceType ? "Endereço do serviço primário" : "Endereço"} value={address} icon={<MapPin className="h-3.5 w-3.5" />} />
+        {operation.secondaryServiceType && <>
+          <ReviewRow label="Serviço primário" value={serviceTypeLabel(operation.type)} />
+          <ReviewRow label="Serviço secundário" value={serviceTypeLabel(operation.secondaryServiceType)} />
+          <ReviewRow label="Endereço do serviço secundário" value={operationServiceAddressLabel(operation.secondaryAddress)} icon={<MapPin className="h-3.5 w-3.5" />} />
+        </>}
         <ReviewRow label="Tipos de serviço" value={(operation.serviceTypes?.length ? operation.serviceTypes : [operation.type]).map(serviceTypeLabel).join(" · ")} />
         <ReviewRow label="Documento" value={DOCUMENT_KIND_LABEL[type]} />
         <ReviewRow label="Operador" value={operation.operator?.name ?? "—"} />

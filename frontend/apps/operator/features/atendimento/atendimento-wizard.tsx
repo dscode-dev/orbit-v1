@@ -80,10 +80,15 @@ import { useAuth } from '@erp/ui/auth/auth-provider';
 import { PmocEquipmentExecutionWizard } from '@platform/components/pmoc-equipment-execution-wizard';
 import { EQUIPMENT_STATUS_LABEL, EQUIPMENT_STATUS_PILL } from '@platform/equipment-display';
 import { useDebounce } from '@erp/utils';
-import { SERVICE_TYPES, serviceTypeLabel, type ServiceTypeKey } from '../../lib/service-types';
+import { SERVICE_TYPES, type ServiceTypeKey } from '../../lib/service-types';
 import { createOperationFromDraft, workOrderNumber } from '../../lib/atendimento';
 import { OperatorSignatureChoice } from '../../components/operator-signature';
 import { FieldEquipmentCollection, type NewFieldEquipmentDraft } from '../../components/field-equipment-collection';
+
+import { OperationSecondaryService, secondaryServiceComplete, secondaryServicePayload, type SecondaryServiceDraft } from '@platform/components/operation-secondary-service';
+import { CustomerAddressSelect } from '@platform/components/entity-select';
+import { operationServiceAddressLabel } from "@erp/ui/operations/operation-shared";
+import { useServiceTypeLabel } from '@erp/ui/operations/use-service-type-label';
 
 const STEPS = [
   'Cliente',
@@ -173,6 +178,7 @@ export function AtendimentoWizard({
   const [equipments, setEquipments] = useState<EquipmentSummary[]>([]);
   const [equipmentProfiles, setEquipmentProfiles] = useState<Record<string, EquipmentProfileDraft>>({});
   const [serviceType, setServiceType] = useState<ServiceTypeKey | null>(null);
+  const [secondaryService, setSecondaryService] = useState<SecondaryServiceDraft | null>(null);
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
   const [maintenanceType, setMaintenanceType] = useState<OperationMaintenanceType>('SEMIANNUAL');
   const [maintenanceChecklist, setMaintenanceChecklist] = useState<OperationMaintenanceChecklistItem[]>([]);
@@ -322,7 +328,7 @@ export function AtendimentoWizard({
       case 1:
         return equipmentProfilesComplete && (documentType !== 'TECHNICAL_REPORT' || equipments.length > 0);
       case 2:
-        return !!serviceType;
+        return !!serviceType && (documentType !== 'WORK_ORDER' || secondaryServiceComplete(secondaryService, walkInMode ? 'walk-in' : address?.id ?? ''));
       case 3:
         return true;
       case 4:
@@ -336,7 +342,7 @@ export function AtendimentoWizard({
       default:
         return false;
     }
-  }, [step, customer, address, serviceType, signature, signerName, technicalSignatureId, walkInMode, walk, walkInEquipments, equipmentProfilesComplete, equipments.length, documentType]);
+  }, [step, customer, address, serviceType, secondaryService, signature, signerName, technicalSignatureId, walkInMode, walk, walkInEquipments, equipmentProfilesComplete, equipments.length, documentType]);
 
   function back() {
     if (step === 0) router.push('/operator');
@@ -442,6 +448,7 @@ export function AtendimentoWizard({
         equipmentId,
         inspectedEquipments,
         serviceType,
+        ...secondaryServicePayload(documentType === 'WORK_ORDER' ? secondaryService : null),
         checklist,
         maintenanceType,
         maintenanceChecklist,
@@ -615,6 +622,7 @@ export function AtendimentoWizard({
                 selected={customer}
                 onSelect={(c) => {
                   setCustomer(c);
+                  setSecondaryService(null);
                   setAddress(null);
                   setEquipments([]);
                   setEquipmentProfiles({});
@@ -625,6 +633,7 @@ export function AtendimentoWizard({
                 type="button"
                 onClick={() => {
                   setWalkInMode(true);
+                  setSecondaryService(null);
                   setWalkInEquipments([]);
                   setCustomer(null);
                   setAddress(null);
@@ -679,7 +688,16 @@ export function AtendimentoWizard({
               <strong>{DOCUMENT_KIND_LABEL[documentType]}</strong>
               <span className="mt-1 block text-caption">O atendimento será executado por você e iniciado agora.</span>
             </div>
+            {secondaryService && <h2 className="font-semibold">Serviço primário</h2>}
             <TipoStep selected={serviceType} onSelect={pickServiceType} />
+            {documentType === 'WORK_ORDER' && (
+              <>
+                {secondaryService && !walkInMode && customer && <CustomerAddressSelect label="Endereço do serviço primário" customerId={customer.id} value={address?.id ?? ''} onChange={(id, selected) => setAddress(selected ? { id, label: operationServiceAddressLabel(selected) } : null)} required />}
+                {secondaryService && walkInMode && <p className="text-sm">Endereço do serviço primário: {walkInAddressLabel(walk)}</p>}
+                <OperationSecondaryService customerId={walkInMode ? '' : customer?.id ?? ''} value={secondaryService} onChange={setSecondaryService} />
+                {secondaryService && !secondaryServiceComplete(secondaryService, walkInMode ? 'walk-in' : address?.id ?? '') && <p className="text-caption">Informe o tipo e o endereço dos dois serviços para continuar.</p>}
+              </>
+            )}
           </div>
         )}
         {step === 3 && (
@@ -729,6 +747,7 @@ export function AtendimentoWizard({
               address={displayAddress}
               equipments={displayEquipments}
               serviceType={serviceType}
+              secondaryService={secondaryService}
               checklist={checklist}
               maintenanceType={maintenanceType}
               maintenanceChecklist={maintenanceChecklist}
@@ -750,6 +769,7 @@ export function AtendimentoWizard({
             address={displayAddress}
             equipments={displayEquipments}
             serviceType={serviceType}
+            secondaryService={secondaryService}
             checklist={checklist}
             maintenanceType={maintenanceType}
             maintenanceChecklist={maintenanceChecklist}
@@ -960,7 +980,7 @@ function pmocExecutionLabel(status: PmocExecutionRequest['status']): string {
 
 function addressLabelOf(a: CustomerAddress): string {
   return (
-    [a.street, a.number, a.district, a.city].filter(Boolean).join(', ') || a.name || 'Endereço'
+    operationServiceAddressLabel(a)
   );
 }
 
@@ -1358,9 +1378,7 @@ function EnderecoStep({
     <ul className="space-y-2">
       {addresses.map((a) => {
         const label =
-          [a.street, a.number, a.district, a.city].filter(Boolean).join(', ') ||
-          a.name ||
-          'Endereço';
+          operationServiceAddressLabel(a);
         return (
           <li key={a.id}>
             <PickRow
@@ -1945,6 +1963,7 @@ function ResumoStep({
   address,
   equipments,
   serviceType,
+  secondaryService,
   checklist,
   maintenanceType,
   maintenanceChecklist,
@@ -1965,6 +1984,7 @@ function ResumoStep({
   address: { id: string; label: string } | null;
   equipments: EquipmentSummary[];
   serviceType: ServiceTypeKey | null;
+  secondaryService?: SecondaryServiceDraft | null;
   checklist: ChecklistItem[];
   maintenanceType: OperationMaintenanceType;
   maintenanceChecklist: OperationMaintenanceChecklistItem[];
@@ -1981,6 +2001,9 @@ function ResumoStep({
   variant?: 'signature' | 'confirmation';
   showSignature?: boolean;
 }) {
+  const serviceTypeLabel = useServiceTypeLabel();
+  const secondaryCustomer = useQuery((signal) => customer?.id && secondaryService?.addressId ? customersApi.getCustomer(customer.id, { signal }) : Promise.resolve(null), [customer?.id, secondaryService?.addressId]);
+  const secondaryAddress = secondaryService?.address ?? secondaryCustomer.data?.addresses.find((item) => item.id === secondaryService?.addressId);
   const displayedChecklist = documentType === 'TECHNICAL_REPORT' ? maintenanceChecklist : checklist;
   const done = displayedChecklist.filter((item) => 'executed' in item ? item.executed : item.done).length;
   return (
@@ -1993,7 +2016,7 @@ function ResumoStep({
       </div>
       <SummaryRow icon={<Building2 className="h-4 w-4" />} label="Cliente" value={customer?.name} />
       <SummaryRow icon={<FileText className="h-4 w-4" />} label="Documento" value={DOCUMENT_KIND_LABEL[documentType]} />
-      <SummaryRow icon={<MapPin className="h-4 w-4" />} label="Endereço" value={address?.label} />
+      <SummaryRow icon={<MapPin className="h-4 w-4" />} label={secondaryService ? "Endereço do serviço primário" : "Endereço"} value={address?.label} />
       <SummaryRow
         icon={<Wrench className="h-4 w-4" />}
         label="Equipamentos"
@@ -2003,9 +2026,13 @@ function ResumoStep({
       />
       <SummaryRow
         icon={<ClipboardList className="h-4 w-4" />}
-        label="Tipo"
+        label={secondaryService ? "Serviço primário" : "Tipo"}
         value={serviceType ? serviceTypeLabel(serviceType) : undefined}
       />
+      {secondaryService && <>
+        <SummaryRow icon={<ClipboardList className="h-4 w-4" />} label="Serviço secundário" value={serviceTypeLabel(secondaryService.type)} />
+        <SummaryRow icon={<MapPin className="h-4 w-4" />} label="Endereço do serviço secundário" value={secondaryAddress ? operationServiceAddressLabel(secondaryAddress) : '—'} />
+      </>}
       <SummaryRow
         icon={<CheckCircle2 className="h-4 w-4" />}
         label="Checklist"

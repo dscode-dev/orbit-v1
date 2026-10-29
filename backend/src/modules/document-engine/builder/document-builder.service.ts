@@ -471,10 +471,12 @@ export class DocumentBuilderService {
                 ? `${contact.name}${contact.phone ? ` · ${contact.phone}` : ''}`
                 : (operation.customer.phone ?? '—'),
             ],
-            ['Endereço', address ? this.address(address) : '—'],
+            [operation.secondaryServiceType ? 'Serviço primário' : 'Tipo de serviço', context.serviceTypeLabels?.[operation.type] ?? this.operationTypeLabel(operation.type)],
+            [operation.secondaryServiceType ? 'Endereço do serviço primário' : 'Endereço', address ? this.workOrderAddress(address) : '—'],
           ]),
         ],
       },
+      this.workOrderSecondaryServiceSection(context),
       this.inspectedEquipmentSection(operation, 'work-order'),
       {
         id: 'work-order-reported-issue',
@@ -495,6 +497,26 @@ export class DocumentBuilderService {
       },
       this.observationSection(operation, 'Observações e resultado operacional'),
     ].filter((section): section is DocumentSection => Boolean(section));
+  }
+
+  private workOrderAddress(address: NonNullable<DocumentContextOperation['address']>): string {
+    return this.clean([this.address(address), address.complement,
+      address.referencePoint ? `Referência: ${address.referencePoint}` : null,
+      address.zipCode ? `CEP: ${address.zipCode}` : null].filter(Boolean).join(' · '));
+  }
+
+  private workOrderSecondaryServiceSection(context: DocumentContext): DocumentSection | null {
+    const { operation } = context;
+    if (!operation.secondaryServiceType) return null;
+    return {
+      id: 'work-order-secondary-service',
+      title: 'Serviço secundário',
+      critical: true,
+      components: [this.metadata('work-order-secondary-service-metadata', [
+        ['Tipo de serviço', context.serviceTypeLabels?.[operation.secondaryServiceType] ?? this.operationTypeLabel(operation.secondaryServiceType)],
+        ['Endereço', operation.secondaryAddress ? this.workOrderAddress(operation.secondaryAddress) : 'Não informado'],
+      ])],
+    };
   }
 
   private canceledWorkOrderSections(
@@ -529,9 +551,11 @@ export class DocumentBuilderService {
           ['Razão/Nome', operation.customer.name],
           ['Documento', operation.customer.cnpj ?? operation.customer.cpf ?? '—'],
           ['Contato', contact ? `${contact.name}${contact.phone ? ` · ${contact.phone}` : ''}` : (operation.customer.phone ?? '—')],
-          ['Endereço', address ? this.address(address) : '—'],
+          [operation.secondaryServiceType ? 'Serviço primário' : 'Tipo de serviço', context.serviceTypeLabels?.[operation.type] ?? this.operationTypeLabel(operation.type)],
+          [operation.secondaryServiceType ? 'Endereço do serviço primário' : 'Endereço', address ? this.workOrderAddress(address) : '—'],
         ])],
       },
+      this.workOrderSecondaryServiceSection(context),
       this.inspectedEquipmentSection(operation, 'work-order-cancellation'),
       {
         id: 'work-order-cancellation-reason',

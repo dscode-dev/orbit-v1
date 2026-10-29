@@ -255,6 +255,8 @@ function operationInitialValues(
   return {
     customerId: operation.customer?.id ?? "",
     addressId: operation.address?.id ?? null,
+    secondaryServiceType: operation.secondaryServiceType ?? null,
+    secondaryAddressId: operation.secondaryAddress?.id ?? null,
     equipmentId: operation.equipment?.id ?? null,
     inspectedEquipments: operation.inspectedEquipments.map((item) => ({
       equipmentId: item.equipmentId,
@@ -289,6 +291,9 @@ function editableOperationPayload(
   return {
     customerId: payload.customerId,
     addressId: payload.addressId,
+    secondaryServiceType: payload.secondaryServiceType,
+    secondaryAddressId: payload.secondaryAddressId,
+    secondaryAddress: payload.secondaryAddress,
     equipmentId: payload.equipmentId,
     type: payload.type,
     serviceTypes: payload.serviceTypes,

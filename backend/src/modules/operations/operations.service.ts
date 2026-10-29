@@ -54,6 +54,7 @@ export type OperationCreationTransactionHook = (
 const OPERATION_INCLUDE = {
   customer: { select: { id: true, name: true, tradeName: true, phone: true, secondaryPhone: true } },
   address: true,
+  secondaryAddress: true,
   equipment: {
     select: {
       id: true,
@@ -193,6 +194,9 @@ type OperationAssignment = {
 const OPERATION_CORE_EDIT_FIELDS = new Set<keyof UpdateOperationDto>([
   'customerId',
   'addressId',
+  'secondaryServiceType',
+  'secondaryAddressId',
+  'secondaryAddress',
   'equipmentId',
   'type',
   'serviceTypes',
@@ -210,6 +214,9 @@ const OPERATION_CORE_EDIT_FIELDS = new Set<keyof UpdateOperationDto>([
 const OPERATION_MANAGEMENT_EDIT_FIELDS = new Set<keyof UpdateOperationDto>([
   'customerId',
   'addressId',
+  'secondaryServiceType',
+  'secondaryAddressId',
+  'secondaryAddress',
   'equipmentId',
   'type',
   'scheduledFor',
@@ -391,7 +398,14 @@ export class OperationsService {
       requestedDocumentType,
       dto.maintenanceReminderIntervalMonths,
     );
-    await this.serviceTypes.assertValidTypeKeys([dto.type, ...(dto.serviceTypes ?? [])]);
+    await this.validateSecondaryService(
+      dto.customerId, requestedDocumentType, dto.addressId,
+      dto.secondaryServiceType, dto.secondaryAddressId, dto.secondaryAddress,
+    );
+    const serviceTypes = requestedDocumentType === DocumentTemplateType.WORK_ORDER
+      ? this.workOrderTypes(dto.type, dto.secondaryServiceType, dto.serviceTypes)
+      : this.operationTypes(dto.type, dto.serviceTypes);
+    await this.serviceTypes.assertValidTypeKeys(serviceTypes);
     await this.validateRelations(dto.customerId, dto.addressId, dto.equipmentId);
     this.validateReferencePeriod(dto.referenceMonth, dto.referenceYear);
     const inspectedEquipments = await this.resolveInspectedEquipments(
@@ -436,16 +450,21 @@ export class OperationsService {
     // Operation + auto Work Order draft are created atomically. The OS number is
     // derived from the operation sequential number.
     const operationId = await this.prisma.$transaction(async (tx) => {
+      const secondaryAddressId = await this.resolveSecondaryServiceAddressTx(
+        tx, dto.customerId, dto.secondaryAddressId, dto.secondaryAddress,
+      );
       const operation = await tx.operation.create({
         data: {
           customerId: dto.customerId,
           sourceSaleId: sourceSale?.id ?? null,
           addressId: dto.addressId ?? null,
+          secondaryServiceType: dto.secondaryServiceType || null,
+          secondaryAddressId,
           equipmentId: dto.equipmentId ?? null,
           operatorId: assignment.operatorId,
           type: dto.type,
           requestedDocumentType: dto.documentType ?? DocumentTemplateType.WORK_ORDER,
-          serviceTypes: this.operationTypes(dto.type, dto.serviceTypes),
+          serviceTypes,
           status: dto.status ?? 'DRAFT',
           scheduledFor: dto.scheduledFor ? new Date(dto.scheduledFor) : null,
           startedAt: dto.startedAt ? new Date(dto.startedAt) : null,
@@ -672,6 +691,8 @@ export class OperationsService {
         id: true,
         customerId: true,
         addressId: true,
+        secondaryServiceType: true,
+        secondaryAddressId: true,
         operatorId: true,
         status: true,
         scheduledFor: true,
@@ -730,6 +751,12 @@ export class OperationsService {
           return dto.customerId !== existing.customerId;
         case 'addressId':
           return (dto.addressId ?? null) !== (existing.addressId ?? null);
+        case 'secondaryServiceType':
+          return (dto.secondaryServiceType ?? null) !== (existing.secondaryServiceType ?? null);
+        case 'secondaryAddressId':
+          return (dto.secondaryAddressId ?? null) !== (existing.secondaryAddressId ?? null);
+        case 'secondaryAddress':
+          return Boolean(dto.secondaryAddress);
         case 'equipmentId':
           return (dto.equipmentId ?? null) !== (existing.equipmentId ?? null);
         case 'type':
@@ -766,6 +793,17 @@ export class OperationsService {
     const targetCustomerId = dto.customerId ?? existing.customerId;
     const targetAddressId =
       dto.addressId === undefined ? (existing.addressId ?? undefined) : (dto.addressId ?? undefined);
+    const targetSecondaryType = dto.secondaryServiceType === undefined
+      ? existing.secondaryServiceType : dto.secondaryServiceType;
+    const targetSecondaryAddressId = !targetSecondaryType ? null
+      : dto.secondaryAddressId === undefined ? existing.secondaryAddressId : dto.secondaryAddressId;
+    const secondaryChanged = dto.secondaryServiceType !== undefined || dto.secondaryAddressId !== undefined || dto.secondaryAddress != null;
+    if (secondaryChanged || dto.customerId !== undefined || dto.addressId !== undefined) {
+      await this.validateSecondaryService(
+        targetCustomerId, existing.requestedDocumentType, targetAddressId, targetSecondaryType,
+        dto.secondaryAddress ? dto.secondaryAddressId : targetSecondaryAddressId, dto.secondaryAddress,
+      );
+    }
     const targetEquipmentId =
       dto.equipmentId === undefined
         ? (existing.equipmentId ?? undefined)
@@ -782,10 +820,14 @@ export class OperationsService {
       existing.requestedDocumentType,
       dto.maintenanceReminderIntervalMonths,
     );
-    if (dto.type !== undefined || dto.serviceTypes !== undefined) {
+    if (dto.type !== undefined || dto.serviceTypes !== undefined || secondaryChanged) {
+      if (existing.requestedDocumentType === DocumentTemplateType.WORK_ORDER) {
+        this.workOrderTypes(dto.type ?? existing.type, targetSecondaryType, dto.serviceTypes);
+      }
       await this.serviceTypes.assertValidTypeKeys([
         ...(dto.type !== undefined ? [dto.type] : []),
         ...(dto.serviceTypes ?? []),
+        ...(targetSecondaryType ? [targetSecondaryType] : []),
       ]);
     }
     if (dto.auxiliaryOperatorIds !== undefined && actor.role !== Role.OWNER && actor.role !== Role.MANAGER) {
@@ -851,20 +893,23 @@ export class OperationsService {
       dto.type !== undefined &&
       !(await this.serviceTypes.getReminderConfigByKey(dto.type))?.generatesReminder;
     await this.prisma.$transaction(async (tx) => {
+      const secondaryAddressId = await this.resolveSecondaryServiceAddressTx(
+        tx, targetCustomerId, targetSecondaryAddressId, dto.secondaryAddress,
+      );
       await tx.operation.update({
         where: { id },
         data: {
+          ...(secondaryChanged ? { secondaryServiceType: targetSecondaryType || null, secondaryAddressId } : {}),
           ...(dto.customerId !== undefined ? { customerId: dto.customerId } : {}),
           ...(dto.addressId !== undefined ? { addressId: dto.addressId } : {}),
           ...(dto.equipmentId !== undefined ? { equipmentId: dto.equipmentId } : {}),
           ...(dto.type !== undefined ? { type: dto.type } : {}),
           ...(dto.status ? { status: dto.status } : {}),
-          ...(dto.serviceTypes !== undefined || dto.type !== undefined
+          ...(dto.serviceTypes !== undefined || dto.type !== undefined || secondaryChanged
             ? {
-                serviceTypes: this.operationTypes(
-                  dto.type ?? existing.type,
-                  dto.serviceTypes ?? existing.serviceTypes,
-                ),
+                serviceTypes: existing.requestedDocumentType === DocumentTemplateType.WORK_ORDER
+                  ? this.workOrderTypes(dto.type ?? existing.type, targetSecondaryType)
+                  : this.operationTypes(dto.type ?? existing.type, dto.serviceTypes ?? existing.serviceTypes),
               }
             : {}),
           ...(dto.scheduledFor !== undefined
@@ -1619,6 +1664,53 @@ export class OperationsService {
     }));
   }
 
+  private async resolveSecondaryServiceAddressTx(
+    tx: Prisma.TransactionClient,
+    customerId: string,
+    addressId?: string | null,
+    address?: CreateOperationDto['secondaryAddress'],
+  ): Promise<string | null> {
+    if (!address) return addressId ?? null;
+    const created = await tx.customerAddress.create({
+      data: { ...address, customerId, isPrimary: false, zipCode: address.zipCode ?? '' },
+      select: { id: true },
+    });
+    return created.id;
+  }
+
+  private workOrderTypes(primary: string, secondary?: string | null, supplied?: string[]): string[] {
+    const types = this.operationTypes(primary, secondary ? [secondary] : []);
+    if (supplied?.some((type) => !types.includes(type)) || (supplied?.length ?? 0) > 2) {
+      throw new ApplicationException(
+        ERROR_CODES.VALIDATION_ERROR,
+        'A OS permite um serviço primário e um secundário, cada um com seu endereço',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return types;
+  }
+
+  private async validateSecondaryService(
+    customerId: string,
+    documentType: DocumentTemplateType,
+    primaryAddressId?: string | null,
+    secondaryType?: string | null,
+    secondaryAddressId?: string | null,
+    secondaryAddress?: CreateOperationDto['secondaryAddress'],
+  ): Promise<void> {
+    if (!secondaryType && !secondaryAddressId && !secondaryAddress) return;
+    if (documentType !== DocumentTemplateType.WORK_ORDER || !secondaryType?.trim() || !primaryAddressId ||
+      (!secondaryAddressId && !secondaryAddress) || (secondaryAddressId && secondaryAddress) ||
+      (secondaryAddress && !secondaryAddress.number?.trim())) {
+      throw new ApplicationException(
+        ERROR_CODES.VALIDATION_ERROR,
+        'Informe o tipo e o endereço de cada serviço. O serviço secundário está disponível somente para OS',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (secondaryAddressId) await this.validateRelations(customerId, secondaryAddressId);
+  }
+
   private operationTypes(primary: OperationType, values?: OperationType[]): OperationType[] {
     return [...new Set([primary, ...(values ?? [])])];
   }
@@ -1855,7 +1947,7 @@ export class OperationsService {
     equipmentId?: string,
   ): Promise<void> {
     const customer = await this.prisma.customer.findUnique({
-      where: { id: customerId },
+      where: { id: customerId, isProvisional: false },
       select: { id: true },
     });
     if (!customer)

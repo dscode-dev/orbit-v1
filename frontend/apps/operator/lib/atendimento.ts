@@ -31,6 +31,9 @@ export type AtendimentoDraft = {
   }>;
   /** ServiceTypeKey maps 1:1 to the backend OperationType. */
   serviceType: ServiceTypeKey | null;
+  secondaryServiceType?: string | null;
+  secondaryAddressId?: string | null;
+  secondaryAddress?: CreateOperationPayload["secondaryAddress"];
   checklist: { catalogId?: string; label: string; done: boolean; note?: string }[];
   maintenanceType: OperationMaintenanceType;
   maintenanceChecklist: OperationMaintenanceChecklistItem[];
@@ -94,6 +97,7 @@ export async function createOperationFromDraft(draft: AtendimentoDraft): Promise
     equipmentId: draft.equipmentId,
     inspectedEquipments: draft.inspectedEquipments,
     type: draft.serviceType,
+    ...(draft.documentType === "WORK_ORDER" ? { secondaryServiceType: draft.secondaryServiceType, secondaryAddressId: draft.secondaryAddressId, secondaryAddress: draft.secondaryAddress } : {}),
     documentType: draft.documentType,
     status: 'DRAFT',
     // catalogId pertence somente ao seletor do frontend. O contrato oficial da

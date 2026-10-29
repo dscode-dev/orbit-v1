@@ -1,5 +1,7 @@
 "use client";
 
+import { operationServiceAddressLabel } from "@erp/ui/operations/operation-shared";
+
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState } from "react";
@@ -22,7 +24,7 @@ import {
   ASSIGNMENT_STATUS_PILL,
   assignmentTime,
 } from "@erp/ui/assignments/assignment-shared";
-import { serviceTypeLabel } from "@operator/lib/service-types";
+import { useServiceTypeLabel } from "@erp/ui/operations/use-service-type-label";
 import { FieldReportHandoff } from "@operator/features/reports/field-report-handoff";
 import { OperatorSignatureChoice } from "@operator/components/operator-signature";
 
@@ -138,6 +140,7 @@ function AssignmentWorkflow({
   // operadores; owner/manager têm acesso pleno.
   const canReports = role !== "OPERATOR" || can("canReports");
   const op = assignment.operation;
+  const serviceTypeLabel = useServiceTypeLabel();
   const readOnlyRvtAuxiliary = op.requestedDocumentType === "TECHNICAL_REPORT" && !assignment.isPrimary;
   const operation = useQuery((signal) => operationApi.getOperation(op.id, { signal }), [op.id]);
   const [document, setDocument] = useState<OperationDocument | null>(null);
@@ -148,9 +151,7 @@ function AssignmentWorkflow({
     (signal) => isPmoc ? documentsApi.getConfigurationByType("PMOC", { signal }) : Promise.resolve(null),
     [isPmoc],
   );
-  const address = op.address
-    ? `${op.address.street ?? ""}${op.address.number ? `, ${op.address.number}` : ""} · ${op.address.city ?? "cidade não informada"}/${op.address.state ?? "UF"}`
-    : "Endereço não informado";
+  const address = operationServiceAddressLabel(op.address);
   const pmoc = op.maintenanceExecution?.plan.pmocPlan;
   const pmocExecution = op.maintenanceExecution?.pmocExecutionRequest;
   const pmocSignatureMode = pmocConfiguration.data?.defaultTemplate?.signatureMode ?? null;
@@ -181,11 +182,16 @@ function AssignmentWorkflow({
       {error && <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{error}</div>}
 
       <section className="rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 space-y-3">
-        <InfoRow icon={MapPin} label="Endereço" value={address} />
+        <InfoRow icon={MapPin} label={op.secondaryServiceType ? "Endereço do serviço primário" : "Endereço"} value={address} />
         <InfoRow icon={MapPin} label="Complemento" value={op.address?.complement || "Não informado"} />
         <InfoRow icon={MapPin} label="Ponto de referência" value={op.address?.referencePoint || "Não informado"} />
         <InfoRow icon={Phone} label="Telefone do cliente" value={op.customer?.phone || op.customer?.secondaryPhone || "Não informado"} />
         <InfoRow icon={Package} label="Equipamentos" value={operation.data?.inspectedEquipments.map((item) => item.equipment?.name).filter(Boolean).join(", ") || pmoc?.equipments.map((item) => item.equipment.name).join(", ") || op.equipment?.name || "Sem equipamento vinculado"} />
+        {op.secondaryServiceType && <>
+          <InfoRow icon={ClipboardCheck} label="Serviço primário" value={serviceTypeLabel(op.type)} />
+          <InfoRow icon={ClipboardCheck} label="Serviço secundário" value={serviceTypeLabel(op.secondaryServiceType)} />
+          <InfoRow icon={MapPin} label="Endereço do serviço secundário" value={operationServiceAddressLabel(op.secondaryAddress)} />
+        </>}
         <InfoRow icon={ClipboardCheck} label="Tipos de serviço" value={(op.serviceTypes?.length ? op.serviceTypes : [op.type]).map(serviceTypeLabel).join(" · ")} />
         {op.serviceValue !== null && op.serviceValue !== undefined && (
           <InfoRow

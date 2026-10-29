@@ -26,6 +26,7 @@ import {
   type TechnicalCatalog,
 } from "@erp/api";
 import { brlAmountInWords, formatCurrencyBRL, formatNumber } from "@erp/utils";
+import { BudgetGuestCustomerFields, validBudgetGuestCustomer, budgetGuestEquipmentDrafts, type BudgetGuestCustomerDraft } from "./budget-guest-customer-fields";
 import { TechnicalSignaturePreview } from "./document-handoff-inbox";
 
 const STEPS = ["Origem", "Dados gerais", "Serviços", "Materiais", "Valores", "Condições", "Responsável técnico"];
@@ -39,21 +40,22 @@ export function BudgetWizardDrawer({
   budget = null,
   initialOperationId = null,
   presentation = "drawer",
-  allowApproval = false,
+  allowDocumentGeneration = false,
 }: {
   open: boolean;
   onClose: () => void;
-  onSaved: (budget: Budget, action?: "save" | "approve") => void;
+  onSaved: (budget: Budget, action?: "save" | "generate") => void;
   budget?: Budget | null;
   initialOperationId?: string | null;
   /** Mobile reuses every field and validation in a full-page shell. */
   presentation?: "drawer" | "page";
-  allowApproval?: boolean;
+  allowDocumentGeneration?: boolean;
 }) {
   const [step, setStep] = useState(0);
   const persistedId = useRef<string | null>(budget?.id ?? null);
   const submitting = useRef(false);
-  const [origin, setOrigin] = useState<"MANUAL" | "WORK_ORDER">("MANUAL");
+  const [origin, setOrigin] = useState<"MANUAL" | "WORK_ORDER" | "GUEST">("MANUAL");
+  const [guestCustomer, setGuestCustomer] = useState<BudgetGuestCustomerDraft>({ type: "COMPANY", name: "" });
   const [operationId, setOperationId] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [addressId, setAddressId] = useState("");
@@ -90,8 +92,8 @@ export function BudgetWizardDrawer({
       total: result.pagination?.total,
     };
   }, []);
-  const customer = useQuery<CustomerDetail | null>((signal) => open && customerId ? customersApi.getCustomer(customerId, { signal }) : Promise.resolve(null), [open, customerId]);
-  const equipments = useQuery((signal) => open && customerId ? equipmentsApi.listEquipments({ limit: 100, customerId, signal }) : Promise.resolve(null), [open, customerId]);
+  const customer = useQuery<CustomerDetail | null>((signal) => open && origin !== "GUEST" && customerId ? customersApi.getCustomer(customerId, { signal }) : Promise.resolve(null), [open, customerId, origin]);
+  const equipments = useQuery((signal) => open && origin !== "GUEST" && customerId ? equipmentsApi.listEquipments({ limit: 100, customerId, signal }) : Promise.resolve(null), [open, customerId, origin]);
   const equipmentOverflow = Math.max(0, (equipments.data?.pagination?.total ?? 0) - (equipments.data?.items.length ?? 0));
   const operations = useQuery((signal) => open && origin === "WORK_ORDER" ? operationApi.listOperations({ limit: 100, status: "COMPLETED", signal }) : Promise.resolve(null), [open, origin]);
   const signatures = useQuery((signal) => open ? signaturesApi.listSignatures({ limit: 100, active: true, signal }) : Promise.resolve(null), [open]);
@@ -106,7 +108,15 @@ export function BudgetWizardDrawer({
   useEffect(() => {
     if (!open) return;
     persistedId.current = budget?.id ?? null;
-    setStep(0); setOrigin(budget?.operationId || initialOperationId ? "WORK_ORDER" : "MANUAL"); setOperationId(budget?.operationId ?? initialOperationId ?? "");
+    setStep(0); setOrigin(budget?.customer?.isProvisional ? "GUEST" : budget?.operationId || initialOperationId ? "WORK_ORDER" : "MANUAL"); setOperationId(budget?.operationId ?? initialOperationId ?? "");
+    const provisional = budget?.customer?.isProvisional ? budget.customer : null;
+    setGuestCustomer(provisional ? {
+      type: provisional.type ?? "COMPANY", name: provisional.name, tradeName: provisional.tradeName,
+      cpf: provisional.cpf, cnpj: provisional.cnpj, email: provisional.email, phone: provisional.phone,
+      secondaryPhone: provisional.secondaryPhone, notes: provisional.notes,
+      equipments: budget?.equipments?.length ? budgetGuestEquipmentDrafts(budget) : undefined,
+      address: budget?.customerAddress ? { name: budget.customerAddress.name || "Principal", zipCode: budget.customerAddress.zipCode || undefined, street: budget.customerAddress.street || "", number: budget.customerAddress.number || "", complement: budget.customerAddress.complement || undefined, district: budget.customerAddress.district || "", city: budget.customerAddress.city || "", state: budget.customerAddress.state || "" } : undefined,
+    } : { type: "COMPANY", name: "" });
     setCustomerId(budget?.customerId ?? ""); setAddressId(budget?.customerAddressId ?? ""); setEquipmentIds(budget?.equipments?.map((item) => item.equipmentId) ?? (budget?.equipmentId ? [budget.equipmentId] : []));
     setTitle(budget?.title ?? "Orçamento de manutenção"); setDescription(budget?.description ?? ""); setIssuedAt(budget?.issuedAt?.slice(0, 10) ?? today());
     setIntroduction(budget?.introduction ?? "Atendendo à honrosa solicitação de V.Sa., apresentamos nosso orçamento conforme solicitado.");
@@ -119,8 +129,8 @@ export function BudgetWizardDrawer({
   }, [budget, initialOperationId, open]);
 
   useEffect(() => {
-    if (!addressId && customer.data?.addresses?.[0]) setAddressId(customer.data.addresses[0].id);
-  }, [addressId, customer.data]);
+    if (origin !== "GUEST" && !addressId && customer.data?.addresses?.[0]) setAddressId(customer.data.addresses[0].id);
+  }, [addressId, customer.data, origin]);
 
   useEffect(() => {
     if (technicalSignatureId) return;
@@ -163,8 +173,8 @@ export function BudgetWizardDrawer({
   }, [step, presentation]);
 
   function canContinue(): boolean {
-    if (step === 0) return origin === "MANUAL" || Boolean(operationId);
-    if (step === 1) return Boolean(customerId && title.trim() && issuedAt && introduction.trim());
+    if (step === 0) return origin === "GUEST" ? validBudgetGuestCustomer(guestCustomer) : origin === "MANUAL" || Boolean(operationId);
+    if (step === 1) return Boolean((origin === "GUEST" ? validBudgetGuestCustomer(guestCustomer) : customerId) && title.trim() && issuedAt && introduction.trim());
     if (step === 2) return services.length > 0 && serviceDiscountValue <= serviceSubtotal && (serviceDiscountValue === 0 || Boolean(serviceDiscountDescription.trim()));
     if (step === 3) return materialDiscountValue <= materialSubtotal && (materialDiscountValue === 0 || Boolean(materialDiscountDescription.trim()));
     if (step === 4) return total >= 0 && Boolean(amountInWords.trim());
@@ -173,16 +183,29 @@ export function BudgetWizardDrawer({
     return true;
   }
 
-  async function submit(action: "save" | "approve" = "save") {
+  async function submit(action: "save" | "generate" = "save") {
     if (submitting.current || !canContinue()) return;
     submitting.current = true;
     setSaving(true); setError(null);
     try {
       const payload: BudgetPayload = {
         operationId: origin === "WORK_ORDER" ? operationId : undefined,
-        customerId,
-        customerAddressId: addressId || undefined,
-        equipmentIds,
+        customerId: origin === "GUEST" ? undefined : customerId,
+        guestCustomer: origin === "GUEST" ? {
+          ...guestCustomer,
+          equipments: (guestCustomer.equipments ?? []).map((item) => ({
+            id: item.id, equipmentTypeCatalogId: item.equipmentTypeCatalogId, manufacturer: item.manufacturer, model: item.model, capacity: item.capacity,
+            sector: item.sector, tag: item.tag, serialNumber: item.serialNumber, voltage: item.voltage, observations: item.observations,
+          })),
+          tradeName: guestCustomer.tradeName || undefined,
+          cpf: guestCustomer.type === "PERSON" ? guestCustomer.cpf || undefined : undefined,
+          cnpj: guestCustomer.type === "COMPANY" ? guestCustomer.cnpj || undefined : undefined,
+          email: guestCustomer.email || undefined, phone: guestCustomer.phone || undefined,
+          secondaryPhone: guestCustomer.secondaryPhone || undefined, notes: guestCustomer.notes || undefined,
+          address: guestCustomer.address ? { ...guestCustomer.address, zipCode: guestCustomer.address.zipCode || undefined, complement: guestCustomer.address.complement || undefined } : undefined,
+        } : undefined,
+        customerAddressId: origin === "GUEST" ? undefined : addressId || undefined,
+        equipmentIds: origin === "GUEST" ? [] : equipmentIds,
         title,
         description: description || undefined,
         issuedAt: new Date(`${issuedAt}T12:00:00`).toISOString(),
@@ -196,7 +219,7 @@ export function BudgetWizardDrawer({
         paymentMethods,
         commercialNotes: commercialNotes || undefined,
         observations: observations || undefined,
-        status: "DRAFT",
+        status: presentation === "page" || budget?.status === "PENDING" ? "PENDING" : "DRAFT",
         items: items.map((item, index) => ({ ...item, sortOrder: index })),
       };
       let saved = persistedId.current
@@ -204,6 +227,9 @@ export function BudgetWizardDrawer({
         : await budgetsApi.createBudget(payload);
       // Keep the identity even if selecting the signature fails, so retry never creates a second budget.
       persistedId.current = saved.id;
+      if (origin === "GUEST") setGuestCustomer((current) => ({ ...current,
+        equipments: current.equipments !== undefined ? budgetGuestEquipmentDrafts(saved) : undefined,
+      }));
       if (!saved.document?.id) saved = await budgetsApi.getBudget(saved.id);
       if (!saved.document?.id) throw new Error("O documento do orçamento ainda não está disponível. Tente salvar novamente.");
       if (saved.document?.id) {
@@ -226,8 +252,8 @@ export function BudgetWizardDrawer({
     {step < STEPS.length - 1
       ? <button type="button" onClick={() => setStep((value) => value + 1)} disabled={saving || !canContinue()} className={`${primaryBtn} ${presentation === "page" ? "col-span-2" : ""}`}>Continuar <ChevronRight className="h-4 w-4" /></button>
       : <>
-          <button type="button" onClick={() => void submit("save")} disabled={saving || !canContinue()} className={allowApproval ? secondaryBtn : primaryBtn}>{saving ? "Salvando…" : budget ? "Salvar alterações" : allowApproval ? "Salvar rascunho" : "Salvar orçamento"}</button>
-          {allowApproval && <button type="button" onClick={() => void submit("approve")} disabled={saving || !canContinue()} className={`${primaryBtn} ${presentation === "page" ? "col-span-2" : ""}`}>Salvar e aprovar</button>}
+          <button type="button" onClick={() => void submit("save")} disabled={saving || !canContinue()} className={allowDocumentGeneration ? secondaryBtn : primaryBtn}>{saving ? "Salvando…" : budget ? "Salvar alterações" : allowDocumentGeneration ? "Salvar pendente" : "Salvar orçamento"}</button>
+          {allowDocumentGeneration && <button type="button" onClick={() => void submit("generate")} disabled={saving || !canContinue()} className={`${primaryBtn} ${presentation === "page" ? "col-span-2" : ""}`}>Concluir e gerar proposta</button>}
         </>}
   </>;
 
@@ -236,8 +262,8 @@ export function BudgetWizardDrawer({
       {error && <div role="alert" className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{error}</div>}
       <div className="flex gap-2 overflow-x-auto pb-1">{STEPS.map((label, index) => <span key={label} className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-xs ${index === step ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]" : index < step ? "border-[var(--color-success)]/40 text-[var(--color-success)]" : "border-[var(--color-border)] text-[var(--color-muted-foreground)]"}`}>{index + 1}. {label}</span>)}</div>
 
-      {step === 0 && <OriginStep origin={origin} setOrigin={setOrigin} operationId={operationId} setOperationId={setOperationId} operations={operations.data?.items ?? []} />}
-      {step === 1 && <div className="grid gap-3 sm:grid-cols-2"><EntityCombobox label="Cliente" value={customerId} onChange={(id) => { setCustomerId(id); setAddressId(""); setEquipmentIds([]); }} fetchOptions={searchCustomers} selectedOption={customer.data ? { value: customer.data.id, label: customer.data.tradeName || customer.data.name } : null} placeholder="Selecione" emptyMessage="Nenhum cliente encontrado." /><Field label="Endereço"><select value={addressId} onChange={(event) => setAddressId(event.target.value)} className={inputCls}><option value="">Selecione</option>{customer.data?.addresses?.map((address) => <option key={address.id} value={address.id}>{address.street}, {address.number} · {address.city}/{address.state}</option>)}</select></Field><div className="sm:col-span-2"><MultiSelect label="Equipamentos (opcional)" placeholder="Selecione um ou mais equipamentos" emptyMessage={customerId ? "Nenhum equipamento para este cliente." : "Selecione um cliente primeiro."} hint={equipmentOverflow > 0 ? `Mostrando ${equipments.data?.items.length} de ${equipments.data?.pagination?.total} equipamentos deste cliente.` : undefined} value={equipmentIds} onChange={setEquipmentIds} options={(equipments.data?.items ?? []).map((equipment: EquipmentSummary) => ({ value: equipment.id, label: equipment.name, description: equipment.tag ?? undefined }))} /></div><Field label="Data"><input type="date" value={issuedAt} onChange={(event) => setIssuedAt(event.target.value)} className={inputCls} /></Field><Field label="Título"><input value={title} onChange={(event) => setTitle(event.target.value)} className={inputCls} /></Field><Field label="Descrição"><textarea value={description} onChange={(event) => setDescription(event.target.value)} className={`${inputCls} min-h-20 py-2`} /></Field><div className="sm:col-span-2"><Field label="Texto introdutório"><textarea value={introduction} onChange={(event) => setIntroduction(event.target.value)} className={`${inputCls} min-h-24 py-2`} /></Field></div></div>}
+      {step === 0 && <OriginStep origin={origin} setOrigin={(next) => { setOrigin(next); setCustomerId(""); setAddressId(""); setEquipmentIds([]); }} guestCustomer={guestCustomer} setGuestCustomer={setGuestCustomer} operationId={operationId} setOperationId={setOperationId} operations={operations.data?.items ?? []} />}
+      {step === 1 && <div className="grid gap-3 sm:grid-cols-2">{origin === "GUEST" ? <div className="sm:col-span-2 rounded-lg border border-[var(--color-border)] p-3 text-sm"><strong>Cliente avulso: {guestCustomer.tradeName || guestCustomer.name}</strong><p className="text-caption">O cadastro será efetivado somente após o aceite do orçamento.</p></div> : <><EntityCombobox label="Cliente" value={customerId} onChange={(id) => { setCustomerId(id); setAddressId(""); setEquipmentIds([]); }} fetchOptions={searchCustomers} selectedOption={customer.data ? { value: customer.data.id, label: customer.data.tradeName || customer.data.name } : null} placeholder="Selecione" emptyMessage="Nenhum cliente encontrado." /><Field label="Endereço"><select value={addressId} onChange={(event) => setAddressId(event.target.value)} className={inputCls}><option value="">Selecione</option>{customer.data?.addresses?.map((address) => <option key={address.id} value={address.id}>{address.street}, {address.number} · {address.city}/{address.state}</option>)}</select></Field><div className="sm:col-span-2"><MultiSelect label="Equipamentos (opcional)" placeholder="Selecione um ou mais equipamentos" emptyMessage={customerId ? "Nenhum equipamento para este cliente." : "Selecione um cliente primeiro."} hint={equipmentOverflow > 0 ? `Mostrando ${equipments.data?.items.length} de ${equipments.data?.pagination?.total} equipamentos deste cliente.` : undefined} value={equipmentIds} onChange={setEquipmentIds} options={(equipments.data?.items ?? []).map((equipment: EquipmentSummary) => ({ value: equipment.id, label: equipment.name, description: equipment.tag ?? undefined }))} /></div></>}<Field label="Data"><input type="date" value={issuedAt} onChange={(event) => setIssuedAt(event.target.value)} className={inputCls} /></Field><Field label="Título"><input value={title} onChange={(event) => setTitle(event.target.value)} className={inputCls} /></Field><Field label="Descrição"><textarea value={description} onChange={(event) => setDescription(event.target.value)} className={`${inputCls} min-h-20 py-2`} /></Field><div className="sm:col-span-2"><Field label="Texto introdutório"><textarea value={introduction} onChange={(event) => setIntroduction(event.target.value)} className={`${inputCls} min-h-24 py-2`} /></Field></div></div>}
       {step === 2 && <div className="space-y-4"><BudgetItemsEditor type="SERVICE" items={items} onChange={setItems} /><DiscountEditor scope="SERVICE" value={serviceDiscount} onValueChange={setServiceDiscount} description={serviceDiscountDescription} onDescriptionChange={setServiceDiscountDescription} subtotal={serviceSubtotal} /></div>}
       {step === 3 && (
         <div className="space-y-4"><BudgetItemsEditor
@@ -270,8 +296,18 @@ function BudgetWizardFrame({ open, onClose, presentation, title, footer, childre
   </div>;
 }
 
-function OriginStep({ origin, setOrigin, operationId, setOperationId, operations }: { origin: "MANUAL" | "WORK_ORDER"; setOrigin: (value: "MANUAL" | "WORK_ORDER") => void; operationId: string; setOperationId: (value: string) => void; operations: Array<{ id: string; number: number; customer: { name: string } | null }> }) {
-  return <div className="grid gap-3 sm:grid-cols-2"><button type="button" onClick={() => { setOrigin("MANUAL"); setOperationId(""); }} className={choiceCls(origin === "MANUAL")}><strong className="block">Criação manual</strong><span className="text-caption">Preencha livremente todos os dados.</span></button><button type="button" onClick={() => setOrigin("WORK_ORDER")} className={choiceCls(origin === "WORK_ORDER")}><strong className="block">A partir de uma OS concluída</strong><span className="text-caption">Importe o atendimento e edite qualquer campo.</span></button>{origin === "WORK_ORDER" && <div className="sm:col-span-2"><Field label="Ordem de Serviço concluída"><select value={operationId} onChange={(event) => setOperationId(event.target.value)} className={inputCls}><option value="">Selecione</option>{operations.map((operation) => <option key={operation.id} value={operation.id}>OS-{String(operation.number).padStart(6, "0")} · {operation.customer?.name ?? "Cliente"}</option>)}</select></Field></div>}</div>;
+function OriginStep({ origin, setOrigin, guestCustomer, setGuestCustomer, operationId, setOperationId, operations }: {
+  origin: "MANUAL" | "WORK_ORDER" | "GUEST"; setOrigin: (value: "MANUAL" | "WORK_ORDER" | "GUEST") => void;
+  guestCustomer: BudgetGuestCustomerDraft; setGuestCustomer: (value: BudgetGuestCustomerDraft) => void;
+  operationId: string; setOperationId: (value: string) => void; operations: Array<{ id: string; number: number; customer: { name: string } | null }>;
+}) {
+  return <div className="grid gap-3 sm:grid-cols-2">
+    <button type="button" onClick={() => { setOrigin("MANUAL"); setOperationId(""); }} className={choiceCls(origin === "MANUAL")}><strong className="block">Cliente cadastrado</strong><span className="text-caption">Criação manual com um cliente da base.</span></button>
+    <button type="button" onClick={() => { setOrigin("GUEST"); setOperationId(""); }} className={choiceCls(origin === "GUEST")}><strong className="block">Cliente avulso / não cadastrado</strong><span className="text-caption">Cadastro provisório durante a validade da proposta.</span></button>
+    <button type="button" onClick={() => setOrigin("WORK_ORDER")} className={choiceCls(origin === "WORK_ORDER")}><strong className="block">A partir de uma OS concluída</strong><span className="text-caption">Importe o atendimento e edite qualquer campo.</span></button>
+    {origin === "GUEST" && <div className="sm:col-span-2"><BudgetGuestCustomerFields value={guestCustomer} onChange={setGuestCustomer} /></div>}
+    {origin === "WORK_ORDER" && <div className="sm:col-span-2"><Field label="Ordem de Serviço concluída"><select value={operationId} onChange={(event) => setOperationId(event.target.value)} className={inputCls}><option value="">Selecione</option>{operations.map((operation) => <option key={operation.id} value={operation.id}>OS-{String(operation.number).padStart(6, "0")} · {operation.customer?.name ?? "Cliente"}</option>)}</select></Field></div>}
+  </div>;
 }
 
 function BudgetItemsEditor({ type, items, onChange, catalog = [] }: { type: BudgetItemType; items: BudgetItemPayload[]; onChange: (items: BudgetItemPayload[]) => void; catalog?: TechnicalCatalog[] }) {

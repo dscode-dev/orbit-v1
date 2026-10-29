@@ -1,47 +1,53 @@
-# Orçamento no app do OWNER
+# Orçamentos: proposta pendente e cliente avulso
 
-No workspace `ERP_Operation`, o botão **Criar orçamento** fica em
-`/operator/atendimento`, imediatamente abaixo de **Executar PMOC**.
-Ele abre `/operator/orcamento`. O botão e a rota permitem somente `OWNER`.
-As APIs existentes continuam bloqueando `OPERATOR`; os gestores preservam
-o fluxo da plataforma web.
+O botão **Criar orçamento**, abaixo de **Executar PMOC**, continua exclusivo
+para OWNER em `/operator/atendimento`. O wizard em `/operator/orcamento`
+compartilha as sete etapas com a plataforma web.
 
-O mobile usa o próprio `BudgetWizardDrawer` em apresentação de página, com
-as mesmas sete etapas: Origem, Dados gerais, Serviços, Materiais, Valores,
-Condições e Responsável técnico. As opções de origem manual ou OS concluída,
-os catálogos, os cálculos e as validações permanecem compartilhados.
-Orçamento não exige assinatura do cliente.
+## Cliente avulso na web e no mobile
 
-Na última etapa, o OWNER pode salvar o rascunho ou salvar e aprovar.
-A aprovação usa a decisão comercial já existente em `/budgets/:id/approve`;
-o documento oficial é gerado em `/budgets/:id/render` e obtido em
-`/budgets/:id/download`. As ações de baixar/compartilhar são habilitadas após
-a aprovação, a geração e o carregamento do arquivo.
+A origem permite cliente cadastrado, cliente avulso/não cadastrado ou OS concluída.
+O cadastro avulso inclui pessoa física/jurídica, identificação, CPF/CNPJ opcional,
+contato, observações e endereço opcional. Ele é criado na mesma transação do
+orçamento, com `isProvisional=true`, `isActive=false` e `provisionalExpiresAt`
+igual ao vencimento do orçamento. Alterar a validade atualiza essa data.
 
-O arquivo é carregado antes do clique de compartilhar, preservando a ativação
-do usuário exigida pela Web Share API. Quando o navegador não suporta arquivos
-no compartilhamento nativo, o PDF é baixado para compartilhamento manual.
-Cancelar a folha de compartilhamento não é tratado como falha.
+Até o aceite, o cliente fica restrito ao orçamento: não aparece na listagem ou
+nas estatísticas de Clientes, não pode ser consultado/ativado pelo CRUD normal
+nem usado para abrir uma operação. Cadastros comuns existentes são preservados.
+CPF/CNPJ já registrados não geram outro cliente.
 
-Falhas após a criação preservam o ID do orçamento. Falhas de PDF após uma
-aprovação permitem gerar novamente sem repetir a decisão. A decisão é relida
-no servidor em cada tentativa, inclusive após perda de resposta da aprovação.
+A aprovação do orçamento efetiva o cliente na mesma transação: remove a marca
+provisória e sua validade, ativa o cadastro e mantém seus dados/endereço.
+Recusar, cancelar ou deixar vencer mantém o cliente oculto. Os dados ligados ao
+orçamento são preservados para o histórico e o documento, sem exclusão física.
+Propostas vencidas não podem ser aprovadas.
 
-## Validação
+## PDF sem aprovação automática
 
-- 4 testes do fluxo de aprovação e retomada no frontend.
-- 5 testes HTTP com PostgreSQL isolado: origem manual e OS concluída, assinatura
-  técnica, aprovação, PDF válido, bloqueio de operadores, acesso web do gestor,
-  desconto inválido e orçamento vencido.
-- TypeScript e lint aprovados; build de produção concluído.
-- Chrome com largura de 390 px e build de produção: sete etapas, validações,
-  rascunho, aprovação posterior, falha de assinatura sem duplicação, falha de
-  render sem repetir aprovação, download, chamada de compartilhamento e alternativa
-  de download, botão/rota bloqueados para operador e rota bloqueada para gestor.
-  Nesse teste de interface, a API e o compartilhamento nativo são simulados;
-  o teste HTTP separado valida a geração real do PDF.
+No mobile, **Salvar pendente** ou **Concluir e gerar proposta** salva o orçamento
+como `PENDING`. A emissão e o download do PDF não alteram a decisão comercial nem
+efetivam o cliente avulso. O compartilhamento usa arquivo já carregado; sem Web
+Share com arquivos, o navegador baixa o PDF para compartilhar manualmente.
 
-Com o frontend de produção rodando localmente:
+A ação separada **Confirmar aceite do cliente** abre uma confirmação explícita.
+Somente **Sim, cliente aprovou** chama a aprovação. O documento é atualizado após
+a decisão, pois inclui o status comercial. Um PDF anterior é marcado STALE para
+impedir o download de uma proposta com a decisão antiga.
+
+A URL passa a incluir `budgetId`, permitindo reabrir a proposta após sair/recarregar
+para gerar PDF, editar dados pendentes ou confirmar o aceite depois. A plataforma
+web preserva os papéis OWNER/MANAGER e sua ação de aprovação; o mobile permanece
+exclusivo de OWNER. Uma resposta perdida de aprovação ou falha de PDF pode ser
+retomada sem duplicar a decisão ou o cadastro.
+
+## Migração e validação
+
+Aplicar `20261028120000_provisional_budget_customers` antes de iniciar o novo backend.
+A migração é aditiva; clientes existentes permanecem definitivos. Publicar backend
+e frontend compatíveis e regenerar o Prisma Client no build.
+
+Testes:
 
 ```sh
 cd frontend
@@ -49,7 +55,10 @@ node --test test/operator-budget.test.mjs
 ORBIT_RUNTIME_VERIFY=true ORBIT_RUNTIME_FRONTEND=http://127.0.0.1:3011 node test/runtime/verify-operator-budget-ui.mjs
 ```
 
-O teste de interface usa Chrome instalado em `/Applications` e a porta de
-depuração 9367. Ele intercepta as chamadas de API e não usa contas reais.
-O teste HTTP segue `backend/test/jest-security.json` e exige `TEST_DATABASE_URL`
-apontando para um banco isolado com nome terminado em `_test`.
+O teste de interface usa Chrome em `/Applications`, porta de depuração 9367,
+frontend local e API/compartilhamento simulados. Exercita cliente cadastrado,
+cliente avulso no mobile/web, PDF pendente, retomada por URL, edição, confirmação
+separada de aceite e restrições de acesso. A geração real de PDF, ocultação,
+validade, aprovação e efetivação são testadas por HTTP com PostgreSQL isolado em
+`backend/test/security/operator-budget.security.spec.ts`, usando `TEST_DATABASE_URL`
+com banco terminado em `_test`. O teste de frontend também integra o CI.

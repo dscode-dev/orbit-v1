@@ -1222,6 +1222,8 @@ export type OperationCancellation = {
 };
 
 export type OperationSummary = {
+  secondaryServiceType?: OperationType | null;
+  secondaryAddressId?: string | null;
   id: string;
   number: number;
   type: OperationType;
@@ -1271,6 +1273,7 @@ export type OperationDetail = Omit<OperationSummary, 'equipment'> & {
     assignee: Pick<TeamUser, 'id' | 'name' | 'role'>;
   }>;
   address: CustomerAddress | null;
+  secondaryAddress?: CustomerAddress | null;
   equipment: {
     id: string;
     name: string;
@@ -1444,7 +1447,23 @@ export type OperatorExecutionOperations = Paginated<OperatorExecutionOperation> 
   view: 'HISTORY' | 'AGENDA';
 };
 
+/** Novo local cadastrado atomicamente com a OS no cliente selecionado. */
+export type OperationServiceAddressInput = {
+  name: string;
+  zipCode?: string;
+  street: string;
+  number: string;
+  complement?: string;
+  referencePoint?: string;
+  district: string;
+  city: string;
+  state: string;
+};
+
 export type CreateOperationPayload = {
+  secondaryServiceType?: OperationType | null;
+  secondaryAddressId?: string | null;
+  secondaryAddress?: OperationServiceAddressInput | null;
   customerId: string;
   sourceSaleId?: string | null;
   addressId?: string | null;
@@ -2570,7 +2589,7 @@ export type Budget = {
   canceledAt: string | null;
   createdAt: string;
   updatedAt: string;
-  customer?: Pick<Customer, 'id' | 'name' | 'tradeName' | 'email' | 'phone'>;
+  customer?: Pick<Customer, 'id' | 'name' | 'tradeName' | 'email' | 'phone'> & Partial<Pick<Customer, 'type' | 'cpf' | 'cnpj' | 'secondaryPhone' | 'notes'>> & { isProvisional?: boolean; provisionalExpiresAt?: string | null };
   customerAddress?: CustomerAddress | null;
   equipment?: Pick<EquipmentSummary, 'id' | 'name' | 'tag' | 'type' | 'status'> | null;
   operation?: {
@@ -2599,7 +2618,7 @@ export type BudgetEquipment = {
   capacitySnapshot: string | null;
   tagSnapshot: string | null;
   serialSnapshot: string | null;
-  equipment?: Pick<EquipmentSummary, 'id' | 'name' | 'tag' | 'type' | 'status'>;
+  equipment?: Pick<EquipmentSummary, 'id' | 'name' | 'tag' | 'type' | 'status'> & Partial<Pick<EquipmentDetail, 'equipmentTypeCatalogId' | 'manufacturer' | 'model' | 'capacity' | 'sector' | 'serialNumber' | 'voltage' | 'observations'>>;
 };
 
 export type BudgetHistory = {
@@ -2634,9 +2653,28 @@ export type BudgetItemPayload = {
   sortOrder?: number;
 };
 
+export type BudgetGuestEquipmentPayload = {
+  id?: string;
+  equipmentTypeCatalogId: string;
+  manufacturer?: string;
+  model?: string;
+  capacity?: string;
+  sector?: string;
+  tag?: string;
+  serialNumber?: string;
+  voltage?: string;
+  observations?: string;
+};
+
+export type BudgetGuestCustomerPayload = CreateCustomerPayload & {
+  equipments?: BudgetGuestEquipmentPayload[];
+  address?: { name: string; zipCode?: string; street: string; number: string; complement?: string; district: string; city: string; state: string };
+};
+
 export type BudgetPayload = {
   operationId?: string | null;
-  customerId: string;
+  customerId?: string;
+  guestCustomer?: BudgetGuestCustomerPayload;
   customerAddressId?: string | null;
   equipmentId?: string | null;
   equipmentIds?: string[];
