@@ -1,3 +1,4 @@
+import { OperationFieldEquipmentDto } from '../../operations/dto/operation.dto';
 import { CreateCustomerDto, CustomerAddressDto } from '../../customers/dto/customer.dto';
 import {
   BudgetItemSource,
@@ -7,6 +8,7 @@ import {
 } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   ArrayMinSize,
   ArrayUnique,
   IsArray,
@@ -55,7 +57,13 @@ export class BudgetItemInputDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(999) sortOrder?: number;
 }
 
+export class BudgetGuestEquipmentDto extends OperationFieldEquipmentDto {
+  @IsOptional() @IsUUID('4') id?: string;
+}
+
 export class BudgetGuestCustomerDto extends CreateCustomerDto {
+  @IsOptional() @IsArray() @ArrayMaxSize(20) @ValidateNested({ each: true }) @Type(() => BudgetGuestEquipmentDto)
+  equipments?: BudgetGuestEquipmentDto[];
   @IsOptional() @ValidateNested() @Type(() => CustomerAddressDto) address?: CustomerAddressDto;
 }
 

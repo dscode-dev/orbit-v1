@@ -19,7 +19,6 @@ import {
   type BudgetItemType,
   type BudgetPaymentMethod,
   type BudgetPayload,
-  type BudgetGuestCustomerPayload,
   type Customer,
   type CustomerDetail,
   type EquipmentSummary,
@@ -27,7 +26,7 @@ import {
   type TechnicalCatalog,
 } from "@erp/api";
 import { brlAmountInWords, formatCurrencyBRL, formatNumber } from "@erp/utils";
-import { BudgetGuestCustomerFields, validBudgetGuestCustomer } from "./budget-guest-customer-fields";
+import { BudgetGuestCustomerFields, validBudgetGuestCustomer, budgetGuestEquipmentDrafts, type BudgetGuestCustomerDraft } from "./budget-guest-customer-fields";
 import { TechnicalSignaturePreview } from "./document-handoff-inbox";
 
 const STEPS = ["Origem", "Dados gerais", "Serviços", "Materiais", "Valores", "Condições", "Responsável técnico"];
@@ -56,7 +55,7 @@ export function BudgetWizardDrawer({
   const persistedId = useRef<string | null>(budget?.id ?? null);
   const submitting = useRef(false);
   const [origin, setOrigin] = useState<"MANUAL" | "WORK_ORDER" | "GUEST">("MANUAL");
-  const [guestCustomer, setGuestCustomer] = useState<BudgetGuestCustomerPayload>({ type: "COMPANY", name: "" });
+  const [guestCustomer, setGuestCustomer] = useState<BudgetGuestCustomerDraft>({ type: "COMPANY", name: "" });
   const [operationId, setOperationId] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [addressId, setAddressId] = useState("");
@@ -115,6 +114,7 @@ export function BudgetWizardDrawer({
       type: provisional.type ?? "COMPANY", name: provisional.name, tradeName: provisional.tradeName,
       cpf: provisional.cpf, cnpj: provisional.cnpj, email: provisional.email, phone: provisional.phone,
       secondaryPhone: provisional.secondaryPhone, notes: provisional.notes,
+      equipments: budget?.equipments?.length ? budgetGuestEquipmentDrafts(budget) : undefined,
       address: budget?.customerAddress ? { name: budget.customerAddress.name || "Principal", zipCode: budget.customerAddress.zipCode || undefined, street: budget.customerAddress.street || "", number: budget.customerAddress.number || "", complement: budget.customerAddress.complement || undefined, district: budget.customerAddress.district || "", city: budget.customerAddress.city || "", state: budget.customerAddress.state || "" } : undefined,
     } : { type: "COMPANY", name: "" });
     setCustomerId(budget?.customerId ?? ""); setAddressId(budget?.customerAddressId ?? ""); setEquipmentIds(budget?.equipments?.map((item) => item.equipmentId) ?? (budget?.equipmentId ? [budget.equipmentId] : []));
@@ -193,6 +193,10 @@ export function BudgetWizardDrawer({
         customerId: origin === "GUEST" ? undefined : customerId,
         guestCustomer: origin === "GUEST" ? {
           ...guestCustomer,
+          equipments: (guestCustomer.equipments ?? []).map((item) => ({
+            id: item.id, equipmentTypeCatalogId: item.equipmentTypeCatalogId, manufacturer: item.manufacturer, model: item.model, capacity: item.capacity,
+            sector: item.sector, tag: item.tag, serialNumber: item.serialNumber, voltage: item.voltage, observations: item.observations,
+          })),
           tradeName: guestCustomer.tradeName || undefined,
           cpf: guestCustomer.type === "PERSON" ? guestCustomer.cpf || undefined : undefined,
           cnpj: guestCustomer.type === "COMPANY" ? guestCustomer.cnpj || undefined : undefined,
@@ -223,6 +227,9 @@ export function BudgetWizardDrawer({
         : await budgetsApi.createBudget(payload);
       // Keep the identity even if selecting the signature fails, so retry never creates a second budget.
       persistedId.current = saved.id;
+      if (origin === "GUEST") setGuestCustomer((current) => ({ ...current,
+        equipments: current.equipments !== undefined ? budgetGuestEquipmentDrafts(saved) : undefined,
+      }));
       if (!saved.document?.id) saved = await budgetsApi.getBudget(saved.id);
       if (!saved.document?.id) throw new Error("O documento do orçamento ainda não está disponível. Tente salvar novamente.");
       if (saved.document?.id) {
@@ -291,7 +298,7 @@ function BudgetWizardFrame({ open, onClose, presentation, title, footer, childre
 
 function OriginStep({ origin, setOrigin, guestCustomer, setGuestCustomer, operationId, setOperationId, operations }: {
   origin: "MANUAL" | "WORK_ORDER" | "GUEST"; setOrigin: (value: "MANUAL" | "WORK_ORDER" | "GUEST") => void;
-  guestCustomer: BudgetGuestCustomerPayload; setGuestCustomer: (value: BudgetGuestCustomerPayload) => void;
+  guestCustomer: BudgetGuestCustomerDraft; setGuestCustomer: (value: BudgetGuestCustomerDraft) => void;
   operationId: string; setOperationId: (value: string) => void; operations: Array<{ id: string; number: number; customer: { name: string } | null }>;
 }) {
   return <div className="grid gap-3 sm:grid-cols-2">

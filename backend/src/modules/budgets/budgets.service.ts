@@ -1,5 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { AssetLifecycleEventType, BudgetHistoryAction, BudgetItemSource, BudgetItemType, BudgetStatus, DocumentTemplateType, CustomerType, NotificationType, OperationStatus, Prisma } from '@prisma/client';
+import { EquipmentType, TechnicalCatalogType, AssetLifecycleEventType, BudgetHistoryAction, BudgetItemSource, BudgetItemType, BudgetStatus, DocumentTemplateType, CustomerType, NotificationType, OperationStatus, Prisma } from '@prisma/client';
 import { BUDGET_AUDIT_ACTIONS, BUDGET_RESOURCE } from '../../shared/constants/budgets.constants';
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
@@ -8,7 +9,7 @@ import { buildPaginatedResponse, type PaginatedResponse } from '../../shared/typ
 import { LifecyclePublisher } from '../asset-lifecycle/lifecycle-publisher.service';
 import { PrismaService } from '../database/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import type { BudgetGuestCustomerDto, BudgetDecisionDto, BudgetItemInputDto, CreateBudgetDto, ListBudgetsQueryDto, UpdateBudgetDto } from './dto/budget.dto';
+import type { BudgetGuestEquipmentDto, BudgetGuestCustomerDto, BudgetDecisionDto, BudgetItemInputDto, CreateBudgetDto, ListBudgetsQueryDto, UpdateBudgetDto } from './dto/budget.dto';
 
 export interface BudgetAuditContext {
   requestId: string;
@@ -23,7 +24,7 @@ const BUDGET_INCLUDE = {
   customerAddress: true,
   equipment: { select: { id: true, name: true, tag: true, type: true, status: true } },
   equipments: {
-    include: { equipment: { select: { id: true, name: true, tag: true, type: true, status: true } } },
+    include: { equipment: { select: { id: true, name: true, tag: true, type: true, status: true, equipmentTypeCatalogId: true, manufacturer: true, model: true, capacity: true, sector: true, serialNumber: true, voltage: true, observations: true } } },
     orderBy: { position: 'asc' as const },
   },
   creator: { select: { id: true, name: true, email: true, username: true, role: true } },
@@ -146,11 +147,14 @@ export class BudgetsService {
 
     return this.prisma.$transaction(async (tx) => {
       const relations = existingRelations ?? await this.createProvisionalRelationsTx(tx, dto.guestCustomer!, expirationDate);
+      const selectedEquipmentRows = dto.guestCustomer
+        ? await this.resolveGuestEquipmentRowsTx(tx, relations, dto.guestCustomer.equipments ?? [], [])
+        : equipmentRows;
       const budget = await tx.budget.create({
         data: {
           ...relations,
-          equipmentId: primaryEquipmentId,
-          equipments: { createMany: { data: equipmentRows } },
+          equipmentId: dto.guestCustomer ? selectedEquipmentRows[0]?.equipmentId ?? null : primaryEquipmentId,
+          equipments: { createMany: { data: selectedEquipmentRows } },
           status: dto.status ?? BudgetStatus.DRAFT,
           title: this.clean(dto.title),
           description: this.optionalClean(dto.description),
@@ -217,6 +221,10 @@ export class BudgetsService {
       throw new ApplicationException(ERROR_CODES.BUDGET_INVALID_RELATIONSHIP, 'O cadastro avulso só pode ser alterado no próprio orçamento pendente', HttpStatus.BAD_REQUEST);
     }
 
+    if (current.customer.isProvisional && (dto.equipmentId || dto.equipmentIds?.length)) {
+      throw new ApplicationException(ERROR_CODES.BUDGET_INVALID_RELATIONSHIP,
+        'Informe os equipamentos no cadastro do próprio cliente avulso', HttpStatus.BAD_REQUEST);
+    }
     const relations =
       dto.customerId || dto.customerAddressId !== undefined || dto.equipmentId !== undefined || dto.equipmentIds !== undefined || dto.operationId !== undefined
         ? await this.resolveRelations({
@@ -230,7 +238,7 @@ export class BudgetsService {
     const customerId = dto.customerId ?? current.customerId;
     let equipmentRows: Prisma.BudgetEquipmentCreateManyBudgetInput[] | undefined;
     let primaryEquipmentId: string | null | undefined;
-    if (dto.equipmentIds !== undefined) {
+    if (dto.equipmentIds !== undefined && !current.customer.isProvisional) {
       const equipmentIds = [...new Set(dto.equipmentIds)];
       equipmentRows = await this.resolveEquipmentRows(customerId, equipmentIds);
       primaryEquipmentId = equipmentIds[0] ?? null;
@@ -293,6 +301,15 @@ export class BudgetsService {
           provisionalAddressId = address.id;
         }
       }
+      if (dto.guestCustomer?.equipments !== undefined) {
+        equipmentRows = await this.resolveGuestEquipmentRowsTx(tx, {
+          organizationId: current.organizationId, customerId: current.customerId,
+          customerAddressId: provisionalAddressId, operationId: null, equipmentId: null,
+        }, dto.guestCustomer.equipments, current.equipments.map((item) => ({
+          id: item.equipmentId, catalogId: item.equipment.equipmentTypeCatalogId,
+        })));
+        primaryEquipmentId = equipmentRows[0]?.equipmentId ?? null;
+      }
       if (items) {
         await tx.budgetItem.deleteMany({ where: { budgetId: id } });
       }
@@ -348,6 +365,11 @@ export class BudgetsService {
         },
         include: BUDGET_INCLUDE,
       });
+      if (dto.guestCustomer?.equipments !== undefined) {
+        const selected = new Set((equipmentRows ?? []).map((item) => item.equipmentId));
+        const removed = current.equipments.map((item) => item.equipmentId).filter((equipmentId) => !selected.has(equipmentId));
+        if (removed.length) await tx.equipment.deleteMany({ where: { id: { in: removed }, customerId: current.customerId } });
+      }
       if (current.document?.renderedAt) {
         await tx.operationDocument.update({
           where: { id: current.document.id },
@@ -538,6 +560,50 @@ export class BudgetsService {
       this.prisma.budgetHistory.count({ where }),
     ]);
     return this.page(items, total, query.page, query.limit);
+  }
+
+  private async resolveGuestEquipmentRowsTx(
+    tx: Prisma.TransactionClient,
+    relations: BudgetRelations,
+    inputs: BudgetGuestEquipmentDto[],
+    existing: Array<{ id: string; catalogId: string | null }>,
+  ): Promise<Prisma.BudgetEquipmentCreateManyBudgetInput[]> {
+    const ids = inputs.flatMap((item) => item.id ? [item.id] : []);
+    if (new Set(ids).size !== ids.length || ids.some((id) => !existing.some((item) => item.id === id))) {
+      throw new ApplicationException(ERROR_CODES.BUDGET_INVALID_RELATIONSHIP,
+        'Os equipamentos devem pertencer ao próprio orçamento avulso', HttpStatus.BAD_REQUEST);
+    }
+    const catalogs = await tx.technicalCatalog.findMany({
+      where: { organizationId: relations.organizationId, type: TechnicalCatalogType.EQUIPMENT_TYPE,
+        id: { in: [...new Set(inputs.map((item) => item.equipmentTypeCatalogId))] } },
+      select: { id: true, title: true, tags: true, active: true, deletedAt: true },
+    });
+    const rows: Prisma.BudgetEquipmentCreateManyBudgetInput[] = [];
+    for (const [position, input] of inputs.entries()) {
+      const catalog = catalogs.find((item) => item.id === input.equipmentTypeCatalogId);
+      const unchangedType = existing.some((item) => item.id === input.id && item.catalogId === input.equipmentTypeCatalogId);
+      if (!catalog || ((!catalog.active || catalog.deletedAt) && !unchangedType) ||
+        !input.manufacturer?.trim() || !input.model?.trim() || !input.capacity?.trim()) {
+        throw new ApplicationException(ERROR_CODES.VALIDATION_ERROR,
+          'Informe um tipo disponível, marca, modelo e capacidade para cada equipamento', HttpStatus.BAD_REQUEST);
+      }
+      const type = Object.values(EquipmentType).find((key) => catalog.tags.includes(`legacy-${key.toLowerCase().replaceAll('_', '-')}`)) ?? EquipmentType.OTHER;
+      const fields = {
+        addressId: relations.customerAddressId, equipmentTypeCatalogId: catalog.id, type,
+        name: [input.manufacturer, input.model, input.capacity].filter(Boolean).join(' - ').slice(0, 180),
+        manufacturer: input.manufacturer, model: input.model, capacity: input.capacity,
+        sector: input.sector || null, tag: input.tag || null, serialNumber: input.serialNumber || null,
+        voltage: input.voltage || null, observations: input.observations || null,
+      };
+      const qrToken = randomUUID();
+      const equipment = input.id
+        ? await tx.equipment.update({ where: { id: input.id, customerId: relations.customerId }, data: fields })
+        : await tx.equipment.create({ data: { ...fields, customerId: relations.customerId, qrToken, qrCode: `equipment:${qrToken}` } });
+      rows.push({ equipmentId: equipment.id, position, sector: (input.sector || equipment.name).slice(0, 160),
+        brandSnapshot: equipment.manufacturer, modelSnapshot: equipment.model, capacitySnapshot: equipment.capacity,
+        tagSnapshot: equipment.tag, serialSnapshot: equipment.serialNumber });
+    }
+    return rows;
   }
 
   private provisionalCustomerData(input: BudgetGuestCustomerDto): Pick<Prisma.CustomerCreateInput, 'type' | 'name' | 'tradeName' | 'cpf' | 'cnpj' | 'email' | 'phone' | 'secondaryPhone' | 'notes'> {

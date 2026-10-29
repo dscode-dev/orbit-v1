@@ -20,8 +20,10 @@ async function until(fn, description) {
 const customer = { id: 'customer-1', name: 'Cliente de teste', tradeName: 'Cliente de teste', addresses: [{ id: 'address-1', street: 'Rua de teste', number: '10', city: 'Recife', state: 'PE' }] };
 const signature = { id: 'signature-1', name: 'Responsável', title: 'Engenheiro', active: true, isDefault: true, hasImage: true };
 const operation = { id: 'operation-1', number: 23, status: 'COMPLETED', customer, address: customer.addresses[0], equipment: { id: 'equipment-1' }, serviceDescription: 'Serviços da OS', inspectedEquipments: [] };
+const equipmentTypeId = '11111111-1111-4111-8111-111111111111';
+const equipmentRows = inputs => (inputs ?? []).map((item,index) => ({ equipmentId:item.id ?? `22222222-2222-4222-8222-${String(index+1).padStart(12,'0')}`, sector:item.sector || 'Recepção', brandSnapshot:item.manufacturer, modelSnapshot:item.model, capacitySnapshot:item.capacity, serialSnapshot:item.serialNumber ?? null, tagSnapshot:item.tag ?? null, equipment:{...item,id:item.id ?? `22222222-2222-4222-8222-${String(index+1).padStart(12,'0')}`} }));
 const paginated = items => ({ items, pagination: { page: 1, limit: 100, total: items.length, totalPages: 1 } });
-async function page(role = 'OWNER', { signatureFailures = 0, renderFailures = 0 } = {}) {
+async function page(role = 'OWNER', { signatureFailures = 0, renderFailures = 0, cepDelay = 0 } = {}) {
   const target = await (await fetch('http://127.0.0.1:9367/json/new?about:blank', { method: 'PUT' })).json();
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   sockets.push(ws);
@@ -29,6 +31,7 @@ async function page(role = 'OWNER', { signatureFailures = 0, renderFailures = 0 
   let nextId = 0;
   const pending = new Map();
   const calls = [];
+  const cepCalls = [];
   let saved;
   const send = (method, params = {}) => new Promise((resolve, reject) => {
     const id = ++nextId; pending.set(id, { resolve, reject }); ws.send(JSON.stringify({ id, method, params }));
@@ -42,6 +45,13 @@ async function page(role = 'OWNER', { signatureFailures = 0, renderFailures = 0 
     if (message.method !== 'Fetch.requestPaused') return;
     const { requestId, request } = message.params;
     const url = new URL(request.url);
+    if (url.hostname === 'viacep.com.br') {
+      const code = url.pathname.split('/')[2]; cepCalls.push(code);
+      if (cepDelay) await sleep(cepDelay);
+      const result = code === '00000000' ? {erro:true} : {cep:code,logradouro:code === '51000000' ? 'Rua CEP novo' : 'Rua preenchida pelo CEP',bairro:'Centro',localidade:'Recife',uf:'PE'};
+      await send('Fetch.fulfillRequest',{requestId,responseCode:200,responseHeaders:[{name:'Content-Type',value:'application/json'},{name:'Access-Control-Allow-Origin',value:'*'}],body:Buffer.from(JSON.stringify(result)).toString('base64')}).catch(()=>{});
+      return;
+    }
     const path = url.pathname.replace('/api/v1', '');
     const method = request.method;
     if (method === 'OPTIONS') {
@@ -63,14 +73,15 @@ async function page(role = 'OWNER', { signatureFailures = 0, renderFailures = 0 
     else if (path === '/operations/operation-1') result = operation;
     else if (path === '/signatures') result = paginated([signature]);
     else if (path === '/signatures/signature-1/download') result = { mimeType: 'image/png', contentBase64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=' };
+    else if (path === '/technical-catalogs' && url.searchParams.get('type') === 'EQUIPMENT_TYPE') result = paginated([{id:equipmentTypeId,title:'Split do orçamento',type:'EQUIPMENT_TYPE',active:true}]);
     else if (path.includes('budget-material-descriptions') || path.includes('maintenance-checklists') || path.includes('technical-catalog')) result = [];
     else if (path === '/budgets' && method === 'POST') {
       const party = payload.guestCustomer ? { ...payload.guestCustomer, id: 'guest-1', isProvisional: true } : customer;
-      saved = { ...payload, customerId: party.id, customer: party, customerAddress: payload.guestCustomer?.address ?? null, id: 'budget-1', number: 1, status: payload.status ?? 'DRAFT', total: 450, subtotal: 500, serviceSubtotal: 500, materialSubtotal: 0, discount: 50, additional: 0, expirationDate: new Date(Date.now()+30*86400000).toISOString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), approvals: [], equipments: [], document: { id: 'document-1', number: 'ORC-000001', editorialStatus: 'DRAFT' }, items: payload.items };
+      saved = { ...payload, customerId: party.id, customer: party, customerAddress: payload.guestCustomer?.address ?? null, id: 'budget-1', number: 1, status: payload.status ?? 'DRAFT', total: 450, subtotal: 500, serviceSubtotal: 500, materialSubtotal: 0, discount: 50, additional: 0, expirationDate: new Date(Date.now()+30*86400000).toISOString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), approvals: [], equipments: equipmentRows(payload.guestCustomer?.equipments), document: { id: 'document-1', number: 'ORC-000001', editorialStatus: 'DRAFT' }, items: payload.items };
       result = saved; status = 201;
     } else if (path === '/budgets' && method === 'GET') result = paginated(saved ? [saved] : []);
     else if (path === '/budgets/stats') result = { total: 0, pending: 0, approved: 0, rejected: 0, potentialRevenue: '0', averageTicket: '0' };
-    else if (path === '/budgets/budget-1' && method === 'PATCH') { saved = { ...saved, ...payload }; result = saved; }
+    else if (path === '/budgets/budget-1' && method === 'PATCH') { saved = { ...saved, ...payload, customer: {...saved.customer,...payload.guestCustomer}, customerAddress:payload.guestCustomer?.address ?? saved.customerAddress, equipments:payload.guestCustomer?.equipments ? equipmentRows(payload.guestCustomer.equipments) : saved.equipments }; result = saved; }
     else if (path === '/budgets/budget-1') result = saved;
     else if (path === '/documents/document-1/handoff/technical-signature') {
       if (signatureFailures-- > 0) { status = 400; result = 'Assinatura indisponível. Tente novamente.'; }
@@ -93,7 +104,7 @@ async function page(role = 'OWNER', { signatureFailures = 0, renderFailures = 0 
   });
   await send('Page.enable'); await send('Network.enable');
   await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
-  await send('Fetch.enable', { patterns: [{ urlPattern: '*api/v1/*', requestStage: 'Request' }] });
+  await send('Fetch.enable', { patterns: [{ urlPattern: '*api/v1/*', requestStage: 'Request' },{ urlPattern:'https://viacep.com.br/*',requestStage:'Request' }] });
   const token = `header.${Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url')}.signature`;
   await send('Page.addScriptToEvaluateOnNewDocument', { source: `
     for (const scope of ['operator','platform']) {
@@ -138,6 +149,17 @@ async function page(role = 'OWNER', { signatureFailures = 0, renderFailures = 0 
       await input('Razão social', 'Empresa avulsa da proposta');
       await input('E-mail', 'novo@example.test');
       await input('Telefone', '81999999999');
+      await evaluate(`Array.from(document.querySelectorAll('label')).find(el=>el.textContent.includes('Informar endereço do cliente')).click()`);
+      await input('Número','15'); await input('CEP (opcional)','50000000');
+      await until(()=>evaluate(`Array.from(document.querySelectorAll('input')).some(el=>el.value==='Rua preenchida pelo CEP')`),'automatic CEP fill');
+      assert.equal(await evaluate(`Array.from(document.querySelectorAll('label')).find(el=>el.querySelector('span')?.textContent==='Número').querySelector('input').value`),'15');
+      await evaluate(`Array.from(document.querySelectorAll('label')).find(el=>el.textContent.includes('Adicionar equipamentos ao orçamento')).click()`);
+      await until(()=>evaluate(`Array.from(document.querySelectorAll('option')).some(el=>el.value===${JSON.stringify(equipmentTypeId)})`),'equipment catalog');
+      for (const model of ['Modelo A','Modelo B']) {
+        await input('Tipo *',equipmentTypeId); await input('Marca *','Marca de teste'); await input('Modelo *',model); await input('Capacidade *','12000 BTU'); await input('Número de série','SERIAL-'+model);
+        await click('Adicionar equipamento');
+      }
+      assert.ok((await text()).includes('Modelo A')&&(await text()).includes('Modelo B'));
     }
     if (fromOperation) {
       await evaluate(`Array.from(document.querySelectorAll('button')).find(el=>el.textContent.includes('A partir de uma OS concluída')).click()`);
@@ -166,7 +188,7 @@ async function page(role = 'OWNER', { signatureFailures = 0, renderFailures = 0 
     await until(() => evaluate(`Array.from(document.querySelectorAll('button')).some(el=>el.textContent.trim()===${JSON.stringify(mobile ? 'Concluir e gerar proposta' : 'Salvar orçamento')}&&!el.disabled)`), 'signature chosen');
     if (mobile) assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true);
   };
-  return { send, evaluate, navigate, text, waitText, click, input, fill, calls };
+  return { send, evaluate, navigate, text, waitText, click, input, next, fill, calls, cepCalls };
 }
 
 try {
@@ -223,15 +245,24 @@ try {
   await draft.waitText('Orçamento aprovado');
   console.log('PASS completed OS origin, pending save, PDF without approval and later acceptance after reload');
 
-  const guest = await page();
+  const guest = await page('OWNER', { signatureFailures: 1 });
   currentPage = guest;
   await guest.navigate('/operator/orcamento');
   await guest.fill({ guest: true });
+  await guest.click('Concluir e gerar proposta');
+  await guest.waitText('Assinatura indisponível');
   await guest.click('Concluir e gerar proposta');
   await until(() => guest.evaluate(`Array.from(document.querySelectorAll('button')).some(el=>el.textContent.trim()==='Baixar PDF'&&!el.disabled)`), 'guest proposal PDF');
   const guestCreation = guest.calls.find(call=>call.path==='/budgets'&&call.method==='POST');
   assert.equal(guestCreation.payload.customerId,undefined);
   assert.equal(guestCreation.payload.guestCustomer.name,'Empresa avulsa da proposta');
+  assert.equal(guestCreation.payload.guestCustomer.equipments.length,2);
+  assert.equal(guest.calls.filter(call=>call.path==='/budgets'&&call.method==='POST').length,1);
+  const guestRetry=guest.calls.find(call=>call.path==='/budgets/budget-1'&&call.method==='PATCH');
+  assert.equal(guestRetry.payload.guestCustomer.equipments.length,2);
+  assert.ok(guestRetry.payload.guestCustomer.equipments.every(item=>item.id));
+  assert.equal(guestCreation.payload.guestCustomer.address.street,'Rua preenchida pelo CEP');
+  assert.equal(guestCreation.payload.guestCustomer.equipments[0].localId,undefined);
   assert.ok(!guest.calls.some(call=>call.path.endsWith('/approve')||call.path==='/customers/guest-1'));
   await guest.navigate('/operator/orcamento?budgetId=budget-1');
   await guest.waitText('Orçamento pendente de aceite');
@@ -239,7 +270,8 @@ try {
   await guest.waitText('Cadastro do cliente avulso');
   assert.equal(await guest.evaluate(`Array.from(document.querySelectorAll('input')).some(el=>el.value==='Empresa avulsa da proposta')`),true);
   assert.ok(!guest.calls.some(call=>call.path==='/customers/guest-1'));
-  console.log('PASS mobile guest form, pending PDF, reload and editing without accessing the hidden customer endpoint');
+  assert.ok((await guest.text()).includes('Modelo A')&&(await guest.text()).includes('Modelo B'));
+  console.log('PASS mobile guest form with automatic CEP, two equipments, pending PDF and reload preserving equipment metadata');
 
   const web = await page('MANAGER');
   currentPage = web;
@@ -252,8 +284,26 @@ try {
   await until(() => Promise.resolve(web.calls.some(call=>call.path==='/budgets'&&call.method==='POST')), 'web guest save');
   const webCreation = web.calls.find(call=>call.path==='/budgets'&&call.method==='POST');
   assert.equal(webCreation.payload.guestCustomer.name,'Empresa avulsa da proposta');
+  assert.equal(webCreation.payload.guestCustomer.equipments.length,2);
+  assert.equal(webCreation.payload.guestCustomer.address.city,'Recife');
   assert.ok(!web.calls.some(call=>call.path.endsWith('/approve')));
   console.log('PASS shared guest wizard on the web for managers without automatic approval');
+
+  const cep = await page('OWNER',{cepDelay:250}); currentPage=cep;
+  await cep.navigate('/operator/orcamento');await cep.waitText('Cliente cadastrado');
+  await cep.evaluate(`Array.from(document.querySelectorAll('button')).find(el=>el.textContent.includes('Cliente avulso / não cadastrado')).click()`);
+  await cep.waitText('Cadastro do cliente avulso');await cep.input('Razão social','Cliente CEP');
+  await cep.evaluate(`Array.from(document.querySelectorAll('label')).find(el=>el.textContent.includes('Informar endereço do cliente')).click()`);
+  await cep.input('CEP (opcional)','00000000');await cep.waitText('CEP não encontrado.');
+  await cep.input('CEP (opcional)','50000000');await until(()=>Promise.resolve(cep.cepCalls.includes('50000000')),'CEP request in flight');
+  await cep.input('Logradouro','Rua ajustada manualmente');await cep.input('Número','90');
+  await cep.input('Razão social','Cliente editado durante consulta');
+  await until(()=>cep.evaluate(`Array.from(document.querySelectorAll('label')).find(el=>el.querySelector('span')?.textContent==='Cidade').querySelector('input').value==='Recife'`),'CEP city');
+  assert.ok(await cep.evaluate(`Array.from(document.querySelectorAll('input')).some(el=>el.value==='Rua ajustada manualmente')`));
+  assert.ok(await cep.evaluate(`Array.from(document.querySelectorAll('input')).some(el=>el.value==='Cliente editado durante consulta')`));
+  await cep.input('CEP (opcional)','51000000');await until(()=>cep.evaluate(`Array.from(document.querySelectorAll('input')).some(el=>el.value==='Rua CEP novo')`),'new CEP replaces old lookup');
+  await cep.next();
+  console.log('PASS CEP failure, retry, manual edits during lookup, changed CEP and optional equipment omission');
 
   const operator = await page('OPERATOR');
   currentPage = operator;

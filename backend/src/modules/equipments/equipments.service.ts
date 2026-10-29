@@ -63,6 +63,7 @@ export class EquipmentsService {
 
   async list(query: ListEquipmentsQueryDto): Promise<unknown> {
     const where: Prisma.EquipmentWhereInput = {
+      customer: { isProvisional: false },
       ...(query.customerId ? { customerId: query.customerId } : {}),
       ...(query.addressId ? { addressId: query.addressId } : {}),
       ...(query.equipmentTypeCatalogId
@@ -139,7 +140,7 @@ export class EquipmentsService {
       or.push({ qrToken: tokenCandidate });
     }
     const equipment = await this.prisma.equipment.findFirst({
-      where: { OR: or },
+      where: { OR: or, customer: { isProvisional: false } },
       include: EQUIPMENT_INCLUDE,
     });
     if (!equipment) {
@@ -154,12 +155,12 @@ export class EquipmentsService {
 
   async stats(): Promise<Record<string, unknown>> {
     const [total, active, maintenance, inactive, retired, byType] = await this.prisma.$transaction([
-      this.prisma.equipment.count(),
-      this.prisma.equipment.count({ where: { status: EquipmentStatus.ACTIVE } }),
-      this.prisma.equipment.count({ where: { status: EquipmentStatus.MAINTENANCE } }),
-      this.prisma.equipment.count({ where: { status: EquipmentStatus.INACTIVE } }),
-      this.prisma.equipment.count({ where: { status: EquipmentStatus.RETIRED } }),
-      this.prisma.equipment.findMany({ select: { type: true } }),
+      this.prisma.equipment.count({ where: { customer: { isProvisional: false } } }),
+      this.prisma.equipment.count({ where: { status: EquipmentStatus.ACTIVE, customer: { isProvisional: false } } }),
+      this.prisma.equipment.count({ where: { status: EquipmentStatus.MAINTENANCE, customer: { isProvisional: false } } }),
+      this.prisma.equipment.count({ where: { status: EquipmentStatus.INACTIVE, customer: { isProvisional: false } } }),
+      this.prisma.equipment.count({ where: { status: EquipmentStatus.RETIRED, customer: { isProvisional: false } } }),
+      this.prisma.equipment.findMany({ where: { customer: { isProvisional: false } }, select: { type: true } }),
     ]);
     const types = Object.fromEntries(
       Object.values(EquipmentType).map((type) => [
@@ -568,7 +569,7 @@ export class EquipmentsService {
     currentId?: string,
   ): Promise<void> {
     const customer = await this.prisma.customer.findUnique({
-      where: { id: customerId },
+      where: { id: customerId, isProvisional: false },
       select: { id: true },
     });
     if (!customer)
@@ -642,7 +643,7 @@ export class EquipmentsService {
     id: string,
   ): Promise<Prisma.EquipmentGetPayload<{ include: typeof EQUIPMENT_INCLUDE }>> {
     const equipment = await this.prisma.equipment.findUnique({
-      where: { id },
+      where: { id, customer: { isProvisional: false } },
       include: EQUIPMENT_INCLUDE,
     });
     if (!equipment)

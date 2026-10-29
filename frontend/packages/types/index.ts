@@ -2618,7 +2618,7 @@ export type BudgetEquipment = {
   capacitySnapshot: string | null;
   tagSnapshot: string | null;
   serialSnapshot: string | null;
-  equipment?: Pick<EquipmentSummary, 'id' | 'name' | 'tag' | 'type' | 'status'>;
+  equipment?: Pick<EquipmentSummary, 'id' | 'name' | 'tag' | 'type' | 'status'> & Partial<Pick<EquipmentDetail, 'equipmentTypeCatalogId' | 'manufacturer' | 'model' | 'capacity' | 'sector' | 'serialNumber' | 'voltage' | 'observations'>>;
 };
 
 export type BudgetHistory = {
@@ -2653,7 +2653,21 @@ export type BudgetItemPayload = {
   sortOrder?: number;
 };
 
+export type BudgetGuestEquipmentPayload = {
+  id?: string;
+  equipmentTypeCatalogId: string;
+  manufacturer?: string;
+  model?: string;
+  capacity?: string;
+  sector?: string;
+  tag?: string;
+  serialNumber?: string;
+  voltage?: string;
+  observations?: string;
+};
+
 export type BudgetGuestCustomerPayload = CreateCustomerPayload & {
+  equipments?: BudgetGuestEquipmentPayload[];
   address?: { name: string; zipCode?: string; street: string; number: string; complement?: string; district: string; city: string; state: string };
 };
 

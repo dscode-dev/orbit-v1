@@ -5,7 +5,7 @@ import {
   registerSecurityHttpServer, resetSecurityState, type SecurityActor, type SecurityApp,
 } from './security-app';
 
-type SavedBudget = { id: string; customerId: string; expirationDate: string; customer: { isProvisional: boolean }; status: string; total: string; document: { id: string }; operationId: string | null };
+type SavedBudget = { equipmentId: string | null; equipments: Array<{ equipmentId: string; brandSnapshot: string; modelSnapshot: string; equipment: { equipmentTypeCatalogId: string; serialNumber: string | null } }>; id: string; customerId: string; expirationDate: string; customer: { isProvisional: boolean }; status: string; total: string; document: { id: string }; operationId: string | null };
 function data(response: { body: unknown }): SavedBudget { return (response.body as { data: SavedBudget }).data; }
 
 describe('Owner mobile budget workflow using the web API', () => {
@@ -15,14 +15,19 @@ describe('Owner mobile budget workflow using the web API', () => {
   let manager: SecurityActor;
   let graph: Awaited<ReturnType<typeof createCustomerGraph>>;
   let signatureId: string;
+  let equipmentTypeId: string;
 
   beforeAll(async () => {
     security = await createSecurityApp();
+    await security.app.listen(0, '127.0.0.1');
     registerSecurityHttpServer(security.http);
   });
   beforeEach(async () => {
     await resetSecurityState();
     const organization = await createOrganization();
+    equipmentTypeId = (await prisma.technicalCatalog.create({ data: {
+      organizationId: organization.id, type: 'EQUIPMENT_TYPE', title: 'Split do orçamento', tags: ['legacy-split'],
+    } })).id;
     owner = await createSecurityActor(Role.OWNER, 'mobile-budget-owner');
     operator = await createSecurityActor(Role.OPERATOR, 'mobile-budget-operator');
     manager = await createSecurityActor(Role.MANAGER, 'web-budget-manager');
@@ -177,6 +182,104 @@ describe('Owner mobile budget workflow using the web API', () => {
     const duplicate = { ...guestPayload(), guestCustomer: { type: 'COMPANY', name: 'Duplicado', cnpj: regular.cnpj } };
     expect((await authPost(owner, '/api/v1/budgets').send(duplicate)).status).toBe(409);
     expect(await prisma.customer.count({ where: { isProvisional: true } })).toBe(0);
+  });
+
+  function guestEquipment(model: string, id?: string): Record<string, unknown> {
+    return { id, equipmentTypeCatalogId: equipmentTypeId, manufacturer: 'Marca orçamento', model,
+      capacity: '12000 BTU', sector: 'Recepção', serialNumber: `SERIAL-${model}`, voltage: '220V' };
+  }
+  function guestWithEquipments(equipments: Record<string, unknown>[]): Record<string, unknown> {
+    const original = guestPayload();
+    return { ...original, guestCustomer: { ...(original.guestCustomer as Record<string, unknown>), equipments } };
+  }
+
+  it('links multiple provisional equipments to the guest budget and promotes them with the accepted customer', async () => {
+    const response = await authPost(owner, '/api/v1/budgets').send(guestWithEquipments([guestEquipment('Modelo A'), guestEquipment('Modelo B')]));
+    expect(response.status).toBe(201);
+    const budget = data(response);
+    expect(budget.equipments).toHaveLength(2);
+    expect(budget.equipmentId).toBe(budget.equipments[0].equipmentId);
+    expect(budget.equipments[0].equipment).toMatchObject({ equipmentTypeCatalogId: equipmentTypeId, serialNumber: 'SERIAL-Modelo A' });
+    const list = await authGet(owner, '/api/v1/equipments').query({ customerId: budget.customerId });
+    expect((list.body as { data: { items: unknown[] } }).data.items).toHaveLength(0);
+    const provisionalExport = await authGet(owner, '/api/v1/equipments/export').query({ customerId: budget.customerId });
+    expect(provisionalExport.status).toBe(200); expect(provisionalExport.headers['x-export-record-count']).toBe('0');
+    const stats = await authGet(owner, '/api/v1/equipments/stats');
+    expect((stats.body as { data: { total: number } }).data.total).toBe(1);
+    for (const item of budget.equipments) {
+      const equipment = await prisma.equipment.findUniqueOrThrow({ where: { id: item.equipmentId } });
+      expect(equipment.customerId).toBe(budget.customerId);
+      expect((await authGet(owner, `/api/v1/equipments/${equipment.id}`)).status).toBe(404);
+      expect((await authGet(owner, `/api/v1/equipments/lookup/${encodeURIComponent(equipment.qrCode)}`)).status).toBe(404);
+    }
+    const preview = await authGet(owner, `/api/v1/budgets/${budget.id}/preview`);
+    expect(preview.status).toBe(200);
+    expect(preview.text).toContain('Modelo A'); expect(preview.text).toContain('Modelo B');
+    expect((await authPost(owner, `/api/v1/budgets/${budget.id}/render`).send({})).status).toBe(201);
+    expect((await authGet(owner, `/api/v1/budgets/${budget.id}/download`)).status).toBe(200);
+    expect((await authPatch(owner, `/api/v1/budgets/${budget.id}/approve`).send({})).status).toBe(200);
+    const registered = await authGet(owner, '/api/v1/equipments').query({ customerId: budget.customerId });
+    expect((registered.body as { data: { items: unknown[] } }).data.items).toHaveLength(2);
+    const acceptedExport = await authGet(owner, '/api/v1/equipments/export').query({ customerId: budget.customerId });
+    expect(acceptedExport.status).toBe(200); expect(acceptedExport.headers['x-export-record-count']).toBe('2');
+    for (const item of budget.equipments) expect((await authGet(owner, `/api/v1/equipments/${item.equipmentId}`)).status).toBe(200);
+  });
+
+  it('preserves equipment IDs on retries and supports adding and removing provisional equipment', async () => {
+    const response = await authPost(owner, '/api/v1/budgets').send(guestWithEquipments([guestEquipment('Modelo A'), guestEquipment('Modelo B')]));
+    expect(response.status).toBe(201);
+    const budget = data(response);
+    const firstId = budget.equipments[0].equipmentId;
+    const secondId = budget.equipments[1].equipmentId;
+    const guest = guestWithEquipments([guestEquipment('Modelo A revisado', firstId), guestEquipment('Modelo B', secondId)]).guestCustomer;
+    for (let retry = 0; retry < 2; retry++) {
+      const updated = await authPatch(owner, `/api/v1/budgets/${budget.id}`).send({ guestCustomer: guest, equipmentIds: [] });
+      expect(updated.status).toBe(200);
+      expect(data(updated).equipments.map((item) => item.equipmentId)).toEqual([firstId, secondId]);
+    }
+    expect(await prisma.equipment.count({ where: { customerId: budget.customerId } })).toBe(2);
+    const changed = await authPatch(owner, `/api/v1/budgets/${budget.id}`).send({ guestCustomer: guestWithEquipments([guestEquipment('Modelo B', secondId), guestEquipment('Modelo C')]).guestCustomer });
+    expect(changed.status).toBe(200);
+    expect(data(changed).equipmentId).toBe(secondId);
+    expect(await prisma.equipment.findUnique({ where: { id: firstId } })).toBeNull();
+    const cleared = await authPatch(owner, `/api/v1/budgets/${budget.id}`).send({ guestCustomer: guestWithEquipments([]).guestCustomer });
+    expect(cleared.status).toBe(200);
+    expect(data(cleared).equipments).toHaveLength(0); expect(data(cleared).equipmentId).toBeNull();
+    expect(await prisma.equipment.count({ where: { customerId: budget.customerId } })).toBe(0);
+  });
+
+  it('rejects invalid equipment and references to another customer without leaving orphan records', async () => {
+    const customersBefore = await prisma.customer.count(); const equipmentsBefore = await prisma.equipment.count();
+    for (const equipments of [
+      [{ ...guestEquipment('Inválido'), equipmentTypeCatalogId: graph.equipmentId }],
+      [{ ...guestEquipment('Inválido'), manufacturer: '' }],
+      [guestEquipment('Outro cliente', graph.equipmentId)],
+      Array.from({ length: 21 }, (_, index) => guestEquipment(`Modelo ${index}`)),
+    ]) {
+      expect((await authPost(owner, '/api/v1/budgets').send(guestWithEquipments(equipments))).status).toBe(400);
+    }
+    expect(await prisma.customer.count()).toBe(customersBefore); expect(await prisma.equipment.count()).toBe(equipmentsBefore);
+    const created = await authPost(owner, '/api/v1/budgets').send(guestWithEquipments([guestEquipment('Modelo A')]));
+    expect(created.status).toBe(201); const budget = data(created);
+    expect((await authPatch(owner, `/api/v1/budgets/${budget.id}`).send({ guestCustomer: guestWithEquipments([guestEquipment('Alheio', graph.equipmentId)]).guestCustomer })).status).toBe(400);
+    const same = budget.equipments[0].equipmentId;
+    expect((await authPatch(owner, `/api/v1/budgets/${budget.id}`).send({ guestCustomer: guestWithEquipments([guestEquipment('A', same), guestEquipment('B', same)]).guestCustomer })).status).toBe(400);
+    expect(await prisma.equipment.count({ where: { customerId: budget.customerId } })).toBe(1);
+    expect((await prisma.equipment.findUniqueOrThrow({ where: { id: graph.equipmentId } })).customerId).toBe(graph.customerId);
+  });
+
+  it('keeps equipment hidden after rejection or expiration and allows guest budgets without any equipment', async () => {
+    const response = await authPost(owner, '/api/v1/budgets').send(guestWithEquipments([guestEquipment('Modelo A')]));
+    expect(response.status).toBe(201); const budget = data(response);
+    expect((await authPatch(owner, `/api/v1/budgets/${budget.id}/reject`).send({})).status).toBe(200);
+    expect((await authGet(owner, `/api/v1/equipments/${budget.equipments[0].equipmentId}`)).status).toBe(404);
+    const expiredResponse = await authPost(owner, '/api/v1/budgets').send({ ...guestWithEquipments([guestEquipment('Modelo vencido')]), issuedAt: new Date(Date.now() - 40 * 86400000).toISOString(), validityDays: 1 });
+    expect(expiredResponse.status).toBe(201);
+    expect((await authPatch(owner, `/api/v1/budgets/${data(expiredResponse).id}/approve`).send({})).status).toBe(409);
+    const noEquipment = await authPost(owner, '/api/v1/budgets').send(guestWithEquipments([]));
+    expect(noEquipment.status).toBe(201); expect(data(noEquipment).equipments).toHaveLength(0);
+    const list = await authGet(owner, '/api/v1/equipments');
+    expect((list.body as { data: { pagination: { total: number } } }).data.pagination.total).toBe(1);
   });
 
 });
