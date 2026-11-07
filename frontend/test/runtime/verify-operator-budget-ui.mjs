@@ -23,6 +23,12 @@ const operation = { id: 'operation-1', number: 23, status: 'COMPLETED', customer
 const equipmentTypeId = '11111111-1111-4111-8111-111111111111';
 const equipmentRows = inputs => (inputs ?? []).map((item,index) => ({ equipmentId:item.id ?? `22222222-2222-4222-8222-${String(index+1).padStart(12,'0')}`, sector:item.sector || 'Recepção', brandSnapshot:item.manufacturer, modelSnapshot:item.model, capacitySnapshot:item.capacity, serialSnapshot:item.serialNumber ?? null, tagSnapshot:item.tag ?? null, equipment:{...item,id:item.id ?? `22222222-2222-4222-8222-${String(index+1).padStart(12,'0')}`} }));
 const paginated = items => ({ items, pagination: { page: 1, limit: 100, total: items.length, totalPages: 1 } });
+const budgetTotals = payload => {
+  const amount = type => payload.items.filter(item=>item.type===type&&item.source!=='CATALOG').reduce((sum,item)=>sum+item.quantity*item.unitPrice,0);
+  const serviceSubtotal=amount('SERVICE'), materialSubtotal=amount('MATERIAL');
+  const discount=(payload.serviceDiscount??0)+(payload.materialDiscount??0);
+  return {serviceSubtotal,materialSubtotal,subtotal:serviceSubtotal+materialSubtotal,discount,total:serviceSubtotal+materialSubtotal-discount};
+};
 async function page(role = 'OWNER', { signatureFailures = 0, renderFailures = 0, cepDelay = 0 } = {}) {
   const target = await (await fetch('http://127.0.0.1:9367/json/new?about:blank', { method: 'PUT' })).json();
   const ws = new WebSocket(target.webSocketDebuggerUrl);
@@ -74,14 +80,15 @@ async function page(role = 'OWNER', { signatureFailures = 0, renderFailures = 0,
     else if (path === '/signatures') result = paginated([signature]);
     else if (path === '/signatures/signature-1/download') result = { mimeType: 'image/png', contentBase64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=' };
     else if (path === '/technical-catalogs' && url.searchParams.get('type') === 'EQUIPMENT_TYPE') result = paginated([{id:equipmentTypeId,title:'Split do orçamento',type:'EQUIPMENT_TYPE',active:true}]);
+    else if (path === '/technical-catalogs' && url.searchParams.get('type') === 'BUDGET_MATERIAL_DESCRIPTION') result = paginated([{id:'material-description-1',title:'Tubulação de teste',type:'BUDGET_MATERIAL_DESCRIPTION',active:true}]);
     else if (path.includes('budget-material-descriptions') || path.includes('maintenance-checklists') || path.includes('technical-catalog')) result = [];
     else if (path === '/budgets' && method === 'POST') {
       const party = payload.guestCustomer ? { ...payload.guestCustomer, id: 'guest-1', isProvisional: true } : customer;
-      saved = { ...payload, customerId: party.id, customer: party, customerAddress: payload.guestCustomer?.address ?? null, id: 'budget-1', number: 1, status: payload.status ?? 'DRAFT', total: 450, subtotal: 500, serviceSubtotal: 500, materialSubtotal: 0, discount: 50, additional: 0, expirationDate: new Date(Date.now()+30*86400000).toISOString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), approvals: [], equipments: equipmentRows(payload.guestCustomer?.equipments), document: { id: 'document-1', number: 'ORC-000001', editorialStatus: 'DRAFT' }, items: payload.items };
+      saved = { ...payload, customerId: party.id, customer: party, customerAddress: payload.guestCustomer?.address ?? null, id: 'budget-1', number: 1, status: payload.status ?? 'DRAFT', ...budgetTotals(payload), additional: 0, expirationDate: new Date(Date.now()+30*86400000).toISOString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), approvals: [], equipments: equipmentRows(payload.guestCustomer?.equipments), document: { id: 'document-1', number: 'ORC-000001', editorialStatus: 'DRAFT' }, items: payload.items };
       result = saved; status = 201;
     } else if (path === '/budgets' && method === 'GET') result = paginated(saved ? [saved] : []);
     else if (path === '/budgets/stats') result = { total: 0, pending: 0, approved: 0, rejected: 0, potentialRevenue: '0', averageTicket: '0' };
-    else if (path === '/budgets/budget-1' && method === 'PATCH') { saved = { ...saved, ...payload, customer: {...saved.customer,...payload.guestCustomer}, customerAddress:payload.guestCustomer?.address ?? saved.customerAddress, equipments:payload.guestCustomer?.equipments ? equipmentRows(payload.guestCustomer.equipments) : saved.equipments }; result = saved; }
+    else if (path === '/budgets/budget-1' && method === 'PATCH') { saved = { ...saved, ...payload, ...budgetTotals(payload), customer: {...saved.customer,...payload.guestCustomer}, customerAddress:payload.guestCustomer?.address ?? saved.customerAddress, equipments:payload.guestCustomer?.equipments ? equipmentRows(payload.guestCustomer.equipments) : saved.equipments }; result = saved; }
     else if (path === '/budgets/budget-1') result = saved;
     else if (path === '/documents/document-1/handoff/technical-signature') {
       if (signatureFailures-- > 0) { status = 400; result = 'Assinatura indisponível. Tente novamente.'; }
@@ -181,8 +188,25 @@ async function page(role = 'OWNER', { signatureFailures = 0, renderFailures = 0,
     await click('Adicionar');
     await input('Valor do desconto (R$)', '50');
     await next(); await waitText('Materiais e fornecimentos');
+    assert.equal(await evaluate(`!!document.querySelector('select[aria-label="Unidade"],select[aria-label="Unidade do material"]')`),false);
+    await input('Descrição do material','Filtro fornecido'); await input('Quantidade','2'); await input('Unidade','UN');
+    await input('Valor unitário (R$)','50'); await click('Adicionar');
+    await click('Selecione uma ou mais descrições'); await waitText('Tubulação de teste');
+    await evaluate(`Array.from(document.querySelectorAll('[role="option"]')).find(el=>el.textContent.includes('Tubulação de teste')).click()`);
+    await evaluate(`Array.from(document.querySelectorAll('button')).find(el=>el.getAttribute('aria-haspopup')==='listbox').click()`);
+    await evaluate(`(() => {
+      const quantity=document.querySelector('input[aria-label="Quantidade do material sugerido"]');
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(quantity,'2.375');quantity.dispatchEvent(new Event('input',{bubbles:true}));
+    })()`);
+    await evaluate(`(() => {
+      const unit=document.querySelector('select[aria-label="Unidade do material sugerido"]');
+      for(const value of ['ML','KG','KGF','M','UN','KGF·M']) { if(!Array.from(unit.options).some(option=>option.value===value)) throw Error('Missing description unit '+value); }
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(unit,'M');unit.dispatchEvent(new Event('change',{bubbles:true}));
+    })()`);
+    assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'),true);
+
     await next(); await waitText('Valor por extenso');
-    assert.ok((await text()).includes('450,00'));
+    assert.ok((await text()).includes('550,00'));
     await next(); await waitText('Validade da proposta (dias)');
     await next(); await waitText('Assinatura técnica');
     await until(() => evaluate(`Array.from(document.querySelectorAll('button')).some(el=>el.textContent.trim()===${JSON.stringify(mobile ? 'Concluir e gerar proposta' : 'Salvar orçamento')}&&!el.disabled)`), 'signature chosen');
@@ -226,6 +250,10 @@ try {
   await owner.waitText('Orçamento aprovado');
   await until(() => owner.evaluate(`Array.from(document.querySelectorAll('button')).some(el=>el.textContent.trim()==='Baixar PDF'&&!el.disabled)`), 'accepted PDF ready');
   assert.equal(owner.calls.filter(call=>call.path.endsWith('/approve')).length,1);
+  const measured=owner.calls.find(call=>call.path==='/budgets'&&call.method==='POST').payload.items;
+  assert.ok(measured.some(item=>item.source==='CATALOG'&&item.quantity===2.375&&item.unit==='M'&&item.unitPrice===0));
+  assert.ok(measured.some(item=>item.source==='MANUAL'&&item.type==='MATERIAL'&&item.quantity===2&&item.unit==='UN'&&item.unitPrice===50));
+  console.log('PASS mobile units only in catalog descriptions; supplied materials add R$ 100 to the budget total');
   console.log('PASS pending PDF, safe retries, download/share, explicit acceptance and cancellation');
 
   const draft = await page();
@@ -285,6 +313,9 @@ try {
   const webCreation = web.calls.find(call=>call.path==='/budgets'&&call.method==='POST');
   assert.equal(webCreation.payload.guestCustomer.name,'Empresa avulsa da proposta');
   assert.equal(webCreation.payload.guestCustomer.equipments.length,2);
+  assert.ok(webCreation.payload.items.some(item=>item.source==='CATALOG'&&item.quantity===2.375&&item.unit==='M'));
+  assert.ok(webCreation.payload.items.some(item=>item.type==='MATERIAL'&&item.source==='MANUAL'&&item.quantity===2&&item.unit==='UN'&&item.unitPrice===50));
+  console.log('PASS web description units stay separate from supplied materials and their BRL amounts');
   assert.equal(webCreation.payload.guestCustomer.address.city,'Recife');
   assert.ok(!web.calls.some(call=>call.path.endsWith('/approve')));
   console.log('PASS shared guest wizard on the web for managers without automatic approval');

@@ -1852,7 +1852,7 @@ describe('DocumentEngine foundation', () => {
         document: { id: '20000000-0000-4000-8000-000000000001', number: 'ORC-000027' },
         items: [
           { id: 'service', type: 'SERVICE', source: 'MANUAL', description: 'Higienização técnica', quantity: 1, unit: 'SERV', unitPrice: 850, total: 850, product: null },
-          { id: 'description', type: 'MATERIAL', source: 'CATALOG', description: 'Tubulação frigorígena', quantity: 2, unit: 'UN', unitPrice: 0, total: 0, product: null },
+          { id: 'description', type: 'MATERIAL', source: 'CATALOG', description: 'Tubulação frigorígena', quantity: 2.375, unit: 'M', unitPrice: 0, total: 0, product: null },
           { id: 'material', type: 'MATERIAL', source: 'MANUAL', description: 'Filtro de reposição', quantity: 5, unit: 'UN', unitPrice: 85, total: 425, product: null },
         ],
       },
@@ -1887,9 +1887,13 @@ describe('DocumentEngine foundation', () => {
       total: '- R$ 50,00',
     });
     expect(services?.kind === 'table' ? services.emphasizedRowIndexes : []).toEqual([1]);
-    expect(descriptions?.kind === 'table' ? descriptions.columns.map((column) => column.key) : []).toEqual(['item', 'quantity']);
+    expect(descriptions?.kind === 'table' ? descriptions.columns.map((column) => column.key) : []).toEqual(['item', 'quantity', 'unit']);
+    expect(descriptions?.kind === 'table' ? descriptions.rows[0] : null).toEqual({ item: 'Tubulação frigorígena', quantity: '2,375', unit: 'M' });
     expect(descriptions?.kind === 'table' ? descriptions.rows[0] : null).not.toHaveProperty('unitPrice');
     expect(materials?.kind === 'table' ? materials.rows : []).toHaveLength(2);
+    expect(materials?.kind === 'table' ? materials.rows[0] : null).toMatchObject({ quantity: '5,00', unit: 'UN' });
+    expect(materials?.kind === 'table' ? materials.rows[0].unitPrice : '').toContain('85,00');
+    expect(materials?.kind === 'table' ? materials.rows[0].total : '').toContain('425,00');
     expect(materials?.kind === 'table' ? materials.rows[1] : null).toEqual({
       item: 'Desconto comercial nos fornecimentos',
       quantity: '',
