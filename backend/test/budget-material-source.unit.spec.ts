@@ -8,7 +8,7 @@ describe('Budget material sources', () => {
   const resolve = (
     service as unknown as {
       resolveSnapshotItems: (items: unknown[]) => Promise<
-        Array<{ source: BudgetItemSource; unitPrice: string; total: string }>
+        Array<{ source: BudgetItemSource; quantity: number; unit: string; unitPrice: string; total: string }>
       >;
     }
   ).resolveSnapshotItems.bind(service);
@@ -19,8 +19,8 @@ describe('Budget material sources', () => {
         type: BudgetItemType.MATERIAL,
         source: BudgetItemSource.CATALOG,
         description: 'Tubulação frigorígena',
-        quantity: 3,
-        unit: 'UN',
+        quantity: 2.375,
+        unit: 'm',
         unitPrice: 999,
       },
       {
@@ -35,6 +35,8 @@ describe('Budget material sources', () => {
 
     expect(items[0]).toMatchObject({
       source: BudgetItemSource.CATALOG,
+      quantity: 2.375,
+      unit: 'M',
       unitPrice: '0.00',
       total: '0.00',
     });

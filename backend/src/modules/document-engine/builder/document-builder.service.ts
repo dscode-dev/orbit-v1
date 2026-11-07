@@ -1780,12 +1780,14 @@ export class DocumentBuilderService {
       id,
       kind: 'table',
       columns: [
-        { key: 'item', label: 'Descrição', width: 0.82 },
+        { key: 'item', label: 'Descrição', width: 0.68 },
         { key: 'quantity', label: 'Quantidade', width: 0.18 },
+        { key: 'unit', label: 'Unidade', width: 0.14 },
       ],
       rows: items.map((item) => ({
         item: this.clean(item.description || 'Material'),
-        quantity: this.decimal(item.quantity),
+        quantity: this.quantity(item.quantity),
+        unit: this.clean(item.unit),
       })),
     });
     const sections: DocumentSection[] = [
@@ -2417,6 +2419,10 @@ export class DocumentBuilderService {
       dateStyle: 'short',
       timeZone: 'UTC',
     }).format(new Date(value));
+  }
+
+  private quantity(value: Prisma.Decimal | number | string): string {
+    return Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
   }
 
   private decimal(value: Prisma.Decimal | number | string): string {

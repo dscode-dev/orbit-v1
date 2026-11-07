@@ -27,6 +27,7 @@ import {
 } from "@erp/api";
 import { brlAmountInWords, formatCurrencyBRL, formatNumber } from "@erp/utils";
 import { BudgetGuestCustomerFields, validBudgetGuestCustomer, budgetGuestEquipmentDrafts, type BudgetGuestCustomerDraft } from "./budget-guest-customer-fields";
+import { BudgetUnitSelect } from "./budget-unit-select";
 import { TechnicalSignaturePreview } from "./document-handoff-inbox";
 
 const STEPS = ["Origem", "Dados gerais", "Serviços", "Materiais", "Valores", "Condições", "Responsável técnico"];
@@ -393,10 +394,18 @@ function BudgetItemsEditor({ type, items, onChange, catalog = [] }: { type: Budg
     {type === "MATERIAL" && <section className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4">
       <div>
         <h4 className="text-sm font-semibold">Descrição dos Materiais</h4>
-        <p className="text-caption">Itens sugeridos pelo catálogo não possuem preço e aparecem no documento somente com descrição e quantidade.</p>
+        <p className="text-caption">Itens sugeridos pelo catálogo não possuem preço e aparecem no documento com descrição, quantidade e unidade de medida.</p>
       </div>
       <MultiSelect label="Selecionar descrições" value={selectedCatalogIds} onChange={selectCatalog} options={catalog.map((entry) => ({ value: entry.id, label: entry.title, description: entry.description ?? undefined }))} placeholder="Selecione uma ou mais descrições" emptyMessage="Nenhuma descrição cadastrada no Catálogo de Serviços." />
-      {catalogRows.length > 0 && <ul className="space-y-2">{catalogRows.map(({ item, index }) => <li key={`catalog-${index}`} className="grid gap-2 rounded-[var(--radius-md)] bg-[var(--color-muted)] p-3 sm:grid-cols-[1fr_110px_auto] sm:items-center"><input aria-label="Descrição do material sugerido" value={item.description} onChange={(event) => update(index, { description: event.target.value })} className={inputCls} /><input aria-label="Quantidade do material sugerido" type="number" min="0.001" step="0.001" value={item.quantity} onChange={(event) => update(index, { quantity: Number(event.target.value) })} className={inputCls} /><IconButton onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))} label="Remover descrição" danger><Trash2 className="h-4 w-4" /></IconButton></li>)}</ul>}
+      {catalogRows.length > 0 && <ul className="space-y-2">{catalogRows.map(({ item, index }) => (
+        <li key={`catalog-${index}`} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2 rounded-[var(--radius-md)] bg-[var(--color-muted)] p-3 sm:grid-cols-[minmax(0,1fr)_100px_190px_auto]">
+          <label className="col-span-3 min-w-0 space-y-1 sm:col-span-1"><span className="text-xs font-medium">Descrição</span><input aria-label="Descrição do material sugerido" value={item.description} onChange={(event) => update(index, { description: event.target.value })} className={inputCls} /></label>
+          <label className="min-w-0 space-y-1"><span className="text-xs font-medium">Quantidade</span><input aria-label="Quantidade do material sugerido" type="number" inputMode="decimal" min="0.001" step="0.001" value={item.quantity} onChange={(event) => update(index, { quantity: Number(event.target.value) })} className={inputCls} /></label>
+          <label className="min-w-0 space-y-1"><span className="text-xs font-medium">Unidade</span><BudgetUnitSelect ariaLabel="Unidade do material sugerido" value={item.unit} onChange={(unit) => update(index, { unit })} className={inputCls} /></label>
+          <IconButton onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))} label="Remover descrição" danger><Trash2 className="h-4 w-4" /></IconButton>
+        </li>
+      ))}</ul>}
+      <p className="text-caption">Informe a quantidade na unidade selecionada. São aceitas até três casas decimais, por exemplo: 2,5 M ou 0,125 KG.</p>
       <a href="/maintenance-checklists?type=BUDGET_MATERIAL_DESCRIPTION" target="_blank" rel="noreferrer" className="inline-block text-xs font-medium text-[var(--color-primary)]">Gerenciar descrições no Catálogo de Serviços</a>
     </section>}
     <section className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4">
