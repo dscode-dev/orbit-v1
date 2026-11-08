@@ -30,6 +30,12 @@ export class ListCustomersQueryDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page = 1;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit = 20;
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(100) search?: string;
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    value === 'true' ? true : value === 'false' ? false : value,
+  )
+  @IsBoolean()
+  isActive = true;
 }
 
 export class CreateCustomerDto {

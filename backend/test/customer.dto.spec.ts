@@ -34,7 +34,27 @@ describe('Customer DTOs', () => {
     expect(await validate(dto)).toHaveLength(0);
     expect(dto.page).toBe(1);
     expect(dto.limit).toBe(20);
+    expect(dto.isActive).toBe(true);
   });
+
+  it.each([
+    ['true', true],
+    ['false', false],
+    [true, true],
+    [false, false],
+  ])('parses the customer status filter %s as %s', async (value, expected) => {
+    const dto = plainToInstance(ListCustomersQueryDto, { isActive: value });
+    expect(await validate(dto)).toHaveLength(0);
+    expect(dto.isActive).toBe(expected);
+  });
+
+  it.each(['invalid', '', '0', '1', ['true', 'false']])(
+    'rejects an invalid customer status filter %s',
+    async (value) => {
+      const dto = plainToInstance(ListCustomersQueryDto, { isActive: value });
+      expect((await validate(dto)).some((error) => error.property === 'isActive')).toBe(true);
+    },
+  );
 
   it('accepts an optional sanitized address reference point', async () => {
     const dto = plainToInstance(CustomerAddressDto, {

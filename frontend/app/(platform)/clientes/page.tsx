@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Plus, Search, Users, Pencil } from 'lucide-react';
+import { Plus, Search, Users, Pencil, UserRoundCheck, UserRoundX } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { PageHeader } from '@platform/components/page-header';
 import { DataTable, type Column } from '@platform/components/data-table';
@@ -12,8 +12,9 @@ import { SkeletonList } from '@erp/ui/skeletons';
 import { EmptyState } from '@erp/ui/empty-state';
 import { ErrorState } from '@erp/ui/states';
 import { Gate } from '@erp/ui/auth/gate';
+import { ConfirmDialog } from '@erp/ui/confirm-dialog';
 import { CustomerFormDrawer } from '@platform/components/customer-form-drawer';
-import { customersApi, useQuery, type Customer } from '@erp/api';
+import { customersApi, errorMessage, useQuery, type Customer } from '@erp/api';
 import { useDebounce } from '@erp/utils';
 
 export default function ClientesPage() {
@@ -21,14 +22,25 @@ export default function ClientesPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
+  const [status, setStatus] = useState('active');
   const debounced = useDebounce(search, 300);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Customer | null>(null);
+  const [statusTarget, setStatusTarget] = useState<Customer | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const list = useQuery(
-    (signal) => customersApi.listCustomers({ page, limit, search: debounced || undefined, signal }),
-    [page, limit, debounced],
+    (signal) =>
+      customersApi.listCustomers({
+        page,
+        limit,
+        search: debounced || undefined,
+        isActive: status === 'active',
+        signal,
+      }),
+    [page, limit, debounced, status],
   );
   const stats = useQuery((signal) => customersApi.getCustomerStats({ signal }), []);
 
@@ -86,28 +98,49 @@ export default function ClientesPage() {
         cell: (c) => (
           <StatusPill
             status={c.isActive ? 'success' : 'offline'}
-            label={c.isActive ? 'Ativo' : 'Inativo'}
+            label={c.isActive ? 'Ativo' : 'Desativado'}
           />
         ),
       },
       {
         key: 'actions',
-        header: '',
-        className: 'w-[64px]',
+        header: 'Ações',
+        className: 'w-[140px]',
         cell: (c) => (
           <Gate roles={['OWNER', 'MANAGER']}>
-            <button
-              type="button"
-              aria-label={`Editar ${c.name}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                setEditing(c);
-                setFormOpen(true);
-              }}
-              className="rounded-md border border-[var(--color-border)] p-2 hover:bg-[var(--color-muted)]"
-            >
-              <Pencil className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                aria-label={`Editar ${c.name}`}
+                title="Editar cliente"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setEditing(c);
+                  setFormOpen(true);
+                }}
+                className="rounded-md border border-[var(--color-border)] p-2 hover:bg-[var(--color-muted)]"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                aria-label={`${c.isActive ? 'Desativar' : 'Reativar'} ${c.name}`}
+                title={c.isActive ? 'Desativar cliente' : 'Reativar cliente'}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setStatusError(null);
+                  setNotice(null);
+                  setStatusTarget(c);
+                }}
+                className={`rounded-md border border-[var(--color-border)] p-2 hover:bg-[var(--color-muted)] ${c.isActive ? 'text-[var(--color-danger)]' : 'text-[var(--color-primary)]'}`}
+              >
+                {c.isActive ? (
+                  <UserRoundX className="h-4 w-4" />
+                ) : (
+                  <UserRoundCheck className="h-4 w-4" />
+                )}
+              </button>
+            </div>
           </Gate>
         ),
       },
@@ -120,6 +153,30 @@ export default function ClientesPage() {
     stats.refetch();
   }
 
+  async function changeStatus() {
+    if (!statusTarget) return;
+    setStatusError(null);
+    try {
+      if (statusTarget.isActive) {
+        await customersApi.disableCustomer(statusTarget.id);
+      } else {
+        await customersApi.enableCustomer(statusTarget.id);
+      }
+    } catch (error) {
+      setStatusError(errorMessage(error));
+      throw error;
+    }
+    setNotice(
+      `Cliente ${statusTarget.name} ${statusTarget.isActive ? 'desativado' : 'reativado'} com sucesso.`,
+    );
+    if (page > 1 && list.data?.items.length === 1) {
+      setPage(page - 1);
+    } else {
+      list.refetch();
+    }
+    stats.refetch();
+  }
+
   const s = stats.data;
 
   return (
@@ -127,7 +184,7 @@ export default function ClientesPage() {
       <PageHeader
         eyebrow="Cadastros"
         title="Clientes"
-        description="Carteira ativa consumida diretamente da API."
+        description="Gerencie sua carteira de clientes ativos e desativados."
         actions={
           <Gate roles={['OWNER', 'MANAGER']}>
             <button
@@ -143,44 +200,81 @@ export default function ClientesPage() {
         }
       />
 
+      {notice && (
+        <p
+          role="status"
+          className="rounded-[var(--radius-md)] bg-[var(--color-success)]/10 p-3 text-sm text-[var(--color-success)]"
+        >
+          {notice}
+        </p>
+      )}
+
       {/* Stats */}
       {s && (
         <div className="flex flex-wrap gap-2 text-caption">
           <Chip label="Total" value={s.total} />
           <Chip label="Ativos" value={s.active} />
-          <Chip label="Inativos" value={s.inactive} />
+          <Chip label="Desativados" value={s.inactive} />
           <Chip label="Empresas" value={s.companies} />
           <Chip label="Pessoas" value={s.people} />
         </div>
       )}
 
-      {/* Search */}
-      <div className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 h-9 w-full max-w-[360px]">
-        <Search className="h-4 w-4 text-[var(--color-muted-foreground)]" />
-        <input
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPage(1);
-          }}
-          placeholder="Buscar por nome, documento, telefone ou e-mail…"
-          className="flex-1 bg-transparent outline-none text-sm placeholder:text-[var(--color-muted-foreground)]"
-        />
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 h-9 w-full max-w-[360px]">
+          <Search className="h-4 w-4 text-[var(--color-muted-foreground)]" />
+          <input
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            placeholder="Buscar por nome, documento, telefone ou e-mail…"
+            className="flex-1 bg-transparent outline-none text-sm placeholder:text-[var(--color-muted-foreground)]"
+          />
+        </div>
+        <Gate roles={['OWNER', 'MANAGER']}>
+          <label className="flex items-center gap-2 text-sm">
+            Status
+            <select
+              aria-label="Status dos clientes"
+              value={status}
+              onChange={(event) => {
+                setStatus(event.target.value);
+                setPage(1);
+                setNotice(null);
+              }}
+              className="h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm outline-none focus:border-[var(--color-primary)]"
+            >
+              <option value="active">Ativos</option>
+              <option value="inactive">Desativados</option>
+            </select>
+          </label>
+        </Gate>
       </div>
 
       {/* List */}
-      {list.loading && !list.data ? (
+      {list.loading ? (
         <SkeletonList rows={6} />
-      ) : list.error && !list.data ? (
+      ) : list.error ? (
         <ErrorState error={list.error} onRetry={list.refetch} />
       ) : list.data && list.data.items.length === 0 ? (
         <EmptyState
           icon={Users}
-          title={debounced ? 'Nenhum cliente encontrado' : 'Nenhum cliente cadastrado'}
+          title={
+            debounced
+              ? 'Nenhum cliente encontrado'
+              : status === 'inactive'
+                ? 'Nenhum cliente desativado'
+                : 'Nenhum cliente ativo'
+          }
           description={
             debounced
               ? 'Ajuste a busca e tente novamente.'
-              : 'Cadastre o primeiro cliente para começar.'
+              : status === 'inactive'
+                ? 'Os clientes desativados aparecerão aqui.'
+                : 'Cadastre um cliente ou consulte o filtro de desativados.'
           }
         />
       ) : list.data ? (
@@ -207,6 +301,31 @@ export default function ClientesPage() {
         onClose={() => setFormOpen(false)}
         onSaved={reload}
         customer={editing}
+      />
+      <ConfirmDialog
+        open={statusTarget !== null}
+        title={statusTarget?.isActive ? 'Desativar cliente?' : 'Reativar cliente?'}
+        description={
+          <div className="space-y-2">
+            <p>
+              {statusTarget?.isActive
+                ? `O cliente ${statusTarget.name} sairá da lista de ativos. Seus dados e histórico serão preservados e poderão ser consultados no filtro de desativados.`
+                : `O cliente ${statusTarget?.name ?? ''} voltará a aparecer na lista de ativos.`}
+            </p>
+            {statusError && (
+              <p role="alert" className="text-[var(--color-danger)]">
+                {statusError}
+              </p>
+            )}
+          </div>
+        }
+        confirmLabel={statusTarget?.isActive ? 'Desativar cliente' : 'Reativar cliente'}
+        danger={statusTarget?.isActive}
+        onClose={() => {
+          setStatusTarget(null);
+          setStatusError(null);
+        }}
+        onConfirm={changeStatus}
       />
     </div>
   );

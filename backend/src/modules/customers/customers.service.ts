@@ -104,6 +104,7 @@ export class CustomersService {
           ],
         }
       : {};
+    where.isActive = query.isActive ?? true;
     const [items, total] = await this.prisma.$transaction([
       this.prisma.customer.findMany({
         where,

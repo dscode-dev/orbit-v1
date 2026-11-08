@@ -15,6 +15,7 @@ export function listCustomers(params?: {
   page?: number;
   limit?: number;
   search?: string;
+  isActive?: boolean;
   signal?: AbortSignal;
 }): Promise<Paginated<Customer>> {
   const { signal, ...query } = params ?? {};
