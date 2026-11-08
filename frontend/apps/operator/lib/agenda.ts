@@ -5,7 +5,7 @@ export async function loadOperatorAgenda(
   role: Role | null,
   signal: AbortSignal,
 ): Promise<Assignment[]> {
-  const list = role === 'OWNER' ? assignmentsApi.listOwnerAgenda : assignmentsApi.listMyAssignments;
+  const list = role === 'OWNER' ? assignmentsApi.listAssignments : assignmentsApi.listMyAssignments;
   const items: Assignment[] = [];
   let page = 1;
   let totalPages = 1;
