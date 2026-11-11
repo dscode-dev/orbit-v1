@@ -5,7 +5,8 @@
  * Platform e adaptado ao mobile: grade do mês com marcadores por dia + lista
  * cronológica do dia selecionado. Não repete o layout da lista de atendimentos.
  */
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, ChevronRight as Arrow, Clock } from "lucide-react";
 import { StatusPill } from "@erp/ui/status-pill";
@@ -13,6 +14,8 @@ import { ErrorState } from "@erp/ui/states";
 import { useQuery, type Assignment, type AssignmentStatus, type Role } from "@erp/api";
 import { useAuth } from "@erp/ui/auth/auth-provider";
 import { loadOperatorAgenda } from "@operator/lib/agenda";
+import { agendaDetailHref, agendaHref, agendaSelection } from "@operator/lib/agenda-navigation";
+import { useServiceTypeLabel, type ServiceTypeLabelResolver } from "@erp/ui/operations/use-service-type-label";
 import { ASSIGNMENT_STATUS_LABEL, ASSIGNMENT_STATUS_PILL } from "@erp/ui/assignments/assignment-shared";
 
 const STATE_COLOR: Record<AssignmentStatus, string> = {
@@ -42,8 +45,10 @@ export default function OperatorAgendaPage() {
 function AgendaCalendar({ role }: { role: Role | null }) {
   const isOwner = role === "OWNER";
   const today = useMemo(() => new Date(), []);
-  const [cursor, setCursor] = useState(() => startOfMonth(new Date()));
-  const [selected, setSelected] = useState<Date>(() => new Date());
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { selected, cursor } = agendaSelection(searchParams, today);
+  const serviceTypeLabel = useServiceTypeLabel();
 
   const assignments = useQuery((signal) => loadOperatorAgenda(role, signal), [role]);
 
@@ -94,15 +99,14 @@ function AgendaCalendar({ role }: { role: Role | null }) {
   const monthCount = cells.filter((d) => d.getMonth() === cursor.getMonth()).reduce((acc, d) => acc + (byDay.get(dayKey(d))?.length ?? 0), 0);
 
   function shift(delta: number) {
-    setCursor((c) => new Date(c.getFullYear(), c.getMonth() + delta, 1));
+    router.replace(agendaHref(selected, new Date(cursor.getFullYear(), cursor.getMonth() + delta, 1)), { scroll: false });
   }
   function goToday() {
-    setCursor(startOfMonth(new Date()));
-    setSelected(new Date());
+    const now = new Date();
+    router.replace(agendaHref(now, startOfMonth(now)), { scroll: false });
   }
   function pick(date: Date) {
-    setSelected(date);
-    if (date.getMonth() !== cursor.getMonth()) setCursor(startOfMonth(date));
+    router.replace(agendaHref(date, startOfMonth(date)), { scroll: false });
   }
 
   return (
@@ -148,6 +152,7 @@ function AgendaCalendar({ role }: { role: Role | null }) {
                 type="button"
                 onClick={() => pick(date)}
                 aria-label={date.toLocaleDateString("pt-BR")}
+                aria-pressed={isSelected}
                 className={`relative h-12 flex flex-col items-center justify-center gap-0.5 transition-colors ${isSelected ? "bg-[var(--color-primary)]/10" : "active:bg-[var(--color-muted)]"}`}
               >
                 <span
@@ -195,7 +200,7 @@ function AgendaCalendar({ role }: { role: Role | null }) {
           </div>
         ) : (
           <ul className="space-y-2">
-            {selectedItems.map((item) => <AgendaRow key={item.id} assignment={item} showAssignee={isOwner} />)}
+            {selectedItems.map((item) => <AgendaRow key={item.id} assignment={item} href={agendaDetailHref(item.id, selected, cursor)} serviceTypeLabel={serviceTypeLabel} />)}
           </ul>
         )}
       </section>
@@ -205,7 +210,7 @@ function AgendaCalendar({ role }: { role: Role | null }) {
         <section className="space-y-2">
           <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">Sem data definida ({unscheduled.length})</h2>
           <ul className="space-y-2">
-            {(isOwner ? unscheduled : unscheduled.slice(0, 5)).map((item) => <AgendaRow key={item.id} assignment={item} showAssignee={isOwner} />)}
+            {(isOwner ? unscheduled : unscheduled.slice(0, 5)).map((item) => <AgendaRow key={item.id} assignment={item} href={agendaDetailHref(item.id, selected, cursor)} serviceTypeLabel={serviceTypeLabel} />)}
           </ul>
         </section>
       )}
@@ -213,16 +218,22 @@ function AgendaCalendar({ role }: { role: Role | null }) {
   );
 }
 
-/** Linha de agenda: horário + cliente/equipamento + status. */
-function AgendaRow({ assignment, showAssignee = false }: { assignment: Assignment; showAssignee?: boolean }) {
+/** Horário e informações necessárias para localizar e identificar o atendimento. */
+function AgendaRow({ assignment, href, serviceTypeLabel }: { assignment: Assignment; href: string; serviceTypeLabel: ServiceTypeLabelResolver }) {
   const op = assignment.operation;
   const time = op.scheduledFor
     ? new Date(op.scheduledFor).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
     : null;
+  const services = op.secondaryServiceType
+    ? [
+        { label: serviceTypeLabel(op.type), address: op.address },
+        { label: serviceTypeLabel(op.secondaryServiceType), address: op.secondaryAddress },
+      ]
+    : [{ label: (op.serviceTypes?.length ? op.serviceTypes : [op.type]).map(serviceTypeLabel).join(" / "), address: op.address }];
   return (
     <li>
       <Link
-        href={`/operator/services/${assignment.id}`}
+        href={href}
         className="flex items-center gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 active:scale-[0.99] transition-transform"
         style={{ boxShadow: `inset 3px 0 0 0 ${STATE_COLOR[assignment.status]}` }}
       >
@@ -230,14 +241,33 @@ function AgendaRow({ assignment, showAssignee = false }: { assignment: Assignmen
           <Clock className="h-3.5 w-3.5" />
           <span className="mt-0.5 font-mono text-xs tabular-nums">{time ?? "—"}</span>
         </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-medium truncate">{op.customer?.name ?? `OP-${String(op.number).padStart(6, "0")}`}</span>
-          <span className="block text-caption truncate">{op.equipment?.name ?? "Sem equipamento"} · OP-{String(op.number).padStart(6, "0")}</span>
-          {showAssignee && <span className="block text-caption truncate">Técnico: {assignment.assignee.name}</span>}
+        <span className="min-w-0 flex-1 space-y-1 break-words">
+          <span className="block truncate text-sm font-semibold" title={op.customer?.name ?? "Cliente não informado"}>{op.customer?.name ?? "Cliente não informado"}</span>
+          {services.map((service, index) => (
+            <span key={index} className="block space-y-0.5">
+              <AgendaAddress address={service.address} />
+              <span className="block text-xs font-medium">{index === 1 ? "Serviço secundário" : "Serviço"}: {service.label}</span>
+            </span>
+          ))}
+          <span className="flex items-baseline gap-1 text-caption">
+            <span className="min-w-0 truncate" title={`Técnico: ${assignment.assignee.name}`}>Técnico: {assignment.assignee.name}</span>
+            <span className="shrink-0 whitespace-nowrap text-[11px] font-normal">· OP-{String(op.number).padStart(6, "0")}</span>
+          </span>
         </span>
-        <StatusPill status={ASSIGNMENT_STATUS_PILL[assignment.status]} label={ASSIGNMENT_STATUS_LABEL[assignment.status]} />
+        <span className="shrink-0 self-center">
+          <StatusPill status={ASSIGNMENT_STATUS_PILL[assignment.status]} label={ASSIGNMENT_STATUS_LABEL[assignment.status]} />
+        </span>
         <Arrow className="h-4 w-4 shrink-0 text-[var(--color-muted-foreground)]" />
       </Link>
     </li>
+  );
+}
+
+function AgendaAddress({ address }: { address: Assignment["operation"]["address"] | undefined }) {
+  const district = address?.district?.trim();
+  return (
+    <span className="block text-xs font-semibold text-[var(--color-foreground)]">
+      {district || "Bairro não informado"}
+    </span>
   );
 }
