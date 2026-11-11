@@ -5,7 +5,7 @@ import { operationServiceAddressLabel } from "@erp/ui/operations/operation-share
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Banknote, CalendarClock, Camera, CheckCircle2, ClipboardCheck, Clock, Download, FileText, Loader2, MapPin, Package, PenLine, Phone, Play, Share2, XCircle } from "lucide-react";
 import { useAuth } from "@erp/ui/auth/auth-provider";
 import { SkeletonCard, SkeletonList } from "@erp/ui/skeletons";
@@ -27,6 +27,7 @@ import {
 import { useServiceTypeLabel } from "@erp/ui/operations/use-service-type-label";
 import { FieldReportHandoff } from "@operator/features/reports/field-report-handoff";
 import { OperatorSignatureChoice } from "@operator/components/operator-signature";
+import { agendaReturnHref } from "@operator/lib/agenda-navigation";
 
 const workflow = [
   { label: "Aceitar", icon: CheckCircle2 },
@@ -41,6 +42,8 @@ const workflow = [
 export default function OperatorServiceDetail() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const agendaBackHref = agendaReturnHref(searchParams);
   const assignment = useQuery((signal) => assignmentsApi.getAssignment(params.id, { signal }), [params.id]);
   const history = useQuery(
     (signal) => assignment.data ? assignmentsApi.getAssignmentHistory(assignment.data.operationId, { signal }) : Promise.resolve([]),
@@ -80,8 +83,8 @@ export default function OperatorServiceDetail() {
 
   return (
     <div className="px-4 pt-4 pb-24 space-y-5">
-      <Link href="/operator/services" className="inline-flex items-center gap-1.5 text-sm text-[var(--color-muted-foreground)]">
-        <ArrowLeft className="h-4 w-4" /> Minhas ordens
+      <Link href={agendaBackHref ?? "/operator/services"} className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-[var(--color-primary)]">
+        <ArrowLeft className="h-4 w-4" /> {agendaBackHref ? "Voltar para a Agenda" : "Minhas ordens"}
       </Link>
 
       {assignment.loading && !assignment.data ? (
