@@ -129,6 +129,7 @@ export class UsersService {
           ],
         }
       : {};
+    where.deletedAt = null;
     const skip = (query.page - 1) * query.limit;
     const [items, total] = await this.prisma.$transaction([
       this.prisma.user.findMany({
@@ -267,7 +268,7 @@ export class UsersService {
     await this.prisma.$transaction([
       this.prisma.user.update({
         where: { id },
-        data: { isActive: false, disabledAt: now },
+        data: { isActive: false, disabledAt: now, deletedAt: now },
       }),
       this.prisma.refreshToken.updateMany({
         where: { userId: id, revokedAt: null },
@@ -730,7 +731,7 @@ export class UsersService {
   }
 
   private async getUserOrThrow(id: string): Promise<UserResponse> {
-    const user = await this.prisma.user.findUnique({ where: { id }, select: USER_SELECT });
+    const user = await this.prisma.user.findUnique({ where: { id, deletedAt: null }, select: USER_SELECT });
     if (!user) {
       throw this.userNotFound();
     }

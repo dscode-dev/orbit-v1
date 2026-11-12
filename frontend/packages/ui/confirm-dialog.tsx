@@ -30,9 +30,10 @@ export function ConfirmDialog({
   onClose: () => void;
 }) {
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!open) setLoading(false);
+    if (!open) { setLoading(false); setError(null); }
   }, [open]);
 
   useEffect(() => {
@@ -47,9 +48,11 @@ export function ConfirmDialog({
   async function handleConfirm() {
     try {
       setLoading(true);
+      setError(null);
       await onConfirm();
       onClose();
-    } catch {
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível concluir a ação. Tente novamente.");
       setLoading(false);
     }
   }
@@ -71,6 +74,7 @@ export function ConfirmDialog({
             {description && <div className="mt-1 text-sm text-[var(--color-muted-foreground)]">{description}</div>}
           </div>
         </div>
+        {error && <p role="alert" className="mt-3 text-sm text-[var(--color-danger)]">{error}</p>}
         <div className="mt-5 flex items-center justify-end gap-2">
           <button type="button" onClick={onClose} disabled={loading} className="rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 h-9 text-sm hover:bg-[var(--color-muted)] disabled:opacity-50">
             {cancelLabel}

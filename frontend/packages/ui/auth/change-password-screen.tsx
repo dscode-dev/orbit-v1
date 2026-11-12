@@ -1,5 +1,6 @@
 'use client';
 
+import { signatureDataUrlToFile } from "@erp/utils/signature-file";
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, ArrowRight, KeyRound, Loader2, PenLine, ShieldCheck } from 'lucide-react';
@@ -13,6 +14,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   SIGNATURE_IMAGE_REQUIRED: 'Desenhe e confirme sua assinatura.',
   UPLOAD_INVALID_MIME_TYPE: 'A imagem gerada para a assinatura é inválida.',
   UPLOAD_FILE_TOO_LARGE: 'A assinatura excedeu o limite permitido.',
+  AUTH_SESSION_REVOKED: 'Sua sessão expirou. Entre novamente para concluir o primeiro acesso.',
+  AUTH_INVALID_TOKEN: 'Sua sessão expirou. Entre novamente para concluir o primeiro acesso.',
   VALIDATION_ERROR: 'Revise a senha e os dados profissionais informados.',
 };
 
@@ -63,7 +66,7 @@ export function ChangePasswordScreen({ variant }: { variant: 'platform' | 'opera
             registrationNumber: registrationNumber.trim() || undefined,
             department: department.trim() || undefined,
           },
-          await dataUrlToFile(signature),
+          signatureDataUrlToFile(signature),
         );
       } else {
         await usersApi.changePassword({ currentPassword, newPassword });
@@ -77,7 +80,9 @@ export function ChangePasswordScreen({ variant }: { variant: 'platform' | 'opera
           : cause instanceof Error && cause.message === 'SIGNATURE_REQUIRED'
             ? 'SIGNATURE_IMAGE_REQUIRED'
             : 'UNKNOWN_ERROR';
-      setError(ERROR_MESSAGES[code] ?? 'Não foi possível concluir o primeiro acesso.');
+      setError(ERROR_MESSAGES[code] ?? (cause instanceof ApiClientError && cause.status < 500
+        ? cause.message
+        : 'Não foi possível concluir o primeiro acesso. Tente novamente.'));
       setSubmitting(false);
     }
   }
@@ -151,10 +156,6 @@ export function ChangePasswordScreen({ variant }: { variant: 'platform' | 'opera
   );
 }
 
-async function dataUrlToFile(dataUrl: string): Promise<File> {
-  const blob = await fetch(dataUrl).then((response) => response.blob());
-  return new File([blob], 'assinatura.png', { type: 'image/png' });
-}
 
 function PwInput({ label, value, onChange, autoComplete }: { label: string; value: string; onChange: (value: string) => void; autoComplete: string }) {
   return <label className="block space-y-1.5"><span className="text-sm font-medium">{label}</span><input type="password" required autoComplete={autoComplete} value={value} onChange={(event) => onChange(event.target.value)} placeholder="••••••••••••" className="h-11 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 text-sm outline-none focus:border-[var(--color-primary)]" /></label>;

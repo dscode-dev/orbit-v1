@@ -52,6 +52,7 @@ export class OperatorExecutionsService {
     const period = await this.period(query);
     const userWhere: Prisma.UserWhereInput = {
       role: Role.OPERATOR,
+      deletedAt: null,
       ...(query.search
         ? {
             OR: [
@@ -286,8 +287,8 @@ export class OperatorExecutionsService {
     const nowLimit = new Date(Math.min(period.end.getTime(), Date.now()));
     const [operators, activeOperators, total, completed, pending, inProgress, overdue, durations] =
       await this.prisma.$transaction([
-        this.prisma.user.count({ where: { role: Role.OPERATOR } }),
-        this.prisma.user.count({ where: { role: Role.OPERATOR, isActive: true, disabledAt: null } }),
+        this.prisma.user.count({ where: { role: Role.OPERATOR, deletedAt: null } }),
+        this.prisma.user.count({ where: { role: Role.OPERATOR, isActive: true, disabledAt: null, deletedAt: null } }),
         this.prisma.assignment.count({
           where: {
             assignee: { role: Role.OPERATOR },
@@ -363,7 +364,7 @@ export class OperatorExecutionsService {
 
   private async operatorOrThrow(operatorId: string): Promise<Prisma.UserGetPayload<{ select: typeof OPERATOR_SELECT }>> {
     const operator = await this.prisma.user.findFirst({
-      where: { id: operatorId, role: Role.OPERATOR },
+      where: { id: operatorId, role: Role.OPERATOR, deletedAt: null },
       select: OPERATOR_SELECT,
     });
     if (!operator) {
