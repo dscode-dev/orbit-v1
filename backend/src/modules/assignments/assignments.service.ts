@@ -305,82 +305,126 @@ export class AssignmentsService {
     actor: AuthenticatedUser,
     context: AssignmentAuditContext,
   ): Promise<AssignmentPayload> {
-    return this.prisma.$transaction(async (tx) => {
-      await this.operationalUserOrThrowTx(tx, dto.assignedTo);
-      const current = await this.assignmentOrThrowTx(tx, id);
-      this.assertReassignable(current);
-      const previousStatus = current.status;
-      const now = new Date();
-      const transition = await tx.assignment.updateMany({
-        where: { id, status: current.status, assignedTo: current.assignedTo },
-        data: {
-          assignedBy: actor.id,
-          assignedTo: dto.assignedTo,
-          assignedAt: now,
-          status: AssignmentStatus.ASSIGNED,
-          // Reatribuição volta a exigir autorização, salvo auto-atribuição.
-          operatorVisible: actor.id === dto.assignedTo,
-          authorizedAt: actor.id === dto.assignedTo ? now : null,
-          authorizedBy: actor.id === dto.assignedTo ? actor.id : null,
-          acceptedAt: null,
-          startedAt: null,
-          completedAt: null,
-          canceledAt: null,
-          rejectedAt: null,
-          rejectionReason: null,
-          notes: dto.notes ?? current.notes,
-        },
-      });
-      if (transition.count !== 1) {
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await this.operationalUserOrThrowTx(tx, dto.assignedTo);
+        const current = await this.assignmentOrThrowTx(tx, id);
+        this.assertReassignable(current);
+        if (!current.isPrimary) {
+          throw new ApplicationException(
+            ERROR_CODES.ASSIGNMENT_INVALID_TRANSITION,
+            'Reatribua o responsável principal para alterar o executor deste atendimento',
+            HttpStatus.CONFLICT,
+          );
+        }
+        // A former/current auxiliary already owns the unique (operation, assignee)
+        // row. Promote it instead of changing the primary into a duplicate row.
+        const existing = await tx.assignment.findUnique({
+          where: { operationId_assignedTo: { operationId: current.operationId, assignedTo: dto.assignedTo } },
+        });
+        const target = existing && existing.id !== current.id ? existing : current;
+        if (target.id !== current.id && target.isPrimary) {
+          throw new ApplicationException(ERROR_CODES.ASSIGNMENT_INVALID_TRANSITION, 'Este técnico já é responsável pelo atendimento', HttpStatus.CONFLICT);
+        }
+        const previousStatus = target.status;
+        const now = new Date();
+        if (target.id !== current.id) {
+          const retired = await tx.assignment.updateMany({
+            where: { id: current.id, isPrimary: true, status: current.status, assignedTo: current.assignedTo },
+            data: { isPrimary: false, status: AssignmentStatus.CANCELED, canceledAt: now },
+          });
+          if (retired.count !== 1) {
+            throw new ApplicationException(ERROR_CODES.ASSIGNMENT_INVALID_TRANSITION, 'A atribuição mudou durante a reatribuição; tente novamente', HttpStatus.CONFLICT);
+          }
+          await this.historyTx(tx, { ...current, status: AssignmentStatus.CANCELED }, AssignmentEventType.CANCELED, actor.id, current.status, 'Responsabilidade transferida para outro técnico');
+          await this.auditTx(tx, ASSIGNMENT_AUDIT_ACTIONS.ASSIGNMENT_CANCELED, actor.id, context, {
+            assignmentId: current.id, operationId: current.operationId, assignedTo: current.assignedTo,
+            replacementAssignmentId: target.id, reason: 'AUXILIARY_PROMOTED',
+          });
+        }
+        const transition = await tx.assignment.updateMany({
+          where: { id: target.id, status: target.status, assignedTo: target.assignedTo },
+          data: {
+            isPrimary: true,
+            assignedBy: actor.id,
+            assignedTo: dto.assignedTo,
+            assignedAt: now,
+            status: AssignmentStatus.ASSIGNED,
+            // Reatribuição volta a exigir autorização, salvo auto-atribuição.
+            operatorVisible: actor.id === dto.assignedTo,
+            authorizedAt: actor.id === dto.assignedTo ? now : null,
+            authorizedBy: actor.id === dto.assignedTo ? actor.id : null,
+            acceptedAt: null,
+            startedAt: null,
+            completedAt: null,
+            canceledAt: null,
+            rejectedAt: null,
+            rejectionReason: null,
+            notes: dto.notes ?? current.notes,
+          },
+        });
+        if (transition.count !== 1) {
+          throw new ApplicationException(
+            ERROR_CODES.ASSIGNMENT_INVALID_TRANSITION,
+            'A atribuição mudou durante a reatribuição; tente novamente',
+            HttpStatus.CONFLICT,
+          );
+        }
+        const assignment = await tx.assignment.findUniqueOrThrow({ where: { id: target.id } });
+        await tx.operation.update({ where: { id: assignment.operationId }, data: { operatorId: dto.assignedTo } });
+        if (dto.auxiliaryOperatorIds !== undefined) {
+          await this.syncAuxiliaryAssignmentsTx(
+            tx,
+            assignment.operationId,
+            dto.assignedTo,
+            dto.auxiliaryOperatorIds,
+            actor.id,
+            context,
+          );
+        }
+        // Reassignment restarts the field flow: the operation waits for the new
+        // operator again (never resurrects COMPLETED/CANCELED operations).
+        await tx.operation.updateMany({
+          where: {
+            id: assignment.operationId,
+            status: { in: [OperationStatus.DRAFT, OperationStatus.IN_PROGRESS, OperationStatus.REVIEW] },
+          },
+          data: { status: OperationStatus.PENDING },
+        });
+        await this.historyTx(tx, assignment, AssignmentEventType.REASSIGNED, actor.id, previousStatus, dto.notes);
+        await this.auditTx(tx, ASSIGNMENT_AUDIT_ACTIONS.ASSIGNMENT_REASSIGNED, actor.id, context, {
+          assignmentId: assignment.id,
+          operationId: assignment.operationId,
+          assignedTo: assignment.assignedTo,
+          previousStatus,
+          previousAssignedTo: current.assignedTo,
+          previousAssignmentId: current.id,
+          newStatus: assignment.status,
+        });
+        await this.lifecycle.publishAssignmentEventTx(
+          tx,
+          {
+            assignmentId: assignment.id,
+            operationId: assignment.operationId,
+            actorId: actor.id,
+            type: AssetLifecycleEventType.ASSIGNMENT_REASSIGNED,
+            description: 'Assignment reassigned',
+            metadata: { assignedTo: assignment.assignedTo, previousStatus, newStatus: assignment.status },
+          },
+          context,
+        );
+        return tx.assignment.findUniqueOrThrow({ where: { id: assignment.id }, include: ASSIGNMENT_INCLUDE });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && ['P2002', 'P2034'].includes(error.code)) {
         throw new ApplicationException(
           ERROR_CODES.ASSIGNMENT_INVALID_TRANSITION,
-          'A atribuição mudou durante a reatribuição; tente novamente',
+          'Outra atualização alterou a equipe deste atendimento. Atualize a operação e tente novamente.',
           HttpStatus.CONFLICT,
         );
       }
-      const assignment = await tx.assignment.findUniqueOrThrow({ where: { id } });
-      await tx.operation.update({ where: { id: assignment.operationId }, data: { operatorId: dto.assignedTo } });
-      if (dto.auxiliaryOperatorIds !== undefined) {
-        await this.syncAuxiliaryAssignmentsTx(
-          tx,
-          assignment.operationId,
-          dto.assignedTo,
-          dto.auxiliaryOperatorIds,
-          actor.id,
-          context,
-        );
-      }
-      // Reassignment restarts the field flow: the operation waits for the new
-      // operator again (never resurrects COMPLETED/CANCELED operations).
-      await tx.operation.updateMany({
-        where: {
-          id: assignment.operationId,
-          status: { in: [OperationStatus.DRAFT, OperationStatus.IN_PROGRESS, OperationStatus.REVIEW] },
-        },
-        data: { status: OperationStatus.PENDING },
-      });
-      await this.historyTx(tx, assignment, AssignmentEventType.REASSIGNED, actor.id, previousStatus, dto.notes);
-      await this.auditTx(tx, ASSIGNMENT_AUDIT_ACTIONS.ASSIGNMENT_REASSIGNED, actor.id, context, {
-        assignmentId: assignment.id,
-        operationId: assignment.operationId,
-        assignedTo: assignment.assignedTo,
-        previousStatus,
-        newStatus: assignment.status,
-      });
-      await this.lifecycle.publishAssignmentEventTx(
-        tx,
-        {
-          assignmentId: assignment.id,
-          operationId: assignment.operationId,
-          actorId: actor.id,
-          type: AssetLifecycleEventType.ASSIGNMENT_REASSIGNED,
-          description: 'Assignment reassigned',
-          metadata: { assignedTo: assignment.assignedTo, previousStatus, newStatus: assignment.status },
-        },
-        context,
-      );
-      return tx.assignment.findUniqueOrThrow({ where: { id }, include: ASSIGNMENT_INCLUDE });
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      throw error;
+    }
   }
 
   async accept(id: string, actor: AuthenticatedUser, context: AssignmentAuditContext): Promise<AssignmentPayload> {

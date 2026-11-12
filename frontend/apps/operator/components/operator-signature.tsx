@@ -1,5 +1,6 @@
 'use client';
 
+import { signatureDataUrlToFile } from "@erp/utils/signature-file";
 import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
@@ -71,7 +72,7 @@ export function OperatorSignatureSettings() {
     try {
       await signaturesApi.saveMySignature(
         { title: title.trim(), profession: profession.trim() || undefined, professionalCouncil: professionalCouncil.trim() || undefined, registrationNumber: registrationNumber.trim() || undefined, department: department.trim() || undefined },
-        drawing ? await dataUrlToFile(drawing) : undefined,
+        drawing ? signatureDataUrlToFile(drawing) : undefined,
       );
       setDrawing(null);
       setFeedback('Assinatura técnica salva. Ela será pré-selecionada nas suas próximas OS e Visitas Técnicas.');
@@ -108,9 +109,4 @@ function SignatureIdentity({ signature }: { signature: Signature }) {
 
 function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (value: string) => void; placeholder: string }) {
   return <label className="space-y-1"><span className="text-sm font-medium">{label}</span><input className={inputClass} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} /></label>;
-}
-
-async function dataUrlToFile(dataUrl: string): Promise<File> {
-  const blob = await fetch(dataUrl).then((response) => response.blob());
-  return new File([blob], 'assinatura.png', { type: 'image/png' });
 }

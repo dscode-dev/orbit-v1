@@ -36,6 +36,7 @@ export function UserDetailDrawer({
   const [tab, setTab] = useState<Tab>("Dados");
   const [avatar, setAvatar] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<null | "disable" | "delete">(null);
   const [tempPassword, setTempPassword] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -44,7 +45,7 @@ export function UserDetailDrawer({
   const isSelf = session?.user.id === user?.id;
 
   useEffect(() => {
-    if (open) { setTab("Dados"); setTempPassword(null); setCopied(false); }
+    if (open) { setTab("Dados"); setTempPassword(null); setCopied(false); setError(null); }
   }, [open, user]);
 
   useEffect(() => {
@@ -61,11 +62,12 @@ export function UserDetailDrawer({
 
   async function runAction(fn: () => Promise<unknown>) {
     setBusy(true);
+    setError(null);
     try {
       await fn();
       onChanged();
-    } catch {
-      // Surface nothing destructive silently; errors are handled inline below by callers.
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível atualizar o usuário.");
     } finally {
       setBusy(false);
     }
@@ -73,12 +75,13 @@ export function UserDetailDrawer({
 
   async function handleReset() {
     setBusy(true);
+    setError(null);
     try {
       const res = await usersApi.resetPassword(user!.id);
       setTempPassword(res.temporaryPassword);
       onChanged();
     } catch (err) {
-      setTempPassword(err instanceof ApiClientError ? `Erro: ${err.message}` : "Erro ao redefinir.");
+      setError(err instanceof ApiClientError ? err.message : "Não foi possível redefinir a senha.");
     } finally {
       setBusy(false);
     }
@@ -117,6 +120,7 @@ export function UserDetailDrawer({
             </div>
           )}
 
+          {error && <p role="alert" className="text-sm text-[var(--color-danger)]">{error}</p>}
           {tempPassword && (
             <div className="rounded-[var(--radius-md)] border border-[var(--color-warning)]/40 bg-[var(--color-warning)]/10 p-3">
               <div className="flex items-center gap-2 text-caption uppercase tracking-wider mb-2"><KeyRound className="h-3.5 w-3.5" /> Senha temporária (única vez)</div>
@@ -178,10 +182,10 @@ export function UserDetailDrawer({
       <ConfirmDialog
         open={confirm === "delete"}
         title="Excluir usuário"
-        description={<>Exclusão lógica de <strong>{user.name}</strong>. O registro permanece inativo no histórico.</>}
+        description={<>O acesso de <strong>{user.name}</strong> será revogado e a conta será removida da listagem. O histórico dos atendimentos será preservado.</>}
         confirmLabel="Excluir"
         danger
-        onConfirm={() => usersApi.deleteUser(user.id).then(onChanged)}
+        onConfirm={async () => { await usersApi.deleteUser(user.id); onChanged(); onClose(); }}
         onClose={() => setConfirm(null)}
       />
     </>

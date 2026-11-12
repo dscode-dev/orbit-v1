@@ -185,10 +185,12 @@ export class SignaturesService {
             professionalCouncil: dto.professionalCouncil ? this.clean(dto.professionalCouncil) : null,
             registrationNumber: dto.registrationNumber ? this.clean(dto.registrationNumber) : null,
             department: dto.department ? this.clean(dto.department) : null,
-            imageStorageKey: staged!.storageKey,
-            mimeType: staged!.mimeType,
-            originalFileName: staged!.originalFileName,
-            fileSize: staged!.fileSize,
+            // The create payload is evaluated even when upsert updates an existing
+            // signature. Metadata-only saves must reuse its image.
+            imageStorageKey: staged?.storageKey ?? user.institutionalSignature?.imageStorageKey,
+            mimeType: staged?.mimeType ?? user.institutionalSignature?.mimeType,
+            originalFileName: staged?.originalFileName ?? user.institutionalSignature?.originalFileName,
+            fileSize: staged?.fileSize ?? user.institutionalSignature?.fileSize,
             active: true,
           },
           update: {
