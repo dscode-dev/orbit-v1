@@ -147,7 +147,7 @@ const OPERATION_INCLUDE = {
   },
   assignments: {
     orderBy: [{ isPrimary: 'desc' as const }, { assignedAt: 'asc' as const }],
-    select: { id: true, assignedBy: true, assignedTo: true, isPrimary: true, status: true, assignee: { select: { id: true, name: true, role: true } } },
+    select: { id: true, assignedBy: true, assignedTo: true, isPrimary: true, status: true, assignee: { select: { id: true, name: true, role: true, isActive: true, disabledAt: true, deletedAt: true } } },
   },
   cancellations: {
     orderBy: { requestedAt: 'desc' as const },

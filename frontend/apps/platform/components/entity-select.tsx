@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useRef } from "react";
-import { MultiSelect } from "@erp/ui/multi-select";
+export { AuxiliaryOperatorSelect } from "@erp/ui/assignments/auxiliary-operator-select";
 import { EntityCombobox, type ComboboxOption, type ComboboxQuery } from "@erp/ui/entity-combobox";
 import {
   customersApi,
@@ -142,47 +142,6 @@ export function UserSelect({ value, onChange }: { value: string; onChange: (id: 
 
 function userOption(user: TeamUser): ComboboxOption {
   return { value: user.id, label: user.name, description: user.role };
-}
-
-/**
- * Auxiliar técnico: recebe/visualiza a mesma demanda do executor primário.
- * Sem permissão de Relatórios (canReports) ficam somente em visualização; com a
- * permissão, podem colaborar. Nunca inclui o próprio executor primário.
- */
-export function AuxiliaryOperatorSelect({
-  value,
-  onChange,
-  excludeId,
-}: {
-  value: string[];
-  onChange: (ids: string[]) => void;
-  excludeId?: string;
-}) {
-  const users = useQuery((signal) => usersApi.listUsers({ limit: 100, signal }), []);
-  const operators = useMemo(
-    () => (users.data?.items ?? []).filter((user) => user.isActive && user.role !== "VIEWER" && user.id !== excludeId),
-    [users.data, excludeId],
-  );
-  return (
-    <div className="space-y-1.5">
-      <MultiSelect
-        label="Auxiliar Técnico (opcional)"
-        value={value.filter((id) => id !== excludeId)}
-        onChange={onChange}
-        options={operators.map((user) => ({
-          value: user.id,
-          label: user.name,
-          description: `${user.role}${user.permission?.canReports ? "" : " · somente visualização"}`,
-        }))}
-        placeholder="Selecionar auxiliar técnico"
-        emptyMessage="Nenhum outro técnico disponível."
-      />
-      <span className="text-caption">
-        Recebem e visualizam a mesma demanda. Sem permissão de Relatórios, ficam somente em
-        visualização (não iniciam nem editam o atendimento).
-      </span>
-    </div>
-  );
 }
 
 export function ServiceTypeSelect({ value, onChange, label = "Tipo de serviço", allowEmpty = false }: { value: OperationType; onChange: (value: OperationType) => void; label?: string; allowEmpty?: boolean }) {

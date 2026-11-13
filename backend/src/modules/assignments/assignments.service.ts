@@ -644,19 +644,28 @@ export class AssignmentsService {
     actorId: string,
     context?: Partial<AssignmentAuditContext>,
   ): Promise<void> {
-    const desiredIds = [...new Set(requestedIds)].filter((id) => id !== primaryOperatorId);
-    for (const id of desiredIds) await this.operationalUserOrThrowTx(tx, id);
-
     const current = await tx.assignment.findMany({
       where: { operationId, isPrimary: false },
       orderBy: { assignedAt: 'asc' },
+      include: { assignee: { select: { isActive: true, disabledAt: true, deletedAt: true, role: true } } },
     });
+    const desiredIds: string[] = [];
+    for (const id of new Set(requestedIds)) {
+      if (id === primaryOperatorId) continue;
+      const previous = current.find((item) => item.assignedTo === id);
+      // Old forms can still contain an auxiliary removed from the user directory.
+      // Drop only stale crew members; invalid new selections remain an error.
+      if (previous && (!previous.assignee.isActive || previous.assignee.disabledAt
+        || previous.assignee.deletedAt || previous.assignee.role === Role.VIEWER)) continue;
+      await this.operationalUserOrThrowTx(tx, id);
+      desiredIds.push(id);
+    }
     const desired = new Set(desiredIds);
     const now = new Date();
 
     for (const assignment of current) {
       if (desired.has(assignment.assignedTo)) continue;
-      if (assignment.status === AssignmentStatus.CANCELED) continue;
+      if (([AssignmentStatus.CANCELED, AssignmentStatus.COMPLETED, AssignmentStatus.REJECTED] as AssignmentStatus[]).includes(assignment.status)) continue;
       await tx.assignment.update({
         where: { id: assignment.id },
         data: { status: AssignmentStatus.CANCELED, canceledAt: now },
@@ -976,9 +985,9 @@ export class AssignmentsService {
   private async operationalUserOrThrowTx(tx: Prisma.TransactionClient, id: string): Promise<void> {
     const user = await tx.user.findUnique({
       where: { id },
-      select: { id: true, role: true, isActive: true, disabledAt: true },
+      select: { id: true, role: true, isActive: true, disabledAt: true, deletedAt: true },
     });
-    if (!user || !user.isActive || user.disabledAt || user.role === Role.VIEWER) {
+    if (!user || !user.isActive || user.disabledAt || user.deletedAt || user.role === Role.VIEWER) {
       throw new ApplicationException(
         ERROR_CODES.OPERATION_OPERATOR_INVALID,
         'O operador atribuído precisa existir, estar ativo e ter perfil operacional',
