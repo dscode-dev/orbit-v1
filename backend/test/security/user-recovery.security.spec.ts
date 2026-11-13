@@ -103,6 +103,41 @@ describe('User recovery: auxiliary promotion, onboarding and deletion', () => {
     expect((await authPatch(owner, `/api/v1/assignments/${responsible.id}/reassign`).send({ assignedTo: primary.user.id })).status).toBe(409);
   });
 
+  it.each(['deleted', 'disabled'] as const)('drops an existing %s auxiliary from stale forms and keeps the available replacement', async unavailable => {
+    const { operation, responsible, member } = await crew();
+    const replacement = await createSecurityActor(Role.OPERATOR, 'available-aux');
+    if (unavailable === 'deleted') await authDelete(owner, `/api/v1/users/${auxiliary.user.id}`).expect(200);
+    else await authPatch(owner, `/api/v1/users/${auxiliary.user.id}/disable`).expect(200);
+    const response = await authPatch(owner, `/api/v1/assignments/${responsible.id}/reassign`).send({
+      assignedTo: primary.user.id, auxiliaryOperatorIds: [auxiliary.user.id, replacement.user.id],
+    });
+    expect(response.status).toBe(200);
+    expect(await prisma.assignment.findUniqueOrThrow({ where: { id: member.id } })).toMatchObject({ assignedTo: auxiliary.user.id, status: 'CANCELED' });
+    expect(await prisma.assignmentHistory.count({ where: { assignmentId: member.id } })).toBe(2);
+    expect(await prisma.assignment.findUniqueOrThrow({ where: { operationId_assignedTo: { operationId: operation.id, assignedTo: replacement.user.id } } })).toMatchObject({ isPrimary: false, status: 'ASSIGNED', operatorVisible: true });
+    expect(await prisma.assignment.count({ where: { operationId: operation.id, isPrimary: true } })).toBe(1);
+    const detail = dataOf<{ auxiliaryAssignments: Array<{ assignedTo: string; assignee: { isActive: boolean; deletedAt: string | null } }> }>(await authGet(owner, `/api/v1/operations/${operation.id}`).expect(200));
+    expect(detail.auxiliaryAssignments.find(item => item.assignedTo === auxiliary.user.id)?.assignee.isActive).toBe(false);
+    expect(detail.auxiliaryAssignments.find(item => item.assignedTo === replacement.user.id)?.assignee.isActive).toBe(true);
+    if (unavailable === 'deleted') expect(detail.auxiliaryAssignments.find(item => item.assignedTo === auxiliary.user.id)?.assignee.deletedAt).toEqual(expect.any(String));
+  });
+
+  it('continues rejecting unknown auxiliary IDs instead of silently accepting an invalid new selection', async () => {
+    const { responsible } = await crew();
+    const response = await authPatch(owner, `/api/v1/assignments/${responsible.id}/reassign`).send({ assignedTo: owner.user.id, auxiliaryOperatorIds: [randomUUID()] });
+    expect(response.status).toBe(400);
+    expect(errorCode(response)).toBe('OPERATION_OPERATOR_INVALID');
+    expect(await prisma.assignment.findUniqueOrThrow({ where: { id: responsible.id } })).toMatchObject({ assignedTo: primary.user.id });
+  });
+
+  it.each([AssignmentStatus.COMPLETED, AssignmentStatus.CANCELED, AssignmentStatus.REJECTED])('preserves the %s auxiliary history when its user is deleted', async status => {
+    const { responsible, member } = await crew(status);
+    await authDelete(owner, `/api/v1/users/${auxiliary.user.id}`).expect(200);
+    await authPatch(owner, `/api/v1/assignments/${responsible.id}/reassign`).send({ assignedTo: primary.user.id, auxiliaryOperatorIds: [auxiliary.user.id] }).expect(200);
+    expect((await prisma.assignment.findUniqueOrThrow({ where: { id: member.id } })).status).toBe(status);
+    expect(await prisma.assignmentHistory.count({ where: { assignmentId: member.id } })).toBe(1);
+  });
+
   it('deletion hides the account from lists, revokes access, preserves operation history and cannot be enabled again', async () => {
     const { operation, member } = await crew();
     await authDelete(owner, `/api/v1/users/${auxiliary.user.id}`).expect(200);

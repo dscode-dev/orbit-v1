@@ -1,5 +1,7 @@
 "use client";
 
+import { activeAuxiliaryOperatorIds } from "@erp/utils/assignment-selection";
+import { AuxiliaryOperatorSelect } from "@erp/ui/assignments/auxiliary-operator-select";
 import { operationServiceAddressLabel } from "@erp/ui/operations/operation-shared";
 
 /**
@@ -26,7 +28,7 @@ import { MultiSelect } from "@erp/ui/multi-select";
 import { PhotoInput, type CapturedPhoto } from "@erp/ui/photo-input";
 import { SignaturePad } from "@erp/ui/documents/signature-pad";
 import {
-  assignmentsApi, documentsApi, equipmentsApi, inventoryApi, operationApi, technicalCatalogsApi, usersApi, useQuery,
+  assignmentsApi, documentsApi, equipmentsApi, inventoryApi, operationApi, technicalCatalogsApi, useQuery,
   type DocumentKind, type EquipmentSummary, type InventoryItem, type OperationChecklistItem,
   type OperationDetail, type OperationMaintenanceChecklistItem, type OperationMaintenanceType,
   type OperationPart, type Product,
@@ -150,9 +152,7 @@ function ExecucaoSteps({
     ?? null;
   const [technicalSignatureId, setTechnicalSignatureId] = useState<string | null>(configuredTechnicalSignatureId);
   const [auxiliaryOperatorIds, setAuxiliaryOperatorIds] = useState<string[]>(
-    () => (operation.auxiliaryAssignments ?? [])
-      .filter((item) => item.status !== "CANCELED" && item.status !== "REJECTED")
-      .map((item) => item.assignedTo),
+    () => activeAuxiliaryOperatorIds(operation.auxiliaryAssignments ?? []),
   );
   const [equipmentProfiles, setEquipmentProfiles] = useState<Record<string, EquipmentProfileDraft>>(
     () => {
@@ -190,10 +190,6 @@ function ExecucaoSteps({
   const equipmentTypes = useQuery(
     (signal) => initiallyUnassigned ? technicalCatalogsApi.listEquipmentTypes({ signal }) : Promise.resolve([]),
     [initiallyUnassigned],
-  );
-  const auxiliaryUsers = useQuery(
-    (signal) => surface === "platform" ? usersApi.listUsers({ page: 1, limit: 100, signal }) : Promise.resolve(null),
-    [surface],
   );
   const materials = useQuery((signal) => inventoryApi.listOperationMaterials(operation.id, { signal }), [operation.id]);
   const rvtChecklistCatalog = useQuery(
@@ -588,20 +584,7 @@ function ExecucaoSteps({
             )}
             {type === "TECHNICAL_REPORT" ? <>
               {surface === "platform" && (
-                <MultiSelect
-                  label="Auxiliar Técnico (opcional)"
-                  value={auxiliaryOperatorIds}
-                  onChange={setAuxiliaryOperatorIds}
-                  options={(auxiliaryUsers.data?.items ?? [])
-                    .filter((user) => user.isActive && user.id !== operation.operator?.id)
-                    .map((user) => ({
-                      value: user.id,
-                      label: user.name,
-                      description: `${user.role} · somente acompanhamento`,
-                    }))}
-                  placeholder="Selecionar auxiliares"
-                  emptyMessage="Nenhum outro usuário operacional disponível."
-                />
+                <AuxiliaryOperatorSelect value={auxiliaryOperatorIds} onChange={setAuxiliaryOperatorIds} excludeId={operation.operator?.id} />
               )}
               <TextArea label="Observações" value={observations} onChange={setObservations} />
               <TextArea label="Recomendações técnicas (opcional)" value={recommendations} onChange={setRecommendations} />

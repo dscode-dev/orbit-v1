@@ -27,6 +27,7 @@ import { assignmentsApi, budgetsApi, documentsApi, inventoryApi, operationApi, s
 import type { DocumentConfiguration, SignatureMode } from "@erp/types";
 import { formatCurrencyBRL, formatDateTime, formatNumber } from "@erp/utils";
 import { ASSIGNMENT_STATUS_LABEL, assignmentTime } from "@erp/ui/assignments/assignment-shared";
+import { activeAuxiliaryOperatorIds } from "@erp/utils/assignment-selection";
 import { AuxiliaryOperatorSelect, UserSelect } from "./entity-select";
 import { BudgetWizardDrawer } from "./budget-wizard-drawer";
 import { OperationCreationDrawer } from "./operation-creation-drawer";
@@ -268,9 +269,7 @@ function operationInitialValues(
       capacity: item.capacitySnapshot ?? item.equipment?.capacity ?? null,
     })),
     operatorId: operation.operator?.id ?? null,
-    auxiliaryOperatorIds: (operation.auxiliaryAssignments ?? [])
-      .filter((item) => item.status !== "CANCELED" && item.status !== "REJECTED")
-      .map((item) => item.assignedTo),
+    auxiliaryOperatorIds: activeAuxiliaryOperatorIds(operation.auxiliaryAssignments ?? []),
     type: operation.type,
     serviceTypes: operation.serviceTypes,
     documentType: operation.requestedDocumentType,
@@ -759,9 +758,7 @@ function AssignmentSection({
   useEffect(() => {
     setOperatorId(assignment?.assignedTo ?? "");
     setAuxiliaryOperatorIds(
-      auxiliaryAssignments
-        .filter((item) => item.status !== "CANCELED" && item.status !== "REJECTED")
-        .map((item) => item.assignedTo),
+      activeAuxiliaryOperatorIds(auxiliaryAssignments),
     );
     setError(null);
   }, [assignment?.assignedTo, auxiliaryAssignments]);

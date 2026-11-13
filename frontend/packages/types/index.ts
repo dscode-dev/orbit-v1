@@ -1270,7 +1270,7 @@ export type OperationDetail = Omit<OperationSummary, 'equipment'> & {
     assignedTo: string;
     isPrimary: false;
     status: AssignmentStatus;
-    assignee: Pick<TeamUser, 'id' | 'name' | 'role'>;
+    assignee: Pick<TeamUser, 'id' | 'name' | 'role'> & { isActive?: boolean; disabledAt?: string | null; deletedAt?: string | null };
   }>;
   address: CustomerAddress | null;
   secondaryAddress?: CustomerAddress | null;

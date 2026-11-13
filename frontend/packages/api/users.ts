@@ -95,6 +95,21 @@ export function listUsers(params?: {
   return api.get<Paginated<TeamUser>>("/users", { query, signal });
 }
 
+/** Load every directory page before reconciling selected auxiliary IDs. */
+export async function listAllOperationalUsers(opts: { signal: AbortSignal }): Promise<TeamUser[]> {
+  const items: TeamUser[] = [];
+  let page = 1;
+  let totalPages = 1;
+  do {
+    if (opts.signal.aborted) throw new DOMException("Consulta cancelada", "AbortError");
+    const result = await listUsers({ page, limit: 100, signal: opts.signal });
+    items.push(...result.items.filter((user) => user.isActive && !user.disabledAt && user.role !== "VIEWER"));
+    totalPages = result.pagination.totalPages;
+    page += 1;
+  } while (page <= totalPages);
+  return items;
+}
+
 export function getUser(id: string, opts?: { signal?: AbortSignal }): Promise<TeamUser> {
   return api.get<TeamUser>(`/users/${id}`, opts);
 }
