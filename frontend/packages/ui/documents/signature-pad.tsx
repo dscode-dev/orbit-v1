@@ -18,10 +18,13 @@ type Point = { x: number; y: number };
 export function SignaturePad({
   onChange,
   onConfirm,
+  initialValue,
 }: {
+  initialValue?: string | null;
   onChange?: (dataUrl: string | null) => void;
   onConfirm?: (dataUrl: string | null) => void;
 }) {
+  const initialImage = useRef(initialValue);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const strokes = useRef<Point[][]>([]);
   const current = useRef<Point[] | null>(null);
@@ -50,7 +53,17 @@ export function SignaturePad({
 
   useEffect(() => {
     setup();
-  }, [setup]);
+    if (!initialImage.current) return;
+    const image = new window.Image();
+    image.onload = () => {
+      const canvas = canvasRef.current; const ctx = ctxOf();
+      if (!canvas || !ctx) return;
+      ctx.drawImage(image, 0, 0, canvas.offsetWidth, canvas.offsetHeight);
+      setHasInk(true); setConfirmed(true);
+    };
+    image.src = initialImage.current;
+    return () => { image.onload = null; };
+  }, [setup, ctxOf]);
 
   function redraw() {
     const canvas = canvasRef.current;
@@ -107,6 +120,7 @@ export function SignaturePad({
     emit();
   }
   function clear() {
+    initialImage.current = null;
     strokes.current = [];
     setConfirmed(false);
     redraw();

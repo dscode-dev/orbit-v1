@@ -1,5 +1,6 @@
 "use client";
 
+import { useCapturedPhotos } from "@erp/ui/use-captured-photos";
 import { useEffect, useMemo, useState } from "react";
 import { Camera, Check, ChevronLeft, ChevronRight, FileText, Wrench } from "lucide-react";
 import {
@@ -14,7 +15,7 @@ import {
   type PmocPlan,
 } from "@erp/api";
 import { Drawer } from "@erp/ui/drawer";
-import { PhotoInput, type CapturedPhoto } from "@erp/ui/photo-input";
+import { PhotoInput } from "@erp/ui/photo-input";
 
 type CoveredEquipment = Pick<
   EquipmentSummary,
@@ -51,7 +52,8 @@ export function PmocEquipmentExecutionWizard({
   const [step, setStep] = useState(0);
   const [scheduledFor, setScheduledFor] = useState("");
   const [auxiliaryIds, setAuxiliaryIds] = useState<string[]>([]);
-  const [photos, setPhotos] = useState<CapturedPhoto[]>([]);
+  const [photos, setPhotos] = useCapturedPhotos();
+  const [photoProcessing, setPhotoProcessing] = useState(false);
   const [reportedIssue, setReportedIssue] = useState("");
   const [serviceDescription, setServiceDescription] = useState("");
   const [observations, setObservations] = useState("");
@@ -72,7 +74,7 @@ export function PmocEquipmentExecutionWizard({
     setGeneratedRequest(null);
     setGeneratedDocument(null);
     setError(null);
-  }, [open, prefill, request?.id]);
+  }, [open, prefill, request?.id, setPhotos]);
 
   const technician = plan.defaultTechnician;
   const availableAuxiliaries =
@@ -172,7 +174,7 @@ export function PmocEquipmentExecutionWizard({
   return (
     <Drawer
       open={open}
-      onClose={busy ? () => undefined : onClose}
+      onClose={busy || photoProcessing ? () => undefined : onClose}
       eyebrow={`PMOC-${String(plan.number).padStart(6, "0")}`}
       title={
         request
@@ -182,15 +184,15 @@ export function PmocEquipmentExecutionWizard({
       width="max-w-[980px]"
       footer={
         <>
-          <button className={secondary} disabled={busy} onClick={step === 0 ? onClose : () => setStep((value) => value - 1)}>
+          <button className={secondary} disabled={busy || photoProcessing} onClick={step === 0 ? onClose : () => setStep((value) => value - 1)}>
             <ChevronLeft className="h-4 w-4" /> {step === 0 ? "Cancelar" : "Voltar"}
           </button>
           {step < steps.length - 1 ? (
-            <button className={primary} disabled={busy} onClick={() => setStep((value) => value + 1)}>
+            <button className={primary} disabled={busy || photoProcessing} onClick={() => setStep((value) => value + 1)}>
               Continuar <ChevronRight className="h-4 w-4" />
             </button>
           ) : (
-            <button className={primary} disabled={busy || !scheduledFor} onClick={() => void submit()}>
+            <button className={primary} disabled={busy || photoProcessing || !scheduledFor} onClick={() => void submit()}>
               <Check className="h-4 w-4" />
               {busy
                 ? "Gerando documento..."
@@ -288,7 +290,7 @@ export function PmocEquipmentExecutionWizard({
         {step === 2 && (
           <section className="space-y-4">
             <SectionTitle icon={Camera} title="Evidências" description="Fotografe agora ou selecione imagens já existentes no dispositivo." />
-            <PhotoInput photos={photos} onChange={setPhotos} max={MAX_PMOC_PHOTOS} />
+            <PhotoInput photos={photos} onChange={setPhotos} onProcessingChange={setPhotoProcessing} max={MAX_PMOC_PHOTOS} />
             <p className="text-sm text-[var(--color-muted-foreground)]">As evidências são opcionais e pertencem somente a esta execução e a este equipamento. A ordem escolhida será preservada no Preview e no PDF.</p>
           </section>
         )}

@@ -33,6 +33,8 @@ function localFieldEquipmentId(): string {
 
 export function FieldEquipmentCollection({
   drafts,
+  draftValue,
+  onDraftChange,
   equipmentTypes,
   equipmentTypesLoading,
   onAdd,
@@ -43,6 +45,8 @@ export function FieldEquipmentCollection({
   description = "Registre os equipamentos encontrados no local. Os novos itens serão vinculados ao cliente e ao relatório.",
 }: {
   drafts: NewFieldEquipmentDraft[];
+  draftValue?: NewFieldEquipmentDraft;
+  onDraftChange?: React.Dispatch<React.SetStateAction<NewFieldEquipmentDraft>>;
   maxItems?: number;
   showForm?: boolean;
   equipmentTypes: TechnicalCatalog[];
@@ -52,7 +56,9 @@ export function FieldEquipmentCollection({
   title?: string;
   description?: string;
 }) {
-  const [draft, setDraft] = useState<NewFieldEquipmentDraft>(() => createEmptyFieldEquipmentDraft());
+  const [localDraft, setLocalDraft] = useState<NewFieldEquipmentDraft>(() => createEmptyFieldEquipmentDraft());
+  const draft = draftValue ?? localDraft;
+  const setDraft = onDraftChange ?? setLocalDraft;
   const complete = Boolean(
     draft.equipmentTypeCatalogId &&
     draft.manufacturer?.trim() &&

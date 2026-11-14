@@ -9,7 +9,11 @@
  * execução. OS e Visita Técnica são concluídas e emitidas no próprio fluxo;
  * documentos especiais atribuídos preservam a revisão da gestão.
  */
+import { useCapturedPhotos } from "@erp/ui/use-captured-photos";
 import { useEffect, useMemo, useState } from "react";
+import { useAuth } from "@erp/ui/auth/auth-provider";
+import { useFieldDraft } from "@operator/lib/use-field-draft";
+import { SaveFieldDraft } from "@operator/components/field-draft-controls";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import {
@@ -35,6 +39,7 @@ import { OperatorSignatureChoice } from "@operator/components/operator-signature
 import { OperatorDocumentSuccessView } from "@operator/features/atendimento/atendimento-wizard";
 import {
   FieldEquipmentCollection,
+  createEmptyFieldEquipmentDraft,
   type NewFieldEquipmentDraft,
 } from "@operator/components/field-equipment-collection";
 
@@ -64,6 +69,7 @@ export function ExecucaoWizard({
   onCompleted?: () => void;
 }) {
   const router = useRouter();
+  const { session } = useAuth();
   const assignment = useQuery((signal) => assignmentsApi.getAssignment(assignmentId, { signal }), [assignmentId]);
   const operation = useQuery(
     (signal) => assignment.data ? operationApi.getOperation(assignment.data.operationId, { signal }) : Promise.resolve(null),
@@ -91,7 +97,9 @@ export function ExecucaoWizard({
 
   return (
     <ExecucaoSteps
+      key={`${session?.organization.id}:${session?.user.id}:${assignmentId}:${assignment.data.assignedAt}`}
       assignmentId={assignmentId}
+      draftRevision={assignment.data.assignedAt}
       operation={operation.data}
       surface={surface}
       onClose={onClose}
@@ -102,12 +110,14 @@ export function ExecucaoWizard({
 
 function ExecucaoSteps({
   assignmentId,
+  draftRevision,
   operation,
   surface,
   onClose,
   onCompleted,
 }: {
   assignmentId: string;
+  draftRevision: string;
   operation: OperationDetail;
   surface: "operator" | "platform";
   onClose?: () => void;
@@ -133,13 +143,15 @@ function ExecucaoSteps({
   );
   const initiallyUnassigned = operation.inspectedEquipments.length === 0 && !operation.equipment;
   const [fieldInspections, setFieldInspections] = useState<OperationDetail["inspectedEquipments"]>([]);
+  const [fieldEquipmentInput, setFieldEquipmentInput] = useState(createEmptyFieldEquipmentDraft);
+  const [persistedPhotoCount, setPersistedPhotoCount] = useState(operation.photos.length);
   const [newFieldEquipments, setNewFieldEquipments] = useState<NewFieldEquipmentDraft[]>([]);
   const [issue, setIssue] = useState(operation.reportedIssue ?? "");
   const [diagnosis, setDiagnosis] = useState(operation.technicalDiagnosis ?? "");
   const [service, setService] = useState(operation.serviceDescription ?? "");
   const [recommendations, setRecommendations] = useState(operation.technicalRecommendations ?? "");
   const [observations, setObservations] = useState(operation.observations ?? "");
-  const [photos, setPhotos] = useState<CapturedPhoto[]>([]);
+  const [photos, setPhotos] = useCapturedPhotos();
   const [signature, setSignature] = useState<string | null>(null);
   const [signerName, setSignerName] = useState(operation.customerSignerName ?? "");
   const [signerRole, setSignerRole] = useState(operation.customerSignerRole ?? "");
@@ -180,6 +192,28 @@ function ExecucaoSteps({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [completedDocument, setCompletedDocument] = useState<{ id: string; number: string } | null>(null);
+
+  const [photoProcessing, setPhotoProcessing] = useState(false);
+  function captureDraft() {
+    return { step, checklist, maintenanceType, maintenanceChecklist, equipmentIds, fieldInspections, newFieldEquipments,
+      issue, diagnosis, service, recommendations, observations, photos, signature, signerName, signerRole,
+      technicalSignatureId, auxiliaryOperatorIds, equipmentProfiles, fieldEquipmentInput, persistedPhotoCount };
+  }
+  type Snapshot = ReturnType<typeof captureDraft>;
+  function restoreDraft(value: Snapshot) {
+    setStep(Math.max(0, Math.min(STEPS.length - 1, value.step))); setChecklist(value.checklist); setMaintenanceType(value.maintenanceType);
+    setMaintenanceChecklist(value.maintenanceChecklist); setEquipmentIds(value.equipmentIds); setFieldInspections(value.fieldInspections);
+    setNewFieldEquipments(value.newFieldEquipments); setIssue(value.issue); setDiagnosis(value.diagnosis); setService(value.service);
+    setRecommendations(value.recommendations); setObservations(value.observations); setPhotos(value.photos); setSignature(value.signature);
+    setSignerName(value.signerName); setSignerRole(value.signerRole); setTechnicalSignatureId(value.technicalSignatureId);
+    setAuxiliaryOperatorIds(value.auxiliaryOperatorIds); setEquipmentProfiles(value.equipmentProfiles);
+    setFieldEquipmentInput(value.fieldEquipmentInput); setPersistedPhotoCount(Math.max(operation.photos.length, value.persistedPhotoCount));
+  }
+  const draft = useFieldDraft<Snapshot>({ kind: 'assigned', id: `assignment:${assignmentId}`, revision: draftRevision,
+    enabled: surface === 'operator', documentType: type, customerName: operation.customer?.name ?? '', onRestore: restoreDraft });
+  async function saveAndExit() {
+    if (!photoProcessing && !submitting && await draft.save(captureDraft(), step)) router.push(`/operator/services/${assignmentId}`);
+  }
 
   const equipments = useQuery(
     (signal) => equipmentsApi.listEquipments({ customerId: operation.customer?.id, page: 1, limit: 100, signal }),
@@ -320,6 +354,7 @@ function ExecucaoSteps({
     (step !== 4 || ((!technicalSignatureRequired || Boolean(technicalSignatureId)) && (!signatureRequired || (Boolean(signature) && signerName.trim().length > 0))));
 
   function back() {
+    if (submitting || photoProcessing || draft.busy) return;
     if (step === 0) {
       if (surface === "platform") onClose?.();
       else router.push(`/operator/services/${assignmentId}`);
@@ -357,6 +392,9 @@ function ExecucaoSteps({
             },
           ])));
           setNewFieldEquipments([]);
+          await draft.checkpoint({ fieldInspections: updated.inspectedEquipments, equipmentIds: updated.inspectedEquipments.map((item) => item.equipmentId), newFieldEquipments: [], equipmentProfiles: Object.fromEntries(updated.inspectedEquipments.map((item) => [item.equipmentId, {
+            manufacturer: item.equipment?.manufacturer ?? item.brandSnapshot ?? '', model: item.equipment?.model ?? item.modelSnapshot ?? '', capacity: item.equipment?.capacity ?? item.capacitySnapshot ?? '',
+          }])) });
           if (updated.inspectedEquipments.some((item) =>
             !item.equipment?.manufacturer?.trim() ||
             !item.equipment?.model?.trim() ||
@@ -381,7 +419,7 @@ function ExecucaoSteps({
       for (const item of fieldInspections) {
         if (item.equipment) equipmentMap.set(item.equipmentId, item.equipment as EquipmentSummary);
       }
-      await operationApi.updateOperation(operation.id, {
+      const updatedOperation = await operationApi.updateOperation(operation.id, {
         ...(surface === "platform" ? { auxiliaryOperatorIds } : {}),
         checklist,
         maintenanceType: type === "TECHNICAL_REPORT" ? maintenanceType : null,
@@ -424,6 +462,10 @@ function ExecucaoSteps({
             }
           : {}),
       });
+      const uploadedIds = photos.map((photo) => photo.id);
+      setPhotos([]);
+      setPersistedPhotoCount(updatedOperation.photos.length);
+      await draft.checkpoint({ persistedPhotoCount: updatedOperation.photos.length }, uploadedIds);
       let handoff = await documentsApi.saveHandoffDraft(operation.id, type);
       if (technicalSignatureRequired && !configuredTechnicalSignatureId) {
         if (!technicalSignatureId) throw new Error("Selecione sua assinatura técnica para esta atividade.");
@@ -453,6 +495,7 @@ function ExecucaoSteps({
         });
       }
       photos.forEach((photo) => URL.revokeObjectURL(photo.url));
+      await draft.clear().catch(() => undefined);
       setDone(true);
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : "Não foi possível concluir o atendimento.");
@@ -461,6 +504,7 @@ function ExecucaoSteps({
     }
   }
 
+  if (draft.loading) return <div className="p-6" role="status">Recuperando rascunho do atendimento…</div>;
   if (done) {
     if (surface === "platform") {
       return (
@@ -526,9 +570,10 @@ function ExecucaoSteps({
         current={step}
         total={STEPS.length}
         onBack={back}
-        onClose={() => surface === "platform" ? onClose?.() : router.push(`/operator/services/${assignmentId}`)}
+        onClose={() => { if (!submitting && !photoProcessing && !draft.busy) { if (surface === "platform") onClose?.(); else router.push(`/operator/services/${assignmentId}`); } }}
       />
 
+      {surface === 'operator' && <SaveFieldDraft onSave={() => { void saveAndExit(); }} disabled={submitting || photoProcessing} busy={draft.busy} error={draft.error} restored={draft.restored} />}
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         {step === 0 && (
           type === "TECHNICAL_REPORT" ? (
@@ -557,7 +602,7 @@ function ExecucaoSteps({
             <MultiSelect label="Equipamentos envolvidos" value={equipmentIds} onChange={setEquipmentIds} options={equipmentOptions} placeholder="Selecionar equipamentos" />
             {fieldCollectionPending && (
               <FieldEquipmentCollection
-                drafts={newFieldEquipments}
+                drafts={newFieldEquipments} draftValue={fieldEquipmentInput} onDraftChange={setFieldEquipmentInput}
                 equipmentTypes={equipmentTypes.data ?? []}
                 equipmentTypesLoading={equipmentTypes.loading}
                 onAdd={(draft) => setNewFieldEquipments((current) => [...current, draft])}
@@ -615,7 +660,7 @@ function ExecucaoSteps({
         {step === 2 && (
           <div className="space-y-3">
             <p className="text-sm text-[var(--color-muted-foreground)]">Registre as evidências do serviço. Fotos já enviadas permanecem na operação.</p>
-            <PhotoInput photos={photos} onChange={setPhotos} max={16} existingCount={operation.photos.length} disabled={submitting} />
+            <PhotoInput photos={photos} onChange={setPhotos} max={16} existingCount={persistedPhotoCount} disabled={submitting} onProcessingChange={setPhotoProcessing} />
           </div>
         )}
         {step === 3 && (
@@ -675,7 +720,7 @@ function ExecucaoSteps({
         onBack={back}
         onNext={next}
         nextLabel={isLast ? (directCompletion ? "Concluir e gerar PDF" : "Concluir e enviar para revisão") : "Continuar"}
-        nextDisabled={!canAdvance || (isLast && !canFinish)}
+        nextDisabled={!canAdvance || (isLast && !canFinish) || photoProcessing || draft.busy}
         loading={submitting}
         isLast={isLast}
         nextIcon={isLast ? <Send className="h-4 w-4" /> : undefined}

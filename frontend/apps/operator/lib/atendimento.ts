@@ -75,7 +75,7 @@ export function workOrderNumber(operation: OperationDetail): string | null {
 
 export async function createOperationFromDraft(
   draft: AtendimentoDraft,
-  options: { operationId?: string | null; onCreated?: (operationId: string) => void } = {},
+  options: { operationId?: string | null; onCreated?: (operationId: string) => void | Promise<void> } = {},
 ): Promise<AtendimentoSubmission> {
   if (!draft.customerId) throw new Error('Cliente é obrigatório');
   if (!draft.serviceType) throw new Error('Tipo de atendimento é obrigatório');
@@ -89,7 +89,7 @@ export async function createOperationFromDraft(
   if (!draft.technicalSignatureId) throw new Error('Selecione sua assinatura técnica para esta atividade.');
 
   const photos = await Promise.all(
-    draft.photos.map(async (p) => ({ dataUrl: await fileToDataUrl(p.file), caption: p.name })),
+    draft.photos.map(async (p) => ({ dataUrl: await fileToDataUrl(p.file), caption: p.caption?.trim() || p.name })),
   );
 
   const now = draft.signature ? draft.signedAt ?? new Date().toISOString() : null;
@@ -129,7 +129,7 @@ export async function createOperationFromDraft(
   const created = options.operationId
     ? await operationApi.getOperation(options.operationId)
     : await operationApi.createOperation(payload);
-  options.onCreated?.(created.id);
+  await options.onCreated?.(created.id);
   const assignments = await assignmentsApi.listMyAssignments({ operationId: created.id, limit: 1 });
   const assignment = assignments.items[0];
   if (!assignment) throw new Error('O atendimento foi criado, mas sua execução não foi localizada.');

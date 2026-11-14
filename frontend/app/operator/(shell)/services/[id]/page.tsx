@@ -1,5 +1,6 @@
 "use client";
 
+import { useCapturedPhotos } from "@erp/ui/use-captured-photos";
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState } from "react";
@@ -12,7 +13,7 @@ import { ErrorState } from "@erp/ui/states";
 import { StatusPill } from "@erp/ui/status-pill";
 import { DocumentViewer } from "@erp/ui/documents/document-viewer";
 import { SignaturePad } from "@erp/ui/documents/signature-pad";
-import { PhotoInput, type CapturedPhoto } from "@erp/ui/photo-input";
+import { PhotoInput } from "@erp/ui/photo-input";
 import { CustomerSignaturePreview } from "@erp/ui/documents/customer-signature-preview";
 import { Drawer } from "@erp/ui/drawer";
 import { assignmentsApi, documentsApi, inventoryApi, operationApi, useQuery, type Assignment, type DocumentRenderResult, type InventoryItem, type OperationDetail, type OperationDocument, type OperationPart, type Product } from "@erp/api";
@@ -402,7 +403,8 @@ function AssignmentWorkflow({
 
 function OperationCancellationWizard({ open, operation, onClose, onCompleted }: { open: boolean; operation: OperationDetail; onClose: () => void; onCompleted: (document: DocumentRenderResult) => Promise<void> }) {
   const [step, setStep] = useState<1 | 2>(1);
-  const [photos, setPhotos] = useState<CapturedPhoto[]>([]);
+  const [photos, setPhotos] = useCapturedPhotos();
+  const [photoProcessing, setPhotoProcessing] = useState(false);
   const [reason, setReason] = useState("");
   const [technicalSignatureId, setTechnicalSignatureId] = useState<string | null>(null);
   const [customerSignature, setCustomerSignature] = useState<string | null>(null);
@@ -438,12 +440,12 @@ function OperationCancellationWizard({ open, operation, onClose, onCompleted }: 
     <Drawer open={open} onClose={busy ? () => undefined : onClose} eyebrow={`OP-${String(operation.number).padStart(6, "0")}`} title="Cancelar atendimento" width="max-w-2xl" footer={
       <div className="flex w-full gap-2">
         {step === 2 && <button type="button" onClick={() => setStep(1)} disabled={busy} className="btn-secondary flex-1">Voltar</button>}
-        {step === 1 ? <button type="button" onClick={() => setStep(2)} className="btn-primary flex-1">Continuar</button> : <button type="button" onClick={() => void finish()} disabled={busy} className="btn-primary flex-1">{busy ? "Finalizando…" : "Confirmar cancelamento"}</button>}
+        {step === 1 ? <button type="button" onClick={() => setStep(2)} disabled={photoProcessing} className="btn-primary flex-1">Continuar</button> : <button type="button" onClick={() => void finish()} disabled={busy || photoProcessing} className="btn-primary flex-1">{busy ? "Finalizando…" : "Confirmar cancelamento"}</button>}
       </div>
     }>
       <div className="space-y-5">
         <div className="flex gap-2 text-xs"><StatusPill status={step === 1 ? "info" : "pending"} label="1 · Evidências" /><StatusPill status={step === 2 ? "info" : "pending"} label="2 · Motivo e assinaturas" /></div>
-        {step === 1 ? <section className="space-y-3"><div><h3 className="font-semibold">Evidências do impedimento</h3><p className="text-caption">Adicione até seis fotos. Elas serão incluídas no relatório de cancelamento.</p></div><PhotoInput photos={photos} onChange={setPhotos} max={6} /></section> : <div className="space-y-5">
+        {step === 1 ? <section className="space-y-3"><div><h3 className="font-semibold">Evidências do impedimento</h3><p className="text-caption">Adicione até seis fotos. Elas serão incluídas no relatório de cancelamento.</p></div><PhotoInput photos={photos} onChange={setPhotos} max={6} onProcessingChange={setPhotoProcessing} /></section> : <div className="space-y-5">
           <label className="space-y-1"><span className="text-sm font-medium">Motivo do cancelamento *</span><textarea value={reason} onChange={(event) => setReason(event.target.value)} maxLength={4000} rows={5} placeholder="Ex.: cliente não se encontrava no local…" className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent p-3 text-sm" /></label>
           <section className="space-y-2"><h3 className="text-sm font-semibold">Assinatura do técnico</h3><OperatorSignatureChoice selectedId={technicalSignatureId} onSelect={setTechnicalSignatureId} /></section>
           <section className="space-y-3"><div><h3 className="text-sm font-semibold">Assinatura do cliente (opcional)</h3><p className="text-caption">Pode ficar sem assinatura quando o cliente não estiver no local.</p></div>{customerSignature && <div className="grid gap-2 sm:grid-cols-2"><input value={customerName} onChange={(event) => setCustomerName(event.target.value)} placeholder="Nome do cliente" className="h-11 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 text-sm" /><input value={customerRole} onChange={(event) => setCustomerRole(event.target.value)} placeholder="Função ou vínculo (opcional)" className="h-11 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 text-sm" /></div>}<SignaturePad onChange={(value) => { if (!value) setCustomerSignature(null); }} onConfirm={setCustomerSignature} /></section>
@@ -520,7 +522,7 @@ function triggerFileDownload(file: File) {
 
 function PmocFieldExecution({ operation, signatureMode, technicalSignature, configurationLoading, onSaved }: { operation: OperationDetail; signatureMode: SignatureMode | null; technicalSignature: Signature | null; configurationLoading: boolean; onSaved: () => void }) {
   const [items, setItems] = useState(operation.maintenanceChecklistItems);
-  const [photos, setPhotos] = useState<CapturedPhoto[]>([]);
+  const [photos, setPhotos] = useCapturedPhotos();
   const [signature, setSignature] = useState<string | null>(null);
   const [signerName, setSignerName] = useState(operation.customerSignerName ?? "");
   const [signerRole, setSignerRole] = useState(operation.customerSignerRole ?? "");

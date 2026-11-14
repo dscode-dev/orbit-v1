@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCapturedPhotos } from "@erp/ui/use-captured-photos";
+import { useMemo, useState } from 'react';
 import { CheckCircle2, FileText, Save, Send } from 'lucide-react';
 import {
   documentsApi,
@@ -14,7 +15,7 @@ import {
 } from '@erp/api';
 import { DOCUMENT_KIND_LABEL } from '@erp/types';
 import { MultiSelect } from '@erp/ui/multi-select';
-import { PhotoInput, type CapturedPhoto } from '@erp/ui/photo-input';
+import { PhotoInput } from '@erp/ui/photo-input';
 import { SignaturePad } from '@erp/ui/documents/signature-pad';
 
 const FIELD_TYPES: DocumentKind[] = ['WORK_ORDER', 'TECHNICAL_REPORT', 'TECHNICAL_OPINION', 'BUDGET', 'PMOC'];
@@ -33,7 +34,8 @@ export function FieldReportHandoff({ operation, onSaved }: { operation: Operatio
   const [recommendations, setRecommendations] = useState(operation.technicalRecommendations ?? '');
   const [observations, setObservations] = useState(operation.observations ?? '');
   const [equipmentIds, setEquipmentIds] = useState(operation.inspectedEquipments.map((item) => item.equipmentId));
-  const [photos, setPhotos] = useState<CapturedPhoto[]>([]);
+  const [photos, setPhotos] = useCapturedPhotos();
+  const [photoProcessing, setPhotoProcessing] = useState(false);
   const [signature, setSignature] = useState<string | null>(null);
   const [signerName, setSignerName] = useState(operation.customerSignerName ?? '');
   const [signerRole, setSignerRole] = useState(operation.customerSignerRole ?? '');
@@ -47,7 +49,6 @@ export function FieldReportHandoff({ operation, onSaved }: { operation: Operatio
   );
   const options = useMemo(() => (equipments.data?.items ?? []).map((item) => ({ value: item.id, label: equipmentLabel(item) })), [equipments.data]);
 
-  useEffect(() => () => photos.forEach((photo) => URL.revokeObjectURL(photo.url)), [photos]);
 
   async function persist(submit: boolean) {
     setBusy(submit ? 'submit' : 'save');
@@ -106,12 +107,12 @@ export function FieldReportHandoff({ operation, onSaved }: { operation: Operatio
       <TextArea label={type === 'BUDGET' ? 'Serviços e peças sugeridos' : 'Atividades e verificações realizadas'} value={service} onChange={setService} />
       <TextArea label="Recomendações" value={recommendations} onChange={setRecommendations} />
       <TextArea label="Observações de campo" value={observations} onChange={setObservations} />
-      {!isPmoc && <div className="space-y-2"><div className="text-sm font-medium">Evidências</div><PhotoInput photos={photos} onChange={setPhotos} max={16} existingCount={operation.photos.length} /></div>}
+      {!isPmoc && <div className="space-y-2"><div className="text-sm font-medium">Evidências</div><PhotoInput photos={photos} onChange={setPhotos} max={16} existingCount={operation.photos.length} onProcessingChange={setPhotoProcessing} /></div>}
       {customerSignatureRequired && !isPmoc && <div className="space-y-3"><div className="text-sm font-medium">Assinatura do cliente</div><input className={input} value={signerName} onChange={(event) => setSignerName(event.target.value)} placeholder="Nome do signatário" /><input className={input} value={signerRole} onChange={(event) => setSignerRole(event.target.value)} placeholder="Função ou vínculo (opcional)" /><SignaturePad onChange={setSignature} onConfirm={setSignature} /></div>}
       {handoff && <div className="rounded-[var(--radius-md)] bg-[var(--color-muted)] p-3 text-sm"><strong>{handoff.editorialStatus === 'DRAFT' ? 'Rascunho' : handoff.editorialStatus === 'PENDING' ? 'Em revisão' : handoff.editorialStatus === 'READY' ? 'Pronto' : 'Atualização necessária'}</strong><span className="block text-xs text-[var(--color-muted-foreground)]">{handoff.number} · revisão {handoff.revision}</span></div>}
       {error && <p className="text-sm text-[var(--color-danger)]">{error}</p>}
       {feedback && <p className="flex items-center gap-1.5 text-sm text-[var(--color-success)]"><CheckCircle2 className="h-4 w-4" />{feedback}</p>}
-      <div className="grid grid-cols-2 gap-2"><button className="inline-flex h-11 items-center justify-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] text-sm font-medium disabled:opacity-50" disabled={Boolean(busy)} onClick={() => void persist(false)}><Save className="h-4 w-4" />{busy === 'save' ? 'Salvando…' : 'Salvar rascunho'}</button><button className="inline-flex h-11 items-center justify-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-sm font-medium text-[var(--color-primary-foreground)] disabled:opacity-50" disabled={Boolean(busy) || !canSubmit} onClick={() => void persist(true)}><Send className="h-4 w-4" />{busy === 'submit' ? 'Enviando…' : 'Enviar para revisão'}</button></div>
+      <div className="grid grid-cols-2 gap-2"><button className="inline-flex h-11 items-center justify-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] text-sm font-medium disabled:opacity-50" disabled={Boolean(busy) || photoProcessing} onClick={() => void persist(false)}><Save className="h-4 w-4" />{busy === 'save' ? 'Salvando…' : 'Salvar rascunho'}</button><button className="inline-flex h-11 items-center justify-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-sm font-medium text-[var(--color-primary-foreground)] disabled:opacity-50" disabled={Boolean(busy) || photoProcessing || !canSubmit} onClick={() => void persist(true)}><Send className="h-4 w-4" />{busy === 'submit' ? 'Enviando…' : 'Enviar para revisão'}</button></div>
       <p className="text-[11px] text-[var(--color-muted-foreground)]"><FileText className="mr-1 inline h-3.5 w-3.5" />Após o envio, alterações ficam rastreadas e o PDF continua sob responsabilidade da Platform.</p>
     </div>
   </section>;

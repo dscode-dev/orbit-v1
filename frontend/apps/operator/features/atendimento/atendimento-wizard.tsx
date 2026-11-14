@@ -8,7 +8,8 @@
  * Reads clients/equipments from the real backend and persists the complete
  * Operation → Assignment → Handoff flow through the official APIs.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useCapturedPhotos } from "@erp/ui/use-captured-photos";
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Loader2,
@@ -82,9 +83,12 @@ import { PmocEquipmentExecutionWizard } from '@platform/components/pmoc-equipmen
 import { EQUIPMENT_STATUS_LABEL, EQUIPMENT_STATUS_PILL } from '@platform/equipment-display';
 import { useDebounce } from '@erp/utils';
 import { SERVICE_TYPES, serviceTypeLabel, type ServiceTypeKey } from '../../lib/service-types';
+import { useFieldDraft } from '@operator/lib/use-field-draft';
+import { FieldDraftPicker, SaveFieldDraft } from '@operator/components/field-draft-controls';
+import type { FieldDraftSummary } from '@operator/lib/field-drafts';
 import { createOperationFromDraft, workOrderNumber } from '../../lib/atendimento';
 import { OperatorSignatureChoice } from '../../components/operator-signature';
-import { FieldEquipmentCollection, type NewFieldEquipmentDraft } from '../../components/field-equipment-collection';
+import { FieldEquipmentCollection, createEmptyFieldEquipmentDraft, type NewFieldEquipmentDraft } from '../../components/field-equipment-collection';
 
 const STEPS = [
   'Cliente',
@@ -154,7 +158,12 @@ const RVT_MAINTENANCE_TYPES: Array<{ value: OperationMaintenanceType; label: str
   { value: 'SEMIANNUAL', label: 'Semestral' },
 ];
 
-export function AtendimentoWizard({
+export function AtendimentoWizard(props: { initialCustomerId?: string; initialEquipmentId?: string } = {}) {
+  const { session } = useAuth();
+  return <AtendimentoForm key={`${session?.organization.id}:${session?.user.id}`} {...props} />;
+}
+
+function AtendimentoForm({
   initialCustomerId,
   initialEquipmentId,
 }: {
@@ -186,7 +195,7 @@ export function AtendimentoWizard({
   const [conditions, setConditions] = useState<string[]>([]);
   const [recommendations, setRecommendations] = useState<string[]>([]);
   const [conclusions, setConclusions] = useState<string[]>([]);
-  const [photos, setPhotos] = useState<CapturedPhoto[]>([]);
+  const [photos, setPhotos] = useCapturedPhotos();
   const [signature, setSignature] = useState<string | null>(null);
   const [signerName, setSignerName] = useState('');
   const [signerRole, setSignerRole] = useState('');
@@ -198,6 +207,8 @@ export function AtendimentoWizard({
   // OS avulso: cadastro de cliente novo direto em campo (fica em Revisão).
   const [walkInMode, setWalkInMode] = useState(false);
   const [walk, setWalk] = useState<WalkInForm>(EMPTY_WALK_IN);
+  const [walkEquipmentInput, setWalkEquipmentInput] = useState(createEmptyFieldEquipmentDraft);
+  const [newEquipmentInput, setNewEquipmentInput] = useState(createEmptyFieldEquipmentDraft);
   const [walkInEquipments, setWalkInEquipments] = useState<NewFieldEquipmentDraft[]>([]);
   // Guarda o cadastro já criado para um retry não recriar o cliente (CNPJ/CPF único).
   const [walkInCreated, setWalkInCreated] = useState<WalkInCustomerResult | null>(null);
@@ -208,7 +219,62 @@ export function AtendimentoWizard({
   const [result, setResult] = useState<{ operationId: string; documentId: string; documentNumber: string; documentType: DocumentKind } | null>(
     null,
   );
-  const [startedAt] = useState(() => new Date().toISOString());
+  const [startedAt, setStartedAt] = useState(() => new Date().toISOString());
+
+  const [photoProcessing, setPhotoProcessing] = useState(false);
+  const [draftOptions, setDraftOptions] = useState<FieldDraftSummary[]>([]);
+  const [pendingFlow, setPendingFlow] = useState<{ type: DocumentKind; guest: boolean } | null>(null);
+  const [choosingDrafts, setChoosingDrafts] = useState(false);
+  const [draftListError, setDraftListError] = useState<string | null>(null);
+  function captureDraft() {
+    return { step, documentType, rvtMode, customer, address, equipments, newEquipments, equipmentProfiles,
+      serviceType, checklist, maintenanceType, maintenanceChecklist, reportedIssue, serviceDescription, observations,
+      objectives, conditions, recommendations, conclusions, photos, signature, signerName, signerRole, signedAt,
+      technicalSignatureId, osOrigin, walkInMode, walk, walkInEquipments, walkEquipmentInput, newEquipmentInput, newEquipmentFormOpen, walkInCreated, submissionOperationId, startedAt };
+  }
+  type Snapshot = ReturnType<typeof captureDraft>;
+  const flowGeneration = useRef(0);
+  const blank = useRef<Snapshot | null>(null);
+  if (!blank.current) blank.current = captureDraft();
+  function restoreDraft(value: Snapshot) {
+    flowGeneration.current += 1;
+    setStep(Math.max(0, Math.min(STEPS.length - 1, value.step))); setDocumentType(value.documentType);
+    setRvtMode(value.rvtMode); setCustomer(value.customer); setAddress(value.address); setEquipments(value.equipments);
+    setNewEquipments(value.newEquipments); setEquipmentProfiles(value.equipmentProfiles); setServiceType(value.serviceType);
+    setChecklist(value.checklist); setMaintenanceType(value.maintenanceType); setMaintenanceChecklist(value.maintenanceChecklist);
+    setReportedIssue(value.reportedIssue); setServiceDescription(value.serviceDescription); setObservations(value.observations);
+    setObjectives(value.objectives); setConditions(value.conditions); setRecommendations(value.recommendations); setConclusions(value.conclusions);
+    setPhotos(value.photos); setSignature(value.signature); setSignerName(value.signerName); setSignerRole(value.signerRole); setSignedAt(value.signedAt);
+    setTechnicalSignatureId(value.technicalSignatureId); setOsOrigin(value.osOrigin); setWalkInMode(value.walkInMode);
+    setWalk(value.walk); setWalkInEquipments(value.walkInEquipments); setWalkInCreated(value.walkInCreated);
+    setWalkEquipmentInput(value.walkEquipmentInput); setNewEquipmentInput(value.newEquipmentInput); setNewEquipmentFormOpen(value.newEquipmentFormOpen);
+    setSubmissionOperationId(value.submissionOperationId); setStartedAt(value.startedAt); setSubmitError(null); setOriginOpen(false);
+  }
+  const draft = useFieldDraft<Snapshot>({ kind: 'new', documentType: documentType ?? 'WORK_ORDER',
+    customerName: walkInMode ? walk.name : customer?.name ?? '', guest: walkInMode, onRestore: restoreDraft });
+  function startClean(type: DocumentKind, guest: boolean) {
+    if (blank.current) restoreDraft({ ...blank.current, documentType: type, walkInMode: guest,
+      rvtMode: guest && type === 'TECHNICAL_REPORT' ? 'standalone' : null,
+      osOrigin: guest ? 'scratch' : null, startedAt: new Date().toISOString() });
+    draft.detach(); setPendingFlow(null); setDraftListError(null);
+  }
+  async function chooseFlow(type: DocumentKind, guest = false) {
+    if (choosingDrafts) return;
+    setChoosingDrafts(true); setDraftListError(null);
+    try {
+      const items = await draft.list(type, guest);
+      if (items.length) { setDraftOptions(items); setPendingFlow({ type, guest }); }
+      else if (guest) startClean(type, true);
+      else setDocumentType(type);
+    } catch (cause) {
+      if (guest) startClean(type, true); else setDocumentType(type);
+      setDraftListError(cause instanceof Error ? cause.message : 'Não foi possível abrir os rascunhos.');
+    }
+    finally { setChoosingDrafts(false); }
+  }
+  async function saveAndExit() {
+    if (!photoProcessing && !submitting && await draft.save(captureDraft(), step)) router.push('/operator');
+  }
 
   const walkInEquipmentTypes = useQuery(
     (signal) => technicalCatalogsApi.listEquipmentTypes({ signal }),
@@ -218,10 +284,11 @@ export function AtendimentoWizard({
   // Prefill from QR / "Iniciar atendimento" deep links.
   useEffect(() => {
     let active = true;
+    const generation = flowGeneration.current;
     (async () => {
       if (initialEquipmentId) {
         const eq = await equipmentsApi.getEquipment(initialEquipmentId).catch(() => null);
-        if (!active || !eq) return;
+        if (!active || generation !== flowGeneration.current || !eq) return;
         setEquipments([eq]);
         if (eq.address)
           setAddress({
@@ -230,14 +297,14 @@ export function AtendimentoWizard({
           });
         if (eq.customer) {
           const c = await customersApi.getCustomer(eq.customer.id).catch(() => null);
-          if (active && c) {
+          if (active && generation === flowGeneration.current && c) {
             setCustomer(c);
             setStep(2); // pula para Execução
           }
         }
       } else if (initialCustomerId) {
         const c = await customersApi.getCustomer(initialCustomerId).catch(() => null);
-        if (active && c) {
+        if (active && generation === flowGeneration.current && c) {
           setCustomer(c);
           setStep(0); // mantém Cliente para escolher o endereço
         }
@@ -343,7 +410,7 @@ export function AtendimentoWizard({
   }, [step, customer, address, serviceType, signature, signerName, technicalSignatureId, walkInMode, walk, walkInEquipments, equipmentProfilesComplete, equipments.length, newEquipments.length, documentType]);
 
   function back() {
-    if (submitting || submissionOperationId) return;
+    if (submitting || submissionOperationId || photoProcessing || draft.busy) return;
     if (step === 0) router.push('/operator');
     // OS avulso pula o passo de seleção: os novos equipamentos já são coletados no cadastro.
     else if (step === 2 && walkInMode) setStep(0);
@@ -426,6 +493,7 @@ export function AtendimentoWizard({
             })),
           }));
         setWalkInCreated(created);
+        await draft.checkpoint({ walkInCreated: created });
         customerId = created.customerId;
         addressId = created.addressId;
         equipmentId = created.equipmentId;
@@ -468,7 +536,12 @@ export function AtendimentoWizard({
         signedAt,
         technicalSignatureId,
         startedAt,
-      }, { operationId: submissionOperationId, onCreated: setSubmissionOperationId });
+      }, { operationId: submissionOperationId, onCreated: async (id) => {
+        setSubmissionOperationId(id);
+        await draft.checkpoint({ submissionOperationId: id });
+      } });
+      await draft.clear().catch(() => undefined);
+      setPhotos([]);
       setResult({
         operationId: submission.operation.id,
         documentId: submission.handoff.id,
@@ -537,11 +610,18 @@ export function AtendimentoWizard({
     );
   }
 
+  if (choosingDrafts) return <div className="p-6" role="status">Buscando seus rascunhos…</div>;
+  if (pendingFlow) return <FieldDraftPicker drafts={draftOptions} busy={draft.busy} error={draft.error}
+    onResume={(item) => { void draft.resume(item).then((resumed) => { if (resumed) setPendingFlow(null); }); }}
+    onNew={() => startClean(pendingFlow.type, pendingFlow.guest)} onBack={() => setPendingFlow(null)}
+    onDelete={async (item) => { await draft.remove(item); setDraftOptions((items) => items.filter((candidate) => candidate.id !== item.id)); }} />;
+
   if (!documentType) {
     return (
       <>
+        {draftListError && <p role="alert" className="p-4 text-sm text-[var(--color-danger)]">{draftListError}</p>}
         <AttendanceTypeStep
-          onSelect={setDocumentType}
+          onSelect={(type) => { void chooseFlow(type); }}
           onClose={() => router.push('/operator')}
           canCreatePmoc={Boolean(isOwner)}
           onCreatePmoc={() => setDocumentType('PMOC')}
@@ -603,9 +683,11 @@ export function AtendimentoWizard({
         current={step}
         total={STEPS.length}
         onBack={back}
-        onClose={() => router.push('/operator')}
+        onClose={() => { if (!submitting && !photoProcessing && !draft.busy) router.push('/operator'); }}
       />
 
+      <SaveFieldDraft onSave={() => { void saveAndExit(); }} disabled={submitting || photoProcessing} busy={draft.busy} error={draft.error} restored={draft.restored} />
+      {draftListError && <p role="alert" className="p-4 text-sm text-[var(--color-danger)]">{draftListError}</p>}
       <div className="flex-1 overflow-y-auto p-4">
         {step === 0 && (
           walkInMode ? (
@@ -614,6 +696,7 @@ export function AtendimentoWizard({
               onChange={setWalk}
               onCancel={() => setWalkInMode(false)}
               equipments={walkInEquipments}
+              equipmentInput={walkEquipmentInput} onEquipmentInput={setWalkEquipmentInput}
               equipmentTypes={walkInEquipmentTypes.data ?? []}
               equipmentTypesLoading={walkInEquipmentTypes.loading}
               onAddEquipment={(draft) => setWalkInEquipments((current) => [...current, draft])}
@@ -635,21 +718,11 @@ export function AtendimentoWizard({
               />
               <button
                 type="button"
-                onClick={() => {
-                  setWalkInMode(true);
-                  setWalkInEquipments([]);
-                  setCustomer(null);
-                  setAddress(null);
-                  setEquipments([]);
-                  setEquipmentProfiles({});
-                  setNewEquipments([]);
-                  setNewEquipmentFormOpen(false);
-                  setOsOrigin('scratch');
-                }}
+                onClick={() => { void chooseFlow(documentType, true); }}
                 className="flex w-full items-center gap-3 rounded-[var(--radius-md)] border border-dashed border-[var(--color-primary)]/40 bg-[var(--color-primary)]/5 p-3.5 text-left active:scale-[0.99]"
               >
                 <span className="grid h-9 w-9 place-items-center rounded-[var(--radius-md)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]"><Building2 className="h-4 w-4" /></span>
-                <span className="min-w-0 flex-1"><span className="block font-semibold">OS avulso — cliente novo</span><span className="block text-caption">Cadastre o cliente em campo (fica em Revisão)</span></span>
+                <span className="min-w-0 flex-1"><span className="block font-semibold">{documentType === 'TECHNICAL_REPORT' ? 'RVT avulso — cliente novo' : 'OS avulso — cliente novo'}</span><span className="block text-caption">Cadastre o cliente em campo (fica em Revisão)</span></span>
                 <ChevronRight className="h-4 w-4 text-[var(--color-muted-foreground)]" />
               </button>
               {customer && (
@@ -669,7 +742,7 @@ export function AtendimentoWizard({
             {(newEquipmentFormOpen || newEquipments.length > 0) && (
               walkInEquipmentTypes.error ? <ErrorState error={walkInEquipmentTypes.error} onRetry={walkInEquipmentTypes.refetch} /> :
               <FieldEquipmentCollection
-                drafts={newEquipments}
+                drafts={newEquipments} draftValue={newEquipmentInput} onDraftChange={setNewEquipmentInput}
                 equipmentTypes={walkInEquipmentTypes.data ?? []}
                 equipmentTypesLoading={walkInEquipmentTypes.loading}
                 maxItems={Math.max(0, 20 - equipments.length)}
@@ -755,7 +828,7 @@ export function AtendimentoWizard({
             areas={technicalCatalogAreas(equipments)}
           />
         )}
-        {step === 5 && <FotosStep photos={photos} onChange={setPhotos} />}
+        {step === 5 && <FotosStep photos={photos} onChange={setPhotos} onProcessingChange={setPhotoProcessing} />}
         {step === 6 && (
           <div className="space-y-5">
             <OperatorSignatureChoice selectedId={technicalSignatureId} onSelect={setTechnicalSignatureId} />
@@ -776,7 +849,7 @@ export function AtendimentoWizard({
               variant="signature"
               showSignature={false}
             />
-            <AssinaturaStep signerName={signerName} signerRole={signerRole} signedAt={signedAt} onSignerName={setSignerName} onSignerRole={setSignerRole} onChange={(value) => { setSignature(value); setSignedAt(value ? new Date().toISOString() : null); }} />
+            <AssinaturaStep signature={signature} signerName={signerName} signerRole={signerRole} signedAt={signedAt} onSignerName={setSignerName} onSignerRole={setSignerRole} onChange={(value) => { setSignature(value); setSignedAt(value ? new Date().toISOString() : null); }} />
           </div>
         )}
         {step === 7 && (
@@ -812,7 +885,7 @@ export function AtendimentoWizard({
         onBack={submitting || submissionOperationId ? undefined : back}
         onNext={next}
         nextLabel={isLast ? 'Concluir e gerar PDF' : 'Continuar'}
-        nextDisabled={!canNext}
+        nextDisabled={!canNext || photoProcessing || draft.busy}
         loading={submitting}
         isLast={isLast}
         nextIcon={isLast ? <Send className="h-4 w-4" /> : undefined}
@@ -1172,6 +1245,8 @@ function WalkInStep({
   onChange,
   onCancel,
   equipments,
+  equipmentInput,
+  onEquipmentInput,
   equipmentTypes,
   equipmentTypesLoading,
   onAddEquipment,
@@ -1181,6 +1256,8 @@ function WalkInStep({
   onChange: (v: WalkInForm) => void;
   onCancel: () => void;
   equipments: NewFieldEquipmentDraft[];
+  equipmentInput: NewFieldEquipmentDraft;
+  onEquipmentInput: React.Dispatch<React.SetStateAction<NewFieldEquipmentDraft>>;
   equipmentTypes: TechnicalCatalog[];
   equipmentTypesLoading: boolean;
   onAddEquipment: (draft: NewFieldEquipmentDraft) => void;
@@ -1217,7 +1294,7 @@ function WalkInStep({
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="font-semibold">Cliente novo (OS avulso)</h2>
+          <h2 className="font-semibold">Cliente novo (atendimento avulso)</h2>
           <p className="text-caption">O cadastro fica em <strong>Revisão</strong> para a gestão concluir depois — não bloqueia o atendimento, a OS nem o relatório.</p>
         </div>
         <button type="button" onClick={onCancel} className="shrink-0 text-xs font-medium text-[var(--color-primary)]">Usar existente</button>
@@ -1268,13 +1345,13 @@ function WalkInStep({
 
       <div className="border-t border-[var(--color-border)] pt-4">
         <FieldEquipmentCollection
-          drafts={equipments}
+          drafts={equipments} draftValue={equipmentInput} onDraftChange={onEquipmentInput}
           equipmentTypes={equipmentTypes}
           equipmentTypesLoading={equipmentTypesLoading}
           onAdd={onAddEquipment}
           onRemove={onRemoveEquipment}
           title="Equipamentos do atendimento"
-          description="Adicione todos os equipamentos encontrados no local. Eles serão cadastrados para o novo cliente e incluídos nesta Ordem de Serviço."
+          description="Adicione todos os equipamentos encontrados no local. Eles serão cadastrados para o novo cliente e incluídos neste atendimento."
         />
       </div>
     </div>
@@ -1920,8 +1997,10 @@ function technicalCatalogAreas(equipments: EquipmentSummary[]): TechnicalCatalog
 function FotosStep({
   photos,
   onChange,
+  onProcessingChange,
 }: {
   photos: CapturedPhoto[];
+  onProcessingChange: (processing: boolean) => void;
   onChange: (p: CapturedPhoto[]) => void;
 }) {
   return (
@@ -1929,12 +2008,13 @@ function FotosStep({
       <p className="text-sm text-[var(--color-muted-foreground)]">
         Registre o serviço com fotos (opcional).
       </p>
-      <PhotoInput photos={photos} onChange={onChange} />
+      <PhotoInput photos={photos} onChange={onChange} onProcessingChange={onProcessingChange} />
     </div>
   );
 }
 
 function AssinaturaStep({
+  signature,
   signerName,
   signerRole,
   signedAt,
@@ -1942,6 +2022,7 @@ function AssinaturaStep({
   onSignerRole,
   onChange,
 }: {
+  signature: string | null;
   signerName: string;
   signerRole: string;
   signedAt: string | null;
@@ -1966,7 +2047,7 @@ function AssinaturaStep({
         placeholder="Função ou vínculo (opcional)"
         className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 h-11 text-sm outline-none focus:border-[var(--color-primary)]"
       />
-      <SignaturePad onChange={onChange} onConfirm={onChange} />
+      <SignaturePad initialValue={signature} onChange={onChange} onConfirm={onChange} />
       {!signerName.trim() && <p className="text-[11px] text-[var(--color-warning)]">Informe o nome de quem assina para continuar.</p>}
       {signedAt && <p className="rounded-[var(--radius-md)] bg-[var(--color-success)]/10 px-3 py-2 text-xs text-[var(--color-success)]">Assinatura coletada em {new Date(signedAt).toLocaleString('pt-BR')}.</p>}
     </div>
