@@ -1158,6 +1158,7 @@ model Equipment {
   installationDate          DateTime?                           @map("installation_date") @db.Date
   warrantyExpiration        DateTime?                           @map("warranty_expiration") @db.Date
   observations              String?                             @db.Text
+  deletedAt                 DateTime?                           @map("deleted_at") @db.Timestamptz(3)
   qrToken                   String                              @unique @default(uuid()) @map("qr_token") @db.Uuid
   qrCode                    String                              @unique @map("qr_code") @db.VarChar(100)
   isActive                  Boolean                             @default(true) @map("is_active")

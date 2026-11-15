@@ -106,7 +106,12 @@ export function EquipmentFormDrawer({
     // escolha usa busca no servidor (a base passa de 100 clientes).
     customersApi
       .listCustomers({ page: 1, limit: 20, signal: ac.signal })
-      .then((res) => setCustomers(res.items))
+      .then((res) => setCustomers((current) => {
+        const selected = current.find((customer) => customer.id === (equipment?.customer?.id ?? presetCustomerId));
+        return selected && !res.items.some((customer) => customer.id === selected.id)
+          ? [selected, ...res.items]
+          : res.items;
+      }))
       .catch(() => undefined);
     technicalCatalogsApi
       .listEquipmentTypes({ signal: ac.signal })
@@ -153,7 +158,11 @@ export function EquipmentFormDrawer({
     const ac = new AbortController();
     customersApi
       .getCustomer(form.customerId, { signal: ac.signal })
-      .then((c) => setAddresses(c.addresses))
+      .then((c) => {
+        setAddresses(c.addresses);
+        seenCustomers.current.set(c.id, c);
+        setCustomers((current) => current.some((customer) => customer.id === c.id) ? current : [c, ...current]);
+      })
       .catch(() => setAddresses([]));
     return () => ac.abort();
   }, [open, form.customerId]);
@@ -247,6 +256,7 @@ export function EquipmentFormDrawer({
 
         <EntityCombobox
           label="Cliente"
+          disabled={Boolean(presetCustomerId)}
           value={form.customerId}
           onChange={(id) => { set("customerId", id); set("addressId", ""); }}
           fetchOptions={searchCustomers}

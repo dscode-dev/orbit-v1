@@ -1,10 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import {
-  EquipmentStatus,
-  EquipmentType,
-  Prisma,
-  TechnicalCatalogType,
-} from '@prisma/client';
+import { EquipmentStatus, EquipmentType, Prisma, TechnicalCatalogType } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { extname } from 'node:path';
 import {
@@ -47,6 +42,7 @@ const EQUIPMENT_INCLUDE = {
   },
   parent: { select: { id: true, name: true, tag: true, type: true } },
   children: {
+    where: { deletedAt: null },
     select: { id: true, name: true, tag: true, type: true, status: true, isActive: true },
     orderBy: { name: 'asc' as const },
   },
@@ -63,6 +59,7 @@ export class EquipmentsService {
 
   async list(query: ListEquipmentsQueryDto): Promise<unknown> {
     const where: Prisma.EquipmentWhereInput = {
+      deletedAt: null,
       ...(query.customerId ? { customerId: query.customerId } : {}),
       ...(query.addressId ? { addressId: query.addressId } : {}),
       ...(query.equipmentTypeCatalogId
@@ -99,7 +96,9 @@ export class EquipmentsService {
           equipmentTypeCatalog: {
             select: { id: true, title: true, active: true, deletedAt: true, tags: true },
           },
-          _count: { select: { children: true, attachments: true, metrics: true } },
+          _count: {
+            select: { children: { where: { deletedAt: null } }, attachments: true, metrics: true },
+          },
         },
       }),
       this.prisma.equipment.count({ where }),
@@ -139,7 +138,7 @@ export class EquipmentsService {
       or.push({ qrToken: tokenCandidate });
     }
     const equipment = await this.prisma.equipment.findFirst({
-      where: { OR: or },
+      where: { deletedAt: null, OR: or },
       include: EQUIPMENT_INCLUDE,
     });
     if (!equipment) {
@@ -154,12 +153,14 @@ export class EquipmentsService {
 
   async stats(): Promise<Record<string, unknown>> {
     const [total, active, maintenance, inactive, retired, byType] = await this.prisma.$transaction([
-      this.prisma.equipment.count(),
-      this.prisma.equipment.count({ where: { status: EquipmentStatus.ACTIVE } }),
-      this.prisma.equipment.count({ where: { status: EquipmentStatus.MAINTENANCE } }),
-      this.prisma.equipment.count({ where: { status: EquipmentStatus.INACTIVE } }),
-      this.prisma.equipment.count({ where: { status: EquipmentStatus.RETIRED } }),
-      this.prisma.equipment.findMany({ select: { type: true } }),
+      this.prisma.equipment.count({ where: { deletedAt: null } }),
+      this.prisma.equipment.count({ where: { deletedAt: null, status: EquipmentStatus.ACTIVE } }),
+      this.prisma.equipment.count({
+        where: { deletedAt: null, status: EquipmentStatus.MAINTENANCE },
+      }),
+      this.prisma.equipment.count({ where: { deletedAt: null, status: EquipmentStatus.INACTIVE } }),
+      this.prisma.equipment.count({ where: { deletedAt: null, status: EquipmentStatus.RETIRED } }),
+      this.prisma.equipment.findMany({ where: { deletedAt: null }, select: { type: true } }),
     ]);
     const types = Object.fromEntries(
       Object.values(EquipmentType).map((type) => [
@@ -215,7 +216,7 @@ export class EquipmentsService {
     actor: AuthenticatedUser,
     context: EquipmentAuditContext,
   ): Promise<unknown> {
-    const existing = await this.equipmentOrThrow(id);
+    const existing = await this.equipmentOrThrow(id, false);
     const customerId = dto.customerId ?? existing.customerId;
     const addressId = dto.addressId ?? existing.addressId ?? undefined;
     const parentId = dto.parentEquipmentId ?? existing.parentEquipmentId ?? undefined;
@@ -241,7 +242,7 @@ export class EquipmentsService {
     }
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.equipment.update({
-        where: { id },
+        where: { id, deletedAt: null },
         data,
         include: EQUIPMENT_INCLUDE,
       });
@@ -617,11 +618,12 @@ export class EquipmentsService {
     context: EquipmentAuditContext,
     deleted = false,
   ): Promise<unknown> {
-    await this.equipmentOrThrow(id);
+    await this.equipmentOrThrow(id, false);
     return this.prisma.$transaction(async (tx) => {
       const equipment = await tx.equipment.update({
-        where: { id },
+        where: { id, deletedAt: null },
         data: {
+          ...(deleted ? { deletedAt: new Date() } : {}),
           isActive: active,
           disabledAt: active ? null : new Date(),
           status: active ? EquipmentStatus.ACTIVE : EquipmentStatus.INACTIVE,
@@ -640,12 +642,13 @@ export class EquipmentsService {
 
   private async equipmentOrThrow(
     id: string,
+    includeDeleted = true,
   ): Promise<Prisma.EquipmentGetPayload<{ include: typeof EQUIPMENT_INCLUDE }>> {
     const equipment = await this.prisma.equipment.findUnique({
       where: { id },
       include: EQUIPMENT_INCLUDE,
     });
-    if (!equipment)
+    if (!equipment || (!includeDeleted && equipment.deletedAt))
       throw new ApplicationException(
         ERROR_CODES.EQUIPMENT_NOT_FOUND,
         'Equipamento não encontrado',

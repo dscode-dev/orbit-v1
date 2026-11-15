@@ -321,6 +321,7 @@ export class ListExportService {
 
   private equipmentWhere(query: EquipmentsPdfExportQueryDto): Prisma.EquipmentWhereInput {
     return {
+      deletedAt: null,
       ...(query.customerId ? { customerId: query.customerId } : {}),
       ...(query.addressId ? { addressId: query.addressId } : {}),
       ...(query.status ? { status: query.status } : {}),

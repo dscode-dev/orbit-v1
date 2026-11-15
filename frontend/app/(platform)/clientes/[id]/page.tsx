@@ -9,6 +9,7 @@ import {
   Clock3,
   ContactRound,
   Mail,
+  Loader2,
   MapPin,
   Pencil,
   Phone,
@@ -531,12 +532,45 @@ function EquipmentTab({ customerId }: { customerId: string }) {
   const [limit, setLimit] = useState(20);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<EquipmentDetail | null>(null);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<EquipmentSummary | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const list = useQuery(
     (signal) => equipmentsApi.listEquipments({ customerId, page, limit, signal }),
     [customerId, page, limit],
   );
-  const columns = useMemo<Column<EquipmentSummary>[]>(
-    () => [
+  async function openEdit(item: EquipmentSummary) {
+    setLoadingId(item.id);
+    setActionError(null);
+    try {
+      setEditing(await equipmentsApi.getEquipment(item.id));
+      setFormOpen(true);
+    } catch (cause) {
+      setActionError(
+        cause instanceof ApiClientError ? cause.message : 'Não foi possível abrir o equipamento para edição.',
+      );
+    } finally {
+      setLoadingId(null);
+    }
+  }
+
+  async function removeEquipment() {
+    if (!deleting) return;
+    setDeleteError(null);
+    try {
+      await equipmentsApi.deleteEquipment(deleting.id);
+      if (page > 1 && list.data?.items.length === 1) setPage(page - 1);
+      else list.refetch();
+    } catch (cause) {
+      setDeleteError(
+        cause instanceof ApiClientError ? cause.message : 'Não foi possível remover o equipamento.',
+      );
+      throw cause;
+    }
+  }
+
+  const columns: Column<EquipmentSummary>[] = [
       {
         key: 'name',
         header: 'Equipamento',
@@ -578,31 +612,42 @@ function EquipmentTab({ customerId }: { customerId: string }) {
       },
       {
         key: 'actions',
-        header: '',
-        className: 'w-16',
+        header: 'Ações',
+        className: 'w-56',
         link: false,
         cell: (item) => (
-          <Gate roles={['OWNER', 'MANAGER']}>
-            <button
-              type="button"
-              aria-label={`Editar ${item.name}`}
-              title="Editar equipamento"
-              className="rounded-md border border-[var(--color-border)] p-2"
-              onClick={async (event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                setEditing(await equipmentsApi.getEquipment(item.id));
-                setFormOpen(true);
-              }}
-            >
-              <Pencil className="h-4 w-4" />
-            </button>
-          </Gate>
+          <div className="flex items-center gap-2 whitespace-nowrap">
+            <Gate roles={['OWNER', 'MANAGER']}>
+              <button
+                type="button"
+                aria-label={`Editar ${item.name}`}
+                disabled={loadingId !== null}
+                className="btn-secondary text-xs disabled:opacity-50"
+                onClick={() => void openEdit(item)}
+              >
+                {loadingId === item.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pencil className="h-4 w-4" />}
+                Editar
+              </button>
+            </Gate>
+            <Gate roles={['OWNER']}>
+              <button
+                type="button"
+                aria-label={`Remover ${item.name}`}
+                disabled={loadingId !== null}
+                className="btn-secondary text-xs text-[var(--color-danger)] disabled:opacity-50"
+                onClick={() => {
+                  setDeleteError(null);
+                  setDeleting(item);
+                }}
+              >
+                <Trash2 className="h-4 w-4" />
+                Remover
+              </button>
+            </Gate>
+          </div>
         ),
       },
-    ],
-    [],
-  );
+    ];
   return (
     <section className="space-y-4">
       <div className="flex items-center justify-between">
@@ -612,7 +657,8 @@ function EquipmentTab({ customerId }: { customerId: string }) {
         </div>
         <Gate roles={['OWNER', 'MANAGER']}>
           <button
-            className="btn-primary"
+            className="btn-primary disabled:opacity-50"
+            disabled={loadingId !== null}
             onClick={() => {
               setEditing(null);
               setFormOpen(true);
@@ -623,6 +669,9 @@ function EquipmentTab({ customerId }: { customerId: string }) {
           </button>
         </Gate>
       </div>
+      {actionError && (
+        <p role="alert" className="text-sm text-[var(--color-danger)]">{actionError}</p>
+      )}
       {list.loading && !list.data ? (
         <SkeletonList rows={5} />
       ) : list.error ? (
@@ -650,6 +699,20 @@ function EquipmentTab({ customerId }: { customerId: string }) {
           description="Cadastre o primeiro equipamento deste cliente."
         />
       )}
+      <ConfirmDialog
+        open={Boolean(deleting)}
+        title="Remover equipamento?"
+        description={
+          <>
+            <p>O equipamento <strong>{deleting?.name}</strong> será removido do cadastro do cliente. O histórico de atendimentos será preservado.</p>
+            {deleteError && <p role="alert" className="mt-2 text-[var(--color-danger)]">{deleteError}</p>}
+          </>
+        }
+        confirmLabel="Remover equipamento"
+        danger
+        onConfirm={removeEquipment}
+        onClose={() => setDeleting(null)}
+      />
       <EquipmentFormDrawer
         open={formOpen}
         onClose={() => setFormOpen(false)}
