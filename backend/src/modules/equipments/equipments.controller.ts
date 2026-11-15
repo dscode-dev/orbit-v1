@@ -38,8 +38,8 @@ export class EquipmentsController {
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
   @Get()
-  list(@Query() query: ListEquipmentsQueryDto): Promise<unknown> {
-    return this.equipments.list(query);
+  list(@Query() query: ListEquipmentsQueryDto, @CurrentUser() actor: AuthenticatedUser): Promise<unknown> {
+    return this.equipments.list(query, actor);
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
@@ -91,8 +91,8 @@ export class EquipmentsController {
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
   @Get(':id/metrics')
-  metrics(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string): Promise<unknown> {
-    return this.equipments.listMetrics(id);
+  metrics(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string, @CurrentUser() actor: AuthenticatedUser): Promise<unknown> {
+    return this.equipments.listMetrics(id, actor);
   }
 
   @Roles(Role.OWNER, Role.MANAGER)
@@ -129,8 +129,9 @@ export class EquipmentsController {
   @Get('attachments/:attachmentId')
   getAttachment(
     @Param('attachmentId', new ParseUUIDPipe({ version: '4' })) id: string,
+    @CurrentUser() actor: AuthenticatedUser,
   ): Promise<unknown> {
-    return this.equipments.getAttachment(id);
+    return this.equipments.getAttachment(id, actor);
   }
 
   @Roles(Role.OWNER, Role.MANAGER)
@@ -146,14 +147,14 @@ export class EquipmentsController {
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
   @Get('lookup/:qrCode')
-  lookup(@Param('qrCode') qrCode: string): Promise<unknown> {
-    return this.equipments.lookupByQrCode(decodeURIComponent(qrCode));
+  lookup(@Param('qrCode') qrCode: string, @CurrentUser() actor: AuthenticatedUser): Promise<unknown> {
+    return this.equipments.lookupByQrCode(decodeURIComponent(qrCode), actor);
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
   @Get(':id')
-  get(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string): Promise<unknown> {
-    return this.equipments.get(id);
+  get(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string, @CurrentUser() actor: AuthenticatedUser): Promise<unknown> {
+    return this.equipments.get(id, actor);
   }
 
   @Roles(Role.OWNER, Role.MANAGER)

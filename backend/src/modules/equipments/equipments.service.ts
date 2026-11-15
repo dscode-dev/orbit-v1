@@ -1,5 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { EquipmentStatus, EquipmentType, Prisma, TechnicalCatalogType } from '@prisma/client';
+import { EquipmentStatus, EquipmentType, Prisma, Role, TechnicalCatalogType } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { extname } from 'node:path';
 import {
@@ -57,9 +57,14 @@ export class EquipmentsService {
     @Inject(STORAGE_PROVIDER_TOKEN) private readonly storage: StorageProviderContract,
   ) {}
 
-  async list(query: ListEquipmentsQueryDto): Promise<unknown> {
+  async list(query: ListEquipmentsQueryDto, actor: AuthenticatedUser): Promise<unknown> {
+    const activity = query.activity ?? 'ACTIVE';
+    if (activity !== 'ACTIVE' && !this.canManageInactive(actor)) {
+      throw new ApplicationException(ERROR_CODES.FORBIDDEN, 'Seu perfil não pode consultar equipamentos desativados.', HttpStatus.FORBIDDEN);
+    }
     const where: Prisma.EquipmentWhereInput = {
-      deletedAt: null,
+      ...(activity === 'ACTIVE' ? { deletedAt: null, isActive: true } : {}),
+      AND: activity === 'INACTIVE' ? [{ OR: [{ isActive: false }, { deletedAt: { not: null } }] }] : [],
       ...(query.customerId ? { customerId: query.customerId } : {}),
       ...(query.addressId ? { addressId: query.addressId } : {}),
       ...(query.equipmentTypeCatalogId
@@ -106,8 +111,12 @@ export class EquipmentsService {
     return buildPaginatedResponse(items, total, query.page, query.limit);
   }
 
-  async get(id: string): Promise<unknown> {
-    return this.equipmentOrThrow(id);
+  async get(id: string, actor: AuthenticatedUser): Promise<unknown> {
+    const equipment = await this.equipmentOrThrow(id);
+    if ((!equipment.isActive || equipment.deletedAt) && !this.canManageInactive(actor)) {
+      throw this.notFound('Equipamento não encontrado');
+    }
+    return equipment;
   }
 
   /**
@@ -116,7 +125,7 @@ export class EquipmentsService {
    * prepare for future signed/tokenized QR formats. Returns the same full
    * detail payload as `get`.
    */
-  async lookupByQrCode(qrCode: string): Promise<unknown> {
+  async lookupByQrCode(qrCode: string, actor: AuthenticatedUser): Promise<unknown> {
     const value = (qrCode ?? '').trim();
     if (!value) {
       throw new ApplicationException(
@@ -138,7 +147,7 @@ export class EquipmentsService {
       or.push({ qrToken: tokenCandidate });
     }
     const equipment = await this.prisma.equipment.findFirst({
-      where: { deletedAt: null, OR: or },
+      where: { ...(this.canManageInactive(actor) ? {} : { deletedAt: null, isActive: true }), OR: or },
       include: EQUIPMENT_INCLUDE,
     });
     if (!equipment) {
@@ -287,7 +296,7 @@ export class EquipmentsService {
     actor: AuthenticatedUser,
     context: EquipmentAuditContext,
   ): Promise<unknown> {
-    await this.equipmentOrThrow(id);
+    await this.get(id, actor);
     return this.prisma.$transaction(async (tx) => {
       const metric = await tx.equipmentMetric.create({
         data: {
@@ -315,8 +324,8 @@ export class EquipmentsService {
     });
   }
 
-  async listMetrics(id: string): Promise<unknown> {
-    await this.equipmentOrThrow(id);
+  async listMetrics(id: string, actor: AuthenticatedUser): Promise<unknown> {
+    await this.get(id, actor);
     return this.prisma.equipmentMetric.findMany({
       where: { equipmentId: id },
       orderBy: { recordedAt: 'desc' },
@@ -358,7 +367,7 @@ export class EquipmentsService {
     actor: AuthenticatedUser,
     context: EquipmentAuditContext,
   ): Promise<unknown> {
-    await this.equipmentOrThrow(id);
+    await this.get(id, actor);
     this.validateFile(file);
     const valid = file as UploadedEquipmentFile;
     const extension =
@@ -400,8 +409,9 @@ export class EquipmentsService {
     }
   }
 
-  async getAttachment(id: string): Promise<unknown> {
+  async getAttachment(id: string, actor: AuthenticatedUser): Promise<unknown> {
     const attachment = await this.attachmentOrThrow(id);
+    await this.get(attachment.equipmentId, actor);
     const stored = await this.storage.get(attachment.storageKey);
     return { ...attachment, contentBase64: stored.content.toString('base64') };
   }
@@ -618,12 +628,14 @@ export class EquipmentsService {
     context: EquipmentAuditContext,
     deleted = false,
   ): Promise<unknown> {
-    await this.equipmentOrThrow(id, false);
+    // Reativação também recupera exclusões lógicas do CRUD anterior.
+    // Nenhum registro relacionado ou identificador de QR é recriado.
+    const previous = await this.equipmentOrThrow(id, active);
     return this.prisma.$transaction(async (tx) => {
       const equipment = await tx.equipment.update({
-        where: { id, deletedAt: null },
+        where: { id, ...(active ? {} : { deletedAt: null }) },
         data: {
-          ...(deleted ? { deletedAt: new Date() } : {}),
+          ...(active ? { deletedAt: null } : deleted ? { deletedAt: new Date() } : {}),
           isActive: active,
           disabledAt: active ? null : new Date(),
           status: active ? EquipmentStatus.ACTIVE : EquipmentStatus.INACTIVE,
@@ -634,6 +646,7 @@ export class EquipmentsService {
         data: this.audit(action, EQUIPMENT_RESOURCE, actor, context, {
           equipmentId: id,
           ...(deleted ? { softDelete: true } : {}),
+          ...(active && previous.deletedAt ? { restoredFromDeletion: true } : {}),
         }),
       });
       return deleted ? { deleted: true } : equipment;
@@ -655,6 +668,10 @@ export class EquipmentsService {
         HttpStatus.NOT_FOUND,
       );
     return equipment;
+  }
+
+  private canManageInactive(actor: AuthenticatedUser): boolean {
+    return actor.role === Role.OWNER || actor.role === Role.MANAGER;
   }
 
   private async attachmentOrThrow(

@@ -21,6 +21,7 @@ export function listEquipments(params?: {
   equipmentTypeCatalogId?: string;
   status?: EquipmentStatus;
   type?: EquipmentType;
+  activity?: "ACTIVE" | "INACTIVE" | "ALL";
   signal?: AbortSignal;
 }): Promise<Paginated<EquipmentSummary>> {
   const { signal, ...query } = params ?? {};

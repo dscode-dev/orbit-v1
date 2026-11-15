@@ -16,6 +16,8 @@ import {
   Plus,
   ReceiptText,
   Trash2,
+  RotateCcw,
+  Eye,
   Wrench,
 } from 'lucide-react';
 import { Breadcrumbs } from '@platform/components/breadcrumbs';
@@ -25,6 +27,7 @@ import { DataTable, type Column } from '@platform/components/data-table';
 import { Pagination } from '@platform/components/pagination';
 import { CustomerFormDrawer } from '@platform/components/customer-form-drawer';
 import { EquipmentFormDrawer } from '@platform/components/equipment-form-drawer';
+import { EquipmentDetailDrawer } from '@platform/components/equipment-detail-drawer';
 import { SaleFormDrawer } from '@platform/components/sale-form-drawer';
 import { OperationDetailDrawer } from '@platform/components/operation-detail-drawer';
 import { OperationCreationDrawer } from '@platform/components/operation-creation-drawer';
@@ -528,6 +531,9 @@ function CustomerKpi({
 }
 
 function EquipmentTab({ customerId }: { customerId: string }) {
+  const [activity, setActivity] = useState<'ACTIVE' | 'INACTIVE' | 'ALL'>('ACTIVE');
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [restoring, setRestoring] = useState<EquipmentSummary | null>(null);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [formOpen, setFormOpen] = useState(false);
@@ -537,8 +543,8 @@ function EquipmentTab({ customerId }: { customerId: string }) {
   const [deleting, setDeleting] = useState<EquipmentSummary | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const list = useQuery(
-    (signal) => equipmentsApi.listEquipments({ customerId, page, limit, signal }),
-    [customerId, page, limit],
+    (signal) => equipmentsApi.listEquipments({ customerId, activity, page, limit, signal }),
+    [customerId, activity, page, limit],
   );
   async function openEdit(item: EquipmentSummary) {
     setLoadingId(item.id);
@@ -560,12 +566,25 @@ function EquipmentTab({ customerId }: { customerId: string }) {
     setDeleteError(null);
     try {
       await equipmentsApi.deleteEquipment(deleting.id);
-      if (page > 1 && list.data?.items.length === 1) setPage(page - 1);
+      if (activity !== 'ALL' && page > 1 && list.data?.items.length === 1) setPage(page - 1);
       else list.refetch();
     } catch (cause) {
       setDeleteError(
-        cause instanceof ApiClientError ? cause.message : 'Não foi possível remover o equipamento.',
+        cause instanceof ApiClientError ? cause.message : 'Não foi possível desativar o equipamento.',
       );
+      throw cause;
+    }
+  }
+
+  async function restoreEquipment() {
+    if (!restoring) return;
+    setActionError(null);
+    try {
+      await equipmentsApi.enableEquipment(restoring.id);
+      if (activity === 'INACTIVE' && page > 1 && list.data?.items.length === 1) setPage(page - 1);
+      else list.refetch();
+    } catch (cause) {
+      setActionError(cause instanceof ApiClientError ? cause.message : 'Não foi possível reativar o equipamento.');
       throw cause;
     }
   }
@@ -606,17 +625,28 @@ function EquipmentTab({ customerId }: { customerId: string }) {
                   ? 'warning'
                   : 'offline'
             }
-            label={item.status}
+            label={!item.isActive || item.deletedAt ? 'Desativado' : item.status}
           />
         ),
       },
       {
         key: 'actions',
         header: 'Ações',
-        className: 'w-56',
+        className: 'w-72',
         link: false,
         cell: (item) => (
           <div className="flex items-center gap-2 whitespace-nowrap">
+            <button type="button" className="btn-secondary text-xs" onClick={() => setDetailId(item.id)}>
+              <Eye className="h-4 w-4" /> Ver detalhes
+            </button>
+            {!item.isActive || item.deletedAt ? (
+              <Gate roles={['OWNER', 'MANAGER']}>
+                <button type="button" className="btn-secondary text-xs" onClick={() => { setActionError(null); setRestoring(item); }}>
+                  <RotateCcw className="h-4 w-4" /> Reativar
+                </button>
+              </Gate>
+            ) : (
+            <>
             <Gate roles={['OWNER', 'MANAGER']}>
               <button
                 type="button"
@@ -632,7 +662,7 @@ function EquipmentTab({ customerId }: { customerId: string }) {
             <Gate roles={['OWNER']}>
               <button
                 type="button"
-                aria-label={`Remover ${item.name}`}
+                aria-label={`Desativar ${item.name}`}
                 disabled={loadingId !== null}
                 className="btn-secondary text-xs text-[var(--color-danger)] disabled:opacity-50"
                 onClick={() => {
@@ -641,9 +671,11 @@ function EquipmentTab({ customerId }: { customerId: string }) {
                 }}
               >
                 <Trash2 className="h-4 w-4" />
-                Remover
+                Desativar
               </button>
             </Gate>
+            </>
+            )}
           </div>
         ),
       },
@@ -669,6 +701,25 @@ function EquipmentTab({ customerId }: { customerId: string }) {
           </button>
         </Gate>
       </div>
+      <Gate roles={['OWNER', 'MANAGER']}>
+        <label className="flex items-center gap-3 text-sm">
+          Situação dos equipamentos
+          <select
+            aria-label="Situação dos equipamentos"
+            className="input h-10 max-w-56"
+            value={activity}
+            onChange={(event) => {
+              setActivity(event.target.value as typeof activity);
+              setPage(1);
+              setActionError(null);
+            }}
+          >
+            <option value="ACTIVE">Ativados</option>
+            <option value="INACTIVE">Desativados</option>
+            <option value="ALL">Todos</option>
+          </select>
+        </label>
+      </Gate>
       {actionError && (
         <p role="alert" className="text-sm text-[var(--color-danger)]">{actionError}</p>
       )}
@@ -696,23 +747,35 @@ function EquipmentTab({ customerId }: { customerId: string }) {
         <EmptyState
           icon={Wrench}
           title="Nenhum equipamento"
-          description="Cadastre o primeiro equipamento deste cliente."
+          description={activity === 'INACTIVE' ? 'Este cliente não possui equipamentos desativados.' : activity === 'ALL' ? 'Cadastre o primeiro equipamento deste cliente.' : 'Nenhum equipamento ativado. Consulte os desativados ou cadastre um equipamento.'}
         />
       )}
       <ConfirmDialog
         open={Boolean(deleting)}
-        title="Remover equipamento?"
+        title="Desativar equipamento?"
         description={
           <>
-            <p>O equipamento <strong>{deleting?.name}</strong> será removido do cadastro do cliente. O histórico de atendimentos será preservado.</p>
+            <p>O equipamento <strong>{deleting?.name}</strong> ficará oculto na listagem padrão. Seus dados, QR Code e histórico serão preservados. Você poderá consultá-lo em Desativados e reativá-lo depois.</p>
             {deleteError && <p role="alert" className="mt-2 text-[var(--color-danger)]">{deleteError}</p>}
           </>
         }
-        confirmLabel="Remover equipamento"
+        confirmLabel="Desativar equipamento"
         danger
         onConfirm={removeEquipment}
         onClose={() => setDeleting(null)}
       />
+      <ConfirmDialog
+        open={Boolean(restoring)}
+        title="Reativar equipamento?"
+        description={<>
+          <p>O equipamento {restoring?.name ?? ''} voltará à listagem de ativados, com o mesmo QR Code e histórico.</p>
+          {actionError && <p role="alert" className="mt-2 text-[var(--color-danger)]">{actionError}</p>}
+        </>}
+        confirmLabel="Reativar equipamento"
+        onConfirm={restoreEquipment}
+        onClose={() => setRestoring(null)}
+      />
+      <EquipmentDetailDrawer equipmentId={detailId} open={detailId !== null} onClose={() => setDetailId(null)} />
       <EquipmentFormDrawer
         open={formOpen}
         onClose={() => setFormOpen(false)}

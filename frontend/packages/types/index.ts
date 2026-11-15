@@ -786,6 +786,8 @@ export type EquipmentCounts = { children: number; attachments: number; metrics: 
 
 export type EquipmentSummary = {
   id: string;
+  isActive: boolean;
+  deletedAt?: string | null;
   type: EquipmentType;
   equipmentTypeCatalogId?: string | null;
   equipmentTypeCatalog?: {

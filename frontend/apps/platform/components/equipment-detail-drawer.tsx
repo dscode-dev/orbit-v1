@@ -53,7 +53,7 @@ export function EquipmentDetailDrawer({
       ) : e ? (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
-            <StatusPill status={EQUIPMENT_STATUS_PILL[e.status]} label={EQUIPMENT_STATUS_LABEL[e.status]} />
+            <StatusPill status={!e.isActive || e.deletedAt ? 'offline' : EQUIPMENT_STATUS_PILL[e.status]} label={!e.isActive || e.deletedAt ? 'Desativado' : EQUIPMENT_STATUS_LABEL[e.status]} />
             <span className="text-[11px] uppercase tracking-wider rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-[var(--color-muted-foreground)]">
               {e.equipmentTypeCatalog?.title ?? EQUIPMENT_TYPE_LABEL[e.type]}
             </span>

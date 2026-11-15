@@ -49,4 +49,15 @@ describe('Equipment DTOs', () => {
     });
     expect((await validate(dto)).length).toBeGreaterThan(0);
   });
+
+  it.each(['ACTIVE', 'INACTIVE', 'ALL'])('accepts equipment visibility filter %s', async (activity) => {
+    const dto = plainToInstance(ListEquipmentsQueryDto, { activity });
+    expect(await validate(dto)).toHaveLength(0);
+    expect(dto.activity).toBe(activity);
+  });
+
+  it('defaults to active equipment and rejects unsupported visibility filters', async () => {
+    expect(plainToInstance(ListEquipmentsQueryDto, {}).activity).toBe('ACTIVE');
+    expect(await validate(plainToInstance(ListEquipmentsQueryDto, { activity: 'DELETED' }))).not.toHaveLength(0);
+  });
 });

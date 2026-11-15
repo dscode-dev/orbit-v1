@@ -4,6 +4,7 @@ import {
   IsDateString,
   IsEnum,
   IsInt,
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
@@ -17,6 +18,7 @@ import {
 const trim = (value: unknown): unknown => (typeof value === 'string' ? value.trim() : value);
 
 export class ListEquipmentsQueryDto {
+  @IsOptional() @IsIn(['ACTIVE', 'INACTIVE', 'ALL']) activity: 'ACTIVE' | 'INACTIVE' | 'ALL' = 'ACTIVE';
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page = 1;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit = 20;
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(100) search?: string;

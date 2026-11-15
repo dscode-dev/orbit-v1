@@ -55,7 +55,7 @@ export default function EquipamentoDetailPage({ params }: { params: Promise<{ id
               eyebrow={e.equipmentTypeCatalog?.title ?? EQUIPMENT_TYPE_LABEL[e.type]}
               title={e.name}
               description={e.customer?.name ?? undefined}
-              actions={<StatusPill status={EQUIPMENT_STATUS_PILL[e.status]} label={EQUIPMENT_STATUS_LABEL[e.status]} />}
+              actions={<StatusPill status={!e.isActive || e.deletedAt ? 'offline' : EQUIPMENT_STATUS_PILL[e.status]} label={!e.isActive || e.deletedAt ? 'Desativado' : EQUIPMENT_STATUS_LABEL[e.status]} />}
             />
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
